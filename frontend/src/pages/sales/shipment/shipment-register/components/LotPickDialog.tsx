@@ -15,8 +15,8 @@ import {
   F1Grid,
   type F1GridColumn,
   type F1GridRef,
-} from '../../../../shared/components/f1-grid';
-import { formatQty } from '../../../../shared/utils/numberFormat';
+} from '../../../../../shared/components/f1-grid';
+import { formatQty } from '../../../../../shared/utils/numberFormat';
 import {
   allocationStatus,
   lotText,

@@ -92,6 +92,18 @@ const sections: DocSection[] = [
       ),
       api('showCheckbox', 'boolean', '행 선택용 Row Selector 체크박스 컬럼을 표시.', 'true'),
       api(
+        'selectionMode',
+        "'cell' | 'row'",
+        '선택 표시·복사 단위. row는 행 전체 강조·전체 행 복사, 셀 범위 드래그 비활성화. 다중 행 선택은 multiSelect로 별도 설정.',
+        "'cell'",
+      ),
+      api(
+        'multiSelect',
+        'boolean',
+        '다중 행 선택 허용. true일 때 Ctrl/Command·Shift·checkbox 누적·행 전체 선택 지원. false는 최대 1행, 초기/ref 복수 ID와 true→false 전환은 표시 순서 첫 유효 행만 유지. 셀 범위·데이터 headerCheckbox·treeCheckbox와 독립적.',
+        'false',
+      ),
+      api(
         'createRow',
         '() => T',
         '기본 행 추가 동작에서 새 행의 초기값을 반환. 반환한 행은 필수 필드를 포함해야 함.',

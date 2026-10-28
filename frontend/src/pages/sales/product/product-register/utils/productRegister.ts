@@ -1,5 +1,5 @@
-import type { BomEditRow } from '../../../co/master/item-master/types/itemMaster.types';
-import type { CommonCodeOption } from '../../../../shared/components/common-code/useCommonCodeOptions';
+import type { BomEditRow } from '../../../../co/master/item-master/types/itemMaster.types';
+import type { CommonCodeOption } from '../../../../../shared/components/common-code/useCommonCodeOptions';
 import type { ProductRegisterBody, ProductRegisterForm } from '../types/productRegister.types';
 
 // 영업관리 > 제품등록 화면 규칙(보관방법 코드 · 빈 입력값 · 등록할 때 보낼 내용)

@@ -1,7 +1,7 @@
-import type { ExcelColumn } from '../../../../shared/utils/excelFile';
-import type { BomEditRow, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
-import { formatPrice } from '../../../../shared/utils/numberFormat';
-import { materialNamePatch } from '../../../co/master/item-master/utils/productBom';
+import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
+import type { BomEditRow, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import { formatPrice } from '../../../../../shared/utils/numberFormat';
+import { materialNamePatch } from '../../../../co/master/item-master/utils/productBom';
 
 // 영업관리 > 견적 (송연 SA0003, 업체 양식은 파이썬 05-quote.js)
 
@@ -21,6 +21,7 @@ export type QuoteRow = {
   confirmedProductCode?: string | null;
   sourceKind?: string | null; // 레시피에서 넘어온 견적
   sourceRecipe?: string | null;
+  detailAction?: never; // 표의 [상세] 단추 칸 자리(값 없음, 2026-10-28)
 };
 
 export type QuoteBomLine = { materialName?: string | null; ratioPercent?: number | null; unitPrice?: number | null; materialCode?: string | null };

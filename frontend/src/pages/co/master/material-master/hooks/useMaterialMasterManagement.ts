@@ -10,6 +10,7 @@ import {
   saveMaterialPrice,
   setMaterialUseYn,
 } from '../services/materialMaster.service';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
 import type { MaterialInfoPayload, MaterialMasterRow, MaterialRow, VendorOption } from '../types/materialMaster.types';
 import {
   filterMaterialRows,
@@ -40,18 +41,37 @@ export const matchMaterialKeyword = (row: Pick<MaterialRow, 'code' | 'name'>, ke
   return !query || row.code.toLowerCase().includes(query) || row.name.toLowerCase().includes(query);
 };
 
+// 상세 조회 납품업체(2026-10-28 글자 칸): 납품업체 이름이나 거래처코드에 들어 있으면(대소문자 무시), 비우면 전체. 원재료 · 부자재 같이 씀
+export const matchSupplierKeyword = (row: Pick<MaterialMasterRow, 'supplierCodes' | 'suppliers'>, keyword: string): boolean => {
+  const query = keyword.trim().toLowerCase();
+  return (
+    !query ||
+    row.supplierCodes.some((code) => code.toLowerCase().includes(query)) ||
+    row.suppliers.some((vendor) => vendor.name.toLowerCase().includes(query))
+  );
+};
+
+// 납품업체 [선택] 팝업 검색: 매입 거래처 목록에서 거래처코드 · 이름으로 찾는다(거래처코드 없는 업체는 뺀다)
+export const vendorPickerOptions = (vendors: VendorOption[], keyword: string): MasterPickerOption[] => {
+  const query = keyword.trim().toLowerCase();
+  return vendors
+    .flatMap((vendor) => (vendor.code ? [{ code: vendor.code, name: vendor.name }] : []))
+    .filter((vendor) => !query || vendor.code.toLowerCase().includes(query) || vendor.name.toLowerCase().includes(query))
+    .map((vendor, index) => ({ id: index + 1, ...vendor }));
+};
+
 // 표에 보일 줄: 부자재 빼기 · 안 쓴 기간 · 사용여부 · 검색어(송연 renderMaterialTab 과 같은 규칙)
-// supplierCode: 상세 조회 납품업체(거래처코드). 그 업체가 납품업체에 들어 있는 원재료만, 비우면 전체
+// supplierKeyword: 상세 조회 납품업체(matchSupplierKeyword)
 export function filterMaterialMasterRows(
   rows: MaterialMasterRow[],
   keyword: string,
   useFilter: MaterialUseFilter,
   stale: { value: number; unit: StaleUnit } | null,
   today = new Date(),
-  supplierCode = '',
+  supplierKeyword = '',
 ): MaterialMasterRow[] {
   return (filterMaterialUse(filterMaterialRows(rows, stale, today), useFilter) as MaterialMasterRow[]).filter(
-    (row) => matchMaterialKeyword(row, keyword) && (!supplierCode || row.supplierCodes.includes(supplierCode)),
+    (row) => matchMaterialKeyword(row, keyword) && matchSupplierKeyword(row, supplierKeyword),
   );
 }
 

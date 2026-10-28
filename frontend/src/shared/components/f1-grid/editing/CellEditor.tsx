@@ -22,6 +22,7 @@ type CellEditorProps<T extends object> = {
   userAnchorEl?: HTMLElement | null;
   onUserChange: (value: F1GridDraftValue) => void;
   onCommitEdit: () => void;
+  onStopEdit: () => void;
   onCodePick: () => void;
 };
 
@@ -35,6 +36,7 @@ export function CellEditor<T extends object>({
   userAnchorEl,
   onUserChange,
   onCommitEdit,
+  onStopEdit,
   onCodePick,
 }: CellEditorProps<T>) {
   const selectOnFocus = column.selectOnFocus ?? true;
@@ -134,6 +136,7 @@ export function CellEditor<T extends object>({
         options={column.options ?? []}
         selectOptionIcon={column.selectOptionIcon}
         onChange={onSelectChange}
+        onClose={onStopEdit}
       />
     );
   return (

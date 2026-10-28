@@ -1,9 +1,11 @@
-package egovframework.let.sa.product.controller;
+package egovframework.let.sales.product.productregister.controller;
 
 import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,9 +17,9 @@ import egovframework.com.cmm.LoginVO;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.product.domain.model.ProductRegisterRequestVO;
-import egovframework.let.sa.product.domain.model.ProductRegisterVO;
-import egovframework.let.sa.product.service.ProductRegisterService;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterRequestVO;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterVO;
+import egovframework.let.sales.product.productregister.service.ProductRegisterService;
 import egovframework.let.uat.uia.service.impl.LoginEmployeeResolver;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,7 +38,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/products")
+@RequestMapping("/api/v1/sales/product/product-register")
 @Tag(name = "ProductRegisterApiController", description = "영업관리 - 제품등록")
 public class ProductRegisterApiController {
 
@@ -72,6 +74,19 @@ public class ProductRegisterApiController {
                     return inputError(CODE_RACE_MESSAGE);
                 }
             }
+        }
+    }
+
+    @Operation(summary = "방금 등록한 제품 삭제(제품 · 배합비 · 단가표, 2026-10-28)", security = { @SecurityRequirement(name = "Authorization") },
+            tags = { "ProductRegisterApiController" })
+    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "삭제 성공. 재고 · 사용 이력이 있으면 입력 오류") })
+    @DeleteMapping("/{code}")
+    public ResultVO deleteProduct(@PathVariable("code") String code) throws Exception {
+        try {
+            productRegisterService.deleteProduct(code);
+            return resultVoHelper.buildFromMap(new HashMap<String, Object>(), ResponseCode.SUCCESS, "삭제되었습니다");
+        } catch (IllegalArgumentException ex) {
+            return inputError(ex.getMessage());
         }
     }
 

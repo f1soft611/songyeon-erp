@@ -3,7 +3,7 @@
 <!-- 영업관리 - 수주등록 (송연 SA0004, 기존 /api/sales-order·/api/clients/sales-names·/api/products/order-candidates 와 같은 값) -->
 <mapper namespace="SalesOrderDAO">
 
-    <resultMap id="salesOrder" type="egovframework.let.sa.order.domain.model.SalesOrderVO">
+    <resultMap id="salesOrder" type="egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO">
         <id property="id" column="id"/>
         <result property="orderDate" column="order_date"/>
         <result property="clientName" column="client_name"/>
@@ -22,7 +22,7 @@
         <result property="createdAt" column="created_at"/>
     </resultMap>
 
-    <resultMap id="orderProduct" type="egovframework.let.sa.order.domain.model.OrderProductVO">
+    <resultMap id="orderProduct" type="egovframework.let.sales.order.orderregister.domain.model.OrderProductVO">
         <result property="code" column="code"/>
         <result property="name" column="name"/>
         <result property="spec" column="spec"/>
@@ -65,7 +65,7 @@
     </select>
 
     <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <insert id="insertOrder" parameterType="egovframework.let.sa.order.domain.model.SalesOrderVO"
+    <insert id="insertOrder" parameterType="egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO"
             useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO sales_order (
             order_date,
@@ -96,7 +96,7 @@
 
     <!-- 수주일·순서는 바꾸지 않는다 -->
     <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <update id="updateOrder" parameterType="egovframework.let.sa.order.domain.model.SalesOrderVO">
+    <update id="updateOrder" parameterType="egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO">
         UPDATE sales_order
         SET client_code = #{clientCode},
             product_code = #{productCode},

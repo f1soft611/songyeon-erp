@@ -1,5 +1,6 @@
 import {
   matchMaterialKeyword,
+  matchSupplierKeyword,
   SUB_MATERIAL_INFO_FIELDS,
   useMaterialMasterManagement,
 } from '../../material-master/hooks/useMaterialMasterManagement';
@@ -7,19 +8,19 @@ import type { MaterialMasterRow } from '../../material-master/types/materialMast
 import { filterMaterialUse, type MaterialUseFilter } from '../../material-master/utils/materialMaster';
 import { fetchSubMaterialRows } from '../services/subMaterialMaster.service';
 
-// 표에 보일 줄: 사용여부 · 검색어(코드 · 이름) · 상세 조회 분류 · 납품업체(비우면 전체)
+// 표에 보일 줄: 사용여부 · 검색어(코드 · 이름) · 상세 조회 분류 · 납품업체(이름 · 거래처코드 일부, 비우면 전체)
 export function filterSubMaterialMasterRows(
   rows: MaterialMasterRow[],
   keyword: string,
   useFilter: MaterialUseFilter,
   subCategory = '',
-  supplierCode = '',
+  supplierKeyword = '',
 ): MaterialMasterRow[] {
   return (filterMaterialUse(rows, useFilter) as MaterialMasterRow[]).filter(
     (row) =>
       matchMaterialKeyword(row, keyword) &&
       (!subCategory || row.subCategory === subCategory) &&
-      (!supplierCode || row.supplierCodes.includes(supplierCode)),
+      matchSupplierKeyword(row, supplierKeyword),
   );
 }
 

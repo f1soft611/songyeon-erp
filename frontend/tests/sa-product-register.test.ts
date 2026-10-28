@@ -8,8 +8,8 @@ vi.mock('../src/shared/services/apiClient', () => ({
   apiDelete: vi.fn(),
 }));
 
-import { registerProduct } from '../src/pages/sa/product/services/productRegister.service';
-import { buildRegisterBody, EMPTY_PRODUCT_FORM } from '../src/pages/sa/product/utils/productRegister';
+import { registerProduct } from '../src/pages/sales/product/product-register/services/productRegister.service';
+import { buildRegisterBody, EMPTY_PRODUCT_FORM } from '../src/pages/sales/product/product-register/utils/productRegister';
 import type { BomEditRow } from '../src/pages/co/master/item-master/types/itemMaster.types';
 
 const row = (overrides: Partial<BomEditRow>): BomEditRow => ({
@@ -52,11 +52,11 @@ describe('영업관리 > 제품등록', () => {
     apiPost.mockResolvedValueOnce({ productCode: '000003', materialCost: 1087.5 });
     const body = buildRegisterBody({ ...EMPTY_PRODUCT_FORM, name: '소스' }, []);
     expect(await registerProduct(body)).toEqual({ productCode: '000003', materialCost: 1087.5 });
-    expect(apiPost).toHaveBeenCalledWith('/api/v1/sa/products', body);
+    expect(apiPost).toHaveBeenCalledWith('/api/v1/sales/product/product-register', body);
   });
 });
 
-import { parseRecipeRows } from '../src/pages/sa/product/utils/recipeExcel';
+import { parseRecipeRows } from '../src/pages/sales/product/product-register/utils/recipeExcel';
 
 describe('제품등록 레시피 엑셀 읽기(송연 handleBomFile)', () => {
   it('"품목" 표에서 합계가 100% 근처인 가장 오른쪽 칸을 배합비율로 읽고, "합계" 줄 앞에서 멈춘다', () => {
@@ -101,7 +101,7 @@ describe('제품등록 레시피 엑셀 읽기(송연 handleBomFile)', () => {
 
 import ExcelJS from 'exceljs';
 import { readExcelValues } from '../src/shared/utils/excelFile';
-import { buildRecipeTemplate } from '../src/pages/sa/product/utils/recipeTemplate';
+import { buildRecipeTemplate } from '../src/pages/sales/product/product-register/utils/recipeTemplate';
 
 describe('제품등록 레시피 양식 내려받기', () => {
   it('내려받은 양식을 그대로 올리면 예시 3줄이 배합비율(%)로 읽힌다(첫 장 = "품목" 표, 둘째 장 = 작성방법)', async () => {

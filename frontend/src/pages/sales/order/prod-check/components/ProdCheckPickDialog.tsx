@@ -15,7 +15,7 @@ import CloseIcon from '@mui/icons-material/Close';
 
 // 생산가능확인 — 검색 창(송연 Picker): 생산일자와 만들 제품(배합비가 있는 제품만)을 골라 '만들 것' 에 담는다.
 // 이미 담은 제품을 다시 담지 않아도 되게 빈 선택으로 연다. 수량은 '만들 것' 에서 적는다.
-export function FeasibilityPickDialog({
+export function ProdCheckPickDialog({
   date,
   products,
   onPick,
@@ -43,8 +43,8 @@ export function FeasibilityPickDialog({
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="feasibility-pick-title">
-      <DialogTitle id="feasibility-pick-title" sx={{ pr: 6 }}>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="prod-check-pick-title">
+      <DialogTitle id="prod-check-pick-title" sx={{ pr: 6 }}>
         생산가능확인 — 검색
         <IconButton aria-label="닫기" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
           <CloseIcon />

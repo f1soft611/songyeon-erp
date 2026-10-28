@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -7,22 +7,27 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   MenuItem,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { F1Grid, type F1GridColumn } from '../../../../shared/components/f1-grid';
-import type { BomEditRow, ClientOption, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
-import type { BoxTypeRow } from '../../../co/master/box-type/types/boxType.types';
-import { BomEditGrid, emptyBomEditRows, type BomEditGridHandle } from '../../product/components/BomEditGrid';
-import { appliedPrice } from '../../../co/master/item-master/utils/productBom';
-import { formatPrice } from '../../../../shared/utils/numberFormat';
-import { ClientSelect } from '../../product/components/ClientSelect';
-import { rateText } from '../../pricing/utils/pricing';
-import { RecipeDropzone } from '../../product/components/RecipeDropzone';
-import { STORAGE_METHOD_GROUP } from '../../product/utils/productRegister';
-import { useCommonCodeOptions } from '../../../../shared/components/common-code/useCommonCodeOptions';
+import SearchIcon from '@mui/icons-material/Search';
+import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
+import type { BomEditRow, ClientOption, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import type { BoxTypeRow } from '../../../../co/master/box-type/types/boxType.types';
+import { BomEditGrid, emptyBomEditRows, type BomEditGridHandle } from '../../../product/product-register/components/BomEditGrid';
+import { appliedPrice } from '../../../../co/master/item-master/utils/productBom';
+import { formatPrice } from '../../../../../shared/utils/numberFormat';
+import { clientPickerOptions, clientPickerValueOf } from '../../../../co/master/item-master/utils/itemMaster';
+import { MasterPickerDialog } from '../../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
+import { rateText } from '../../../product/pricing/utils/pricing';
+import { RecipeDropzone } from '../../../product/product-register/components/RecipeDropzone';
+import { STORAGE_METHOD_GROUP } from '../../../product/product-register/utils/productRegister';
+import { useCommonCodeOptions } from '../../../../../shared/components/common-code/useCommonCodeOptions';
 import { computeQuote, toQuoteSaveBody, type QuoteForm, type QuoteFormField } from '../utils/quote';
 
 export type QuoteFormMode = { kind: 'new' } | { kind: 'edit'; quoteId: number } | { kind: 'view'; quoteId: number; productCode: string };
@@ -31,9 +36,6 @@ type Message = { text: string; error: boolean };
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 
-// 가견적 작성·수정·상세 창(송연 SA0003QuoteFormModal, 업체 양식은 파이썬 05-quote.js)
-// 제품 정보 → 원재료 배합비(레시피 엑셀 불러오기) → 단가 계산(고정마진·로스·인건비…) → 견적단가/확정단가.
-// 확정된 견적은 상세보기(읽기 전용)로만 연다.
 export function QuoteFormDialog({
   mode,
   initialForm,
@@ -44,6 +46,7 @@ export function QuoteFormDialog({
   clients,
   materials,
   onSave,
+  onConfirm,
   onClose,
 }: {
   mode: QuoteFormMode;
@@ -55,6 +58,7 @@ export function QuoteFormDialog({
   clients: ClientOption[];
   materials: MaterialOption[];
   onSave: (body: ReturnType<typeof toQuoteSaveBody>) => Promise<void>;
+  onConfirm?: (body: ReturnType<typeof toQuoteSaveBody>) => Promise<void>;
   onClose: () => void;
 }) {
   const readOnly = mode.kind === 'view';
@@ -67,6 +71,10 @@ export function QuoteFormDialog({
   const [liveRows, setLiveRows] = useState<BomEditRow[]>(bomSource.rows);
   const [message, setMessage] = useState<Message | null>(null);
   const set = (patch: Partial<QuoteForm>) => setForm((current) => ({ ...current, ...patch }));
+  // 거래처 팝업: 사용 중 거래처에서 고른다. 지금 견적의 거래처가 사용안함이 됐으면 그 이름에 '(사용안함)'
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const clientPickerValue = clientPickerValueOf(clients, form.clientCode, form.clientCode === initialForm.clientCode ? initialClientName : '');
+  const searchClients = useCallback(async (keyword: string): Promise<MasterPickerOption[]> => clientPickerOptions(clients, keyword), [clients]);
   const computed = computeQuote(form, liveRows);
 
   // 송연 q-type-select: 포장유형을 고르면 고정마진율·로스율·인건비·포장비·물류비·마진을 채운다
@@ -89,7 +97,7 @@ export function QuoteFormDialog({
 
 
   // 송연 quote-save-btn: 제품명 필수 → 저장(새로 작성이면 등록, 고치는 중이면 수정). 거절되면 서버 문구.
-  const save = async () => {
+  const save = async (then: 'close' | 'confirm' = 'close') => {
     if (savingRef.current) return;
     if (!form.productName.trim()) {
       setMessage({ text: '제품명은 필수예요', error: true });
@@ -98,7 +106,8 @@ export function QuoteFormDialog({
     savingRef.current = true;
     setMessage(null);
     try {
-      await onSave(toQuoteSaveBody(form, gridRef.current?.getRows() ?? liveRows));
+      const body = toQuoteSaveBody(form, gridRef.current?.getRows() ?? liveRows);
+      await (then === 'confirm' && onConfirm ? onConfirm(body) : onSave(body));
     } catch (saveError) {
       setMessage({ text: errorText(saveError, '저장에 실패했어요'), error: true });
     } finally {
@@ -183,14 +192,40 @@ export function QuoteFormDialog({
               <MenuItem value={form.storage}>{initialStorageNm || form.storage}</MenuItem>
             ) : null}
           </TextField>
-          {/* 거래처명: 거래처마스터 목록에서 고른다(이름 표시, 저장은 거래처코드, 2026-10-23) */}
-          <ClientSelect
-            shrinkLabel
-            disabled={readOnly}
-            options={clients}
-            value={form.clientCode}
-            currentName={initialClientName}
-            onChange={(clientCode) => set({ clientCode })}
+
+          <TextField
+            size="small"
+            margin="none"
+            fullWidth
+            label="거래처명"
+            value={clientPickerValue ? `${clientPickerValue.code} · ${clientPickerValue.name}` : ''}
+            slotProps={{
+              ...shrink,
+              htmlInput: { readOnly: true },
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="거래처명 선택">
+                      <span>
+                        <IconButton aria-label="거래처명 선택" edge="end" size="small" sx={{ p: 0.75 }} disabled={readOnly} onClick={() => setClientPickerOpen(true)}>
+                          <SearchIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+          <MasterPickerDialog
+            label="거래처명"
+            open={clientPickerOpen}
+            search={searchClients}
+            onClose={() => setClientPickerOpen(false)}
+            onChange={(option) => {
+              set({ clientCode: option.code });
+              setClientPickerOpen(false);
+            }}
           />
           {field('note', '비고 — 견적서 비고란에 그대로 들어가요', { type: 'text', placeholder: '예: 초도 물량 협의중' })}
         </Box>
@@ -275,6 +310,9 @@ export function QuoteFormDialog({
           </Typography>
         )}
         <Button onClick={onClose}>{readOnly ? '닫기' : '취소'}</Button>
+        {mode.kind === 'edit' && onConfirm && (
+          <Button variant="outlined" onClick={() => void save('confirm')}>확정 (제품등록으로)</Button>
+        )}
         {!readOnly && <Button variant="contained" onClick={() => void save()}>가견적 저장</Button>}
       </DialogActions>
     </Dialog>

@@ -147,7 +147,7 @@ export function ItemMasterManagementPage({ selectedModule, currentMenuName, cont
       key: 'write',
       actions: [
         // 새 제품은 영업관리 > 제품등록에서 만든다(송연과 같음)
-        { label: '신규 제품 등록', icon: AddIcon, visible: permissions.create, disabled: management.loading, onClick: () => navigate('/sa/product') },
+        { label: '신규 제품 등록', icon: AddIcon, visible: permissions.create, disabled: management.loading, onClick: () => navigate('/sales/product/PMProductRegisterView') },
         {
           label: '저장',
           icon: management.saving ? SaveProgressIcon : SaveIcon,

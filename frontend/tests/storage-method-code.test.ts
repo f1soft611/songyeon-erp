@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { storageCodeOf } from '../src/pages/sa/product/utils/productRegister';
+import { storageCodeOf } from '../src/pages/sales/product/product-register/utils/productRegister';
 
 // 보관방법 공통코드(2026-10-23): 견적 등에서 넘어온 글자를 코드로 바꾼다
 const options = [

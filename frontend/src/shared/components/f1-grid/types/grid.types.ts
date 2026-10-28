@@ -290,6 +290,8 @@ export type F1GridProps<T extends object> = {
   queryWorkerThreshold?: number;
   disableQueryWorker?: boolean;
   showCheckbox?: boolean;
+  selectionMode?: 'cell' | 'row';
+  multiSelect?: boolean;
   createRow?: () => T;
   createDuplicate?: (row: T) => T;
   editorPlugins?: F1GridEditorPlugin<T>[];

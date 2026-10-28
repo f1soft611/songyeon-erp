@@ -1,4 +1,4 @@
-package egovframework.let.sa.pricing.domain.model;
+package egovframework.let.sales.product.pricing.domain.model;
 
 import java.io.Serializable;
 
@@ -88,6 +88,9 @@ public class PricingVO implements Serializable {
     @Schema(description = "제품단가(최종계산단가) = 모든 원가 항목의 합")
     private Double totalPrice;
 
-    @Schema(description = "거래처명")
+    @Schema(description = "거래처코드(clients.client_code, 2026-10-28 예전 거래처명)")
+    private String clientCode;
+
+    @Schema(description = "거래처명(거래처마스터에서 붙인다)")
     private String clientName;
 }

@@ -8,8 +8,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.egovframe.rte.fdl.cmmn.EgovAbstractServiceImpl;
 import org.springframework.dao.DuplicateKeyException;
@@ -52,6 +54,7 @@ public class MaterialMasterServiceImpl extends EgovAbstractServiceImpl implement
     static final String REPLACE_SAME_MESSAGE = "같은 원재료로는 교체할 수 없습니다";
     static final String SAME_MATERIAL_MESSAGE = "같은 이름·규격의 원재료가 이미 있어요: ";
     static final String SUPPLIER_NOT_FOUND_MESSAGE = "거래처BOM에 없는 납품업체입니다. 새로고침 후 다시 골라주세요";
+    static final String SUPPLIER_ONE_MESSAGE = "납품업체는 한 곳만 고를 수 있어요";
 
     private static final DateTimeFormatter NOW = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
@@ -173,8 +176,8 @@ public class MaterialMasterServiceImpl extends EgovAbstractServiceImpl implement
         MaterialMasterVO row = new MaterialMasterVO();
         row.setCode(code);
         row.setName(name);
-        // 납품업체는 materials.client_code 에 거래처코드 배열('["000001","000002"]')로 넣는다. 목록이 안 왔으면 지금 값 그대로 둔다.
-        row.setSupplier(suppliers == null ? current.getSupplier() : supplierCodesText(suppliers));
+        // 납품업체는 materials.client_code 에 거래처코드 한 곳('000001')으로 넣는다(2026-10-28, 예전 배열). 목록이 안 왔으면 지금 값 그대로 둔다.
+        row.setSupplier(suppliers == null ? current.getSupplier() : supplierCodeText(suppliers));
         row.setSpec(memo(text(values.get("spec"))));
         row.setWarehouse(memo(text(values.get("warehouse"))));
         // 부자재 분류(2026-10-23): 공통코드 SUB_MATERIAL_CATEGORY 의 사용 중 코드만 받는다(비우면 원재료). 안 보냈으면 그대로 둔다
@@ -217,25 +220,29 @@ public class MaterialMasterServiceImpl extends EgovAbstractServiceImpl implement
         return saved;
     }
 
-    // 거래처코드 배열 글자(2026-10-23): ["000001","000002"]. 없으면 null
-    static String supplierCodesText(List<MaterialSupplierVO> suppliers) {
-        if (suppliers.isEmpty()) {
-            return null;
-        }
-        StringBuilder text = new StringBuilder("[");
-        for (int i = 0; i < suppliers.size(); i++) {
-            text.append(i == 0 ? "" : ",").append('"').append(suppliers.get(i).getClientCode()).append('"');
-        }
-        return text.append(']').toString();
+    // materials.client_code 에 넣을 거래처코드 한 곳(2026-10-28): '000001'. 없으면 null
+    static String supplierCodeText(List<MaterialSupplierVO> suppliers) {
+        return suppliers.isEmpty() ? null : suppliers.get(0).getClientCode();
     }
 
-    // materials.client_code 가 거래처코드 배열('["000001","000002"]')인지
-    static boolean isSupplierCodesText(String value) {
-        return value != null && value.replace(" ", "").matches("\\[(\"[0-9]+\"(,\"[0-9]+\")*)?\\]");
+    // materials.client_code 가 거래처코드인지(바꾸기 전 거래처코드 배열 '["000001"]' 도 코드로 본다). 아니면 옛 업체명
+    static boolean isSupplierCodeText(String value) {
+        String text = value == null ? "" : value.replace(" ", "");
+        return text.matches("[0-9]+") || text.matches("\\[(\"[0-9]+\"(,\"[0-9]+\")*)?\\]");
     }
 
-    // 거래처코드 목록 → 거래처코드·업체명(같은 코드는 한 번만, 빈 값은 건너뜀). 거래처BOM 에 없는 코드면 막는다.
+    // 거래처코드 목록 → 거래처코드·업체명(같은 코드는 한 번만, 빈 값은 건너뜀). 두 곳 이상이거나 거래처BOM 에 없는 코드면 막는다.
     private List<MaterialSupplierVO> resolveSuppliers(List<?> codes) throws Exception {
+        Set<String> distinct = new LinkedHashSet<>();
+        for (Object raw : codes) {
+            String clientCode = raw == null ? "" : String.valueOf(raw).trim();
+            if (!clientCode.isEmpty()) {
+                distinct.add(clientCode);
+            }
+        }
+        if (distinct.size() > 1) {
+            throw new IllegalArgumentException(SUPPLIER_ONE_MESSAGE);
+        }
         List<MaterialSupplierVO> result = new ArrayList<>();
         for (Object raw : codes) {
             String clientCode = raw == null ? "" : String.valueOf(raw).trim();
@@ -374,7 +381,7 @@ public class MaterialMasterServiceImpl extends EgovAbstractServiceImpl implement
     }
 
     // 납품업체는 목록 쿼리에서 거래처와 조인해 업체코드·업체명 배열로 받는다 → 화면 칩 목록으로 짝짓는다.
-    // 업체코드 배열이 아닌 옛 값(업체명)은 그 이름 그대로 채운다(업체코드 없음 — 다시 골라 저장하면 배열로 바뀐다).
+    // 거래처코드가 아닌 옛 값(업체명)은 그 이름 그대로 채운다(업체코드 없음 — 다시 골라 저장하면 코드로 바뀐다).
     @Override
     public void attachSuppliers(List<MaterialMasterVO> rows) {
         for (MaterialMasterVO row : rows) {
@@ -389,7 +396,7 @@ public class MaterialMasterServiceImpl extends EgovAbstractServiceImpl implement
                 list.add(supplier);
             }
             String legacy = row.getSupplier() == null ? "" : row.getSupplier().trim();
-            if (list.isEmpty() && !legacy.isEmpty() && !isSupplierCodesText(legacy)) {
+            if (list.isEmpty() && !legacy.isEmpty() && !isSupplierCodeText(legacy)) {
                 MaterialSupplierVO old = new MaterialSupplierVO();
                 old.setMaterialCode(row.getCode());
                 old.setClientName(legacy);

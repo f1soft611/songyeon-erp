@@ -8,15 +8,15 @@ import {
   footerOf,
   toGridRows,
   verdictOf,
-  type FeasibilityResult,
-  type FeasibilityRow,
-} from '../src/pages/sa/feasibility/utils/feasibility';
+  type ProdCheckResult,
+  type ProdCheckRow,
+} from '../src/pages/sales/order/prod-check/utils/prodCheck';
 
-const row = (overrides: Partial<FeasibilityRow>): FeasibilityRow => ({
+const row = (overrides: Partial<ProdCheckRow>): ProdCheckRow => ({
   code: 'M1', name: '양파', spec: null, known: true, needQty: 0, stockQty: 0, afterQty: 0, shortage: 0, per: null, ...overrides,
 });
 
-const result = (overrides: Partial<FeasibilityResult>): FeasibilityResult => ({
+const result = (overrides: Partial<ProdCheckResult>): ProdCheckResult => ({
   date: '2026-10-06', lines: [{ product: 'A', qtyKg: 1000 }, { product: 'B', qtyKg: 500 }], rows: [], byProduct: [],
   unknownProducts: [], shortageCount: 0, ok: true, ...overrides,
 });
@@ -52,7 +52,7 @@ describe('생산가능확인 utils(송연 34-prod-check.js)', () => {
   it('엑셀 칸: 제품이 둘 이상이면 제품별 필요량 칸과 "필요량 합계"', () => {
     const many = excelColumnsOf(result({}));
     expect(many.map((c) => c.label)).toEqual(['원재료명', '규격', '2026-10-06 재고', '필요량1 A', '필요량2 B', '필요량 합계', '생산 후 재고', '부족량']);
-    const perB = many[4].key as (r: FeasibilityRow) => unknown;
+    const perB = many[4].key as (r: ProdCheckRow) => unknown;
     expect(perB(row({ per: [1, 2] }))).toBe(2);
     expect(excelColumnsOf(result({ lines: [{ product: 'A', qtyKg: 1 }] })).map((c) => c.label)).toEqual(['원재료명', '규격', '2026-10-06 재고', '필요량', '생산 후 재고', '부족량']);
   });

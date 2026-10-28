@@ -15,8 +15,8 @@ import {
   toShipmentRow,
   type ProductLot,
   type ShipmentRecord,
-} from '../src/pages/sa/shipment/utils/shipment';
-import * as shipmentUtils from '../src/pages/sa/shipment/utils/shipment';
+} from '../src/pages/sales/shipment/shipment-register/utils/shipment';
+import * as shipmentUtils from '../src/pages/sales/shipment/shipment-register/utils/shipment';
 
 const record = (overrides: Partial<ShipmentRecord> = {}): ShipmentRecord => ({
   id: 3,

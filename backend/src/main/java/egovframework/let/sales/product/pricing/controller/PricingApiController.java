@@ -1,4 +1,4 @@
-package egovframework.let.sa.pricing.controller;
+package egovframework.let.sales.product.pricing.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.pricing.service.PricingService;
+import egovframework.let.sales.product.pricing.service.PricingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,7 +31,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/pricing")
+@RequestMapping("/api/v1/sales/product/pricing")
 @Tag(name = "PricingApiController", description = "영업관리 - 단가관리")
 public class PricingApiController {
 

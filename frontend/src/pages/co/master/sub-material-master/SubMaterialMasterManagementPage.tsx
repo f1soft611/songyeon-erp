@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Card, CardContent, TextField, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -13,11 +13,13 @@ import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { toPageSearchFields, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import type { F1GridRef, F1GridValidationError } from '../../../../shared/components/f1-grid';
+import { MasterPickerDialog } from '../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../shared/components/master-picker/masterPicker.types';
 import { useCommonCodeOptions } from '../../../../shared/components/common-code/useCommonCodeOptions';
 import { downloadExcel, todayFileTag } from '../../../../shared/utils/excelFile';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { MaterialHistoryDialog } from '../material-master/components/MaterialHistoryDialog';
-import { matchMaterialKeyword } from '../material-master/hooks/useMaterialMasterManagement';
+import { matchMaterialKeyword, vendorPickerOptions } from '../material-master/hooks/useMaterialMasterManagement';
 import type { MaterialMasterRow } from '../material-master/types/materialMaster.types';
 import { SUB_MATERIAL_EXCEL_COLUMNS, type MaterialUseFilter } from '../material-master/utils/materialMaster';
 import { SubMaterialMasterGrid, createSubMaterialMasterColumns } from './components/SubMaterialMasterGrid';
@@ -63,7 +65,10 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<MaterialUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [subCategory, setSubCategory] = useState('');
-  const [supplierCode, setSupplierCode] = useState('');
+  // 상세 조회 납품업체(이름 · 거래처코드 일부)
+  const [supplierKeyword, setSupplierKeyword] = useState('');
+  // 납품업체 [선택] 팝업: 고르면 상세 창(또는 표 칸)에 넣을 함수(원재료마스터와 같음)
+  const [supplierPicker, setSupplierPicker] = useState<{ apply: (changes: Partial<MaterialMasterRow>) => void } | null>(null);
   const [confirmReload, setConfirmReload] = useState(false);
   const [history, setHistory] = useState<MaterialMasterRow | null>(null);
   // 단위(공통코드 UNIT) · 분류(공통코드 SUB_MATERIAL_CATEGORY, 짧은 이름)
@@ -81,13 +86,21 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
   };
   const canEdit = permissions.write && !management.saving;
   const columns = useMemo(
-    () => createSubMaterialMasterColumns(canEdit, management.vendors, unitOptions, categoryOptions, management.rows, setHistory),
+    () =>
+      createSubMaterialMasterColumns(canEdit, management.vendors, unitOptions, categoryOptions, management.rows, setHistory, (_row, apply) => {
+        setSupplierPicker({ apply });
+        return undefined;
+      }),
     [canEdit, management.vendors, unitOptions, categoryOptions, management.rows],
   );
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
   const visibleRows = useMemo(
-    () => filterSubMaterialMasterRows(management.rows, searchQuery, useFilter, subCategory, supplierCode),
-    [management.rows, searchQuery, useFilter, subCategory, supplierCode],
+    () => filterSubMaterialMasterRows(management.rows, searchQuery, useFilter, subCategory, supplierKeyword),
+    [management.rows, searchQuery, useFilter, subCategory, supplierKeyword],
+  );
+  const searchSuppliers = useCallback(
+    async (keyword: string): Promise<MasterPickerOption[]> => vendorPickerOptions(management.vendors, keyword),
+    [management.vendors],
   );
 
   // 저장하지 않은 변경이 있으면 먼저 묻는다
@@ -179,7 +192,7 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
         onDetailSearch={(values) => {
           setUseFilter(useFilterOf(values));
           setSubCategory(textOf(values.subCategory));
-          setSupplierCode(textOf(values.supplierCodes));
+          setSupplierKeyword(textOf(values.supplierCodes).trim());
         }}
         detailLoading={management.loading}
       />
@@ -207,6 +220,16 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
           </CardContent>
         </Card>
       </Box>
+      <MasterPickerDialog
+        label="납품업체"
+        open={supplierPicker !== null}
+        search={searchSuppliers}
+        onClose={() => setSupplierPicker(null)}
+        onChange={(option) => {
+          supplierPicker?.apply({ supplierCodes: [option.code] });
+          setSupplierPicker(null);
+        }}
+      />
       {history && (
         <MaterialHistoryDialog code={history.code} name={history.name} canWrite={permissions.write} onClose={() => setHistory(null)} />
       )}

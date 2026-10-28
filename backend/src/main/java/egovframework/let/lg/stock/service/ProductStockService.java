@@ -4,7 +4,7 @@ import java.util.List;
 
 import egovframework.let.lg.stock.domain.model.ProductStockVO;
 import egovframework.let.lg.stock.domain.model.StockAsOfVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotVO;
 
 /**
  * 물류관리 - 제품재고관리 서비스 인터페이스 클래스 (조회만)

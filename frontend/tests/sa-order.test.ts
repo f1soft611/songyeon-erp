@@ -15,7 +15,7 @@ import {
   pendingOrderRows,
   isBlankOrderRow,
   summaryOf,
-} from '../src/pages/sa/order/utils/salesOrder';
+} from '../src/pages/sales/order/order-register/utils/salesOrder';
 
 describe('수주등록 utils', () => {
   it('수량은 쉼표·단위가 섞여도 첫 숫자를 읽고, 합계는 줄 수와 수량 합', () => {

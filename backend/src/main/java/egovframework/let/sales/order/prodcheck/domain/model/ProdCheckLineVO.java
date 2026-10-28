@@ -1,4 +1,4 @@
-package egovframework.let.sa.feasibility.domain.model;
+package egovframework.let.sales.order.prodcheck.domain.model;
 
 import java.io.Serializable;
 
@@ -15,7 +15,7 @@ import lombok.Setter;
 @Schema(description = "만들 것 한 줄")
 @Getter
 @Setter
-public class FeasibilityLineVO implements Serializable {
+public class ProdCheckLineVO implements Serializable {
 
     private static final long serialVersionUID = 1L;
 

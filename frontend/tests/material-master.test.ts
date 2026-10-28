@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   filterMaterialMasterRows,
+  vendorPickerOptions,
   materialSavePlansOf,
   SUB_MATERIAL_INFO_FIELDS,
   toMaterialMasterRows,
@@ -42,9 +43,12 @@ describe('원재료마스터(BSMaterialMasterView) 화면 규칙', () => {
     expect(filterMaterialMasterRows(rows, '설탕', 'ALL', null, today).map((row) => row.id)).toEqual(['2']);
     // 30일 이상 안 쓴 것(사용이력 없음 포함)
     expect(filterMaterialMasterRows(rows, '', 'ALL', { value: 30, unit: 'day' }, today).map((row) => row.id)).toEqual(['2']);
-    // 상세 조회 납품업체(거래처코드): 그 업체가 들어 있는 원재료만
+    // 상세 조회 납품업체(거래처코드 일부): 그 업체가 들어 있는 원재료만
     expect(filterMaterialMasterRows(rows, '', 'ALL', null, today, '900011').map((row) => row.id)).toEqual(['1', '2']);
     expect(filterMaterialMasterRows(rows, '', 'ALL', null, today, '900099')).toEqual([]);
+    // 2026-10-28 상세 조회 납품업체는 글자 칸: 이름 일부로도 찾는다(거래처코드가 없는 옛 업체 이름 포함)
+    expect(filterMaterialMasterRows(rows, '', 'ALL', null, today, '예시상').map((row) => row.id)).toEqual(['1', '2']);
+    expect(filterMaterialMasterRows(rows, '', 'ALL', null, today, '옛업').map((row) => row.id)).toEqual(['1', '2']);
   });
 
   it('[저장]: 새 줄은 등록 + 값이 있는 칸, 고친 줄은 바뀐 칸만 보낸다', () => {
@@ -91,5 +95,13 @@ describe('원재료마스터(BSMaterialMasterView) 화면 규칙', () => {
     expect(dated.price).toEqual({ unitPrice: '900', effectiveDate: '2026-11-01' });
     const [now] = materialSavePlansOf([], { ...noChanges, insertedRows: [fresh] });
     expect(now.price).toBeNull();
+  });
+
+  it('납품업체 팝업 목록(2026-10-28): 매입 거래처에서 코드 · 이름으로 찾고, 거래처코드 없는 업체는 뺀다', () => {
+    const vendors = [{ code: '900011', name: '예시상사' }, { code: '900012', name: '샘플유통' }, { code: null, name: '옛업체' }];
+    expect(vendorPickerOptions(vendors, '').map((option) => option.code)).toEqual(['900011', '900012']);
+    expect(vendorPickerOptions(vendors, '샘플')).toEqual([{ id: 1, code: '900012', name: '샘플유통' }]);
+    expect(vendorPickerOptions(vendors, '90001').length).toBe(2);
+    expect(vendorPickerOptions(vendors, '옛업체')).toEqual([]);
   });
 });

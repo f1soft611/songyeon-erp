@@ -48,12 +48,15 @@
              LIMIT 1) AS unit_nm,
             m.unit_price,
             CASE
-                <!-- 2026-10-23 납품업체는 materials.client_code 의 거래처코드 배열 -->
-                WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]("[0-9]+"(,"[0-9]+")*)?[]]$' THEN (
-                    SELECT array_agg(c.name ORDER BY e.ord)
-                    FROM jsonb_array_elements_text(m.client_code::jsonb) WITH ORDINALITY AS e(code, ord)
-                    JOIN clients c ON c.client_code = e.code
-                    WHERE c.name IS NOT NULL AND c.name != ''
+                <!-- 2026-10-28 납품업체는 materials.client_code 의 거래처코드 한 곳(바꾸기 전 배열 '["000001"]' 이면 첫 코드) -->
+                WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^([0-9]+|[[]("[0-9]+"(,"[0-9]+")*)?[]])$' THEN (
+                    SELECT array_agg(c.name)
+                    FROM clients c
+                    WHERE c.client_code = CASE
+                            WHEN replace(m.client_code, ' ', '') ~ '^[0-9]+$' THEN replace(m.client_code, ' ', '')
+                            ELSE m.client_code::jsonb ->> 0
+                        END
+                      AND c.name IS NOT NULL AND c.name != ''
                 )
                 WHEN TRIM(COALESCE(m.client_code, '')) != '' THEN ARRAY[TRIM(m.client_code)]
                 ELSE NULL

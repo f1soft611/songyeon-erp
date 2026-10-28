@@ -1,9 +1,9 @@
-package egovframework.let.sa.order.service;
+package egovframework.let.sales.order.orderregister.service;
 
 import java.util.List;
 
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.domain.model.SalesOrderVO;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
 
 /**
  * 영업관리 - 수주등록 서비스 인터페이스 클래스

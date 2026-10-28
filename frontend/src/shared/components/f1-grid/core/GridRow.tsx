@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Box, Checkbox } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { GridCell } from './GridCell';
 import { GridFormActionCell } from '../form/GridFormActionCell';
 import type {
@@ -31,6 +32,7 @@ type GridRowProps<T extends object> = {
   columnLine: boolean;
   stripeRows: boolean;
   isSelected: boolean;
+  selectionMode?: 'cell' | 'row';
   rowHeight: number;
   defaultRowHeight: number;
   minRowHeight: number;
@@ -211,6 +213,7 @@ const areGridRowPropsEqual = <T extends object>(
     prev.columnLine === next.columnLine &&
     prev.stripeRows === next.stripeRows &&
     prev.isSelected === next.isSelected &&
+    prev.selectionMode === next.selectionMode &&
     prev.rowHeight === next.rowHeight &&
     prev.defaultRowHeight === next.defaultRowHeight &&
     prev.minRowHeight === next.minRowHeight &&
@@ -253,6 +256,7 @@ const GridRowInner = <T extends object>({
   columnLine,
   stripeRows,
   isSelected,
+  selectionMode = 'cell',
   rowHeight,
   defaultRowHeight,
   minRowHeight,
@@ -352,6 +356,16 @@ const GridRowInner = <T extends object>({
         onSelectRow(rowId, event);
       }
       if (event.button !== 0) return;
+      if (
+        editingCell &&
+        columns[editingCell.columnIndex]?.type === 'select'
+      )
+        return;
+      if (selectionMode === 'row') {
+        onSetFocusedCell(cell);
+        onSelectRow(rowId, event);
+        return;
+      }
 
       dragSelectionStateRef.current = {
         active: true,
@@ -362,10 +376,13 @@ const GridRowInner = <T extends object>({
     },
     [
       dragSelectionStateRef,
+      editingCell,
+      columns,
       onCellSelectionStart,
       onSelectRow,
       onSetFocusedCell,
       rowId,
+      selectionMode,
       selectedCellRange,
       latestPropsRef,
     ],
@@ -373,6 +390,7 @@ const GridRowInner = <T extends object>({
 
   const handleCellMouseEnter = useCallback(
     (cell: { rowId: F1GridRowId; columnIndex: number }) => {
+      if (selectionMode === 'row') return;
       const dragState = dragSelectionStateRef.current;
       const dragAlreadyActive =
         latestPropsRef?.current.isCellSelectionDragging ||
@@ -398,6 +416,7 @@ const GridRowInner = <T extends object>({
       onCellSelectionDrag,
       selectedCellRange,
       latestPropsRef,
+      selectionMode,
     ],
   );
 
@@ -470,6 +489,20 @@ const GridRowInner = <T extends object>({
       data-f1-grid-row-id={String(rowId)}
       sx={{ display: 'contents' }}
     >
+      {selectionMode === 'row' && isSelected ? (
+        <Box
+          aria-hidden
+          data-row-selection-overlay={String(rowId)}
+          sx={{
+            gridColumn: '1 / -1',
+            gridRow: renderIndex + 1,
+            pointerEvents: 'none',
+            zIndex: 7,
+            backgroundColor: (theme) =>
+              alpha(theme.palette.primary.main, theme.palette.action.selectedOpacity),
+          }}
+        />
+      ) : null}
       {showCheckbox ? (
         <Box
           sx={{
@@ -558,6 +591,7 @@ const GridRowInner = <T extends object>({
             columnLine={columnLine}
             stripeRows={stripeRows}
             focused={focused}
+            selectionMode={selectionMode}
             editing={editing}
             selected={Boolean(selected)}
             selectionRangeActive={selectedRangeHasMultipleCells}
@@ -575,9 +609,9 @@ const GridRowInner = <T extends object>({
             dirtyCell={Boolean(
               dirtyCellMap[`${String(rowId)}:${String(column.field)}`],
             )}
-            onFocus={() => {
+            onFocus={(event) => {
               const focusRowIndex =
-                column.mergeRows && merged
+                selectionMode === 'cell' && column.mergeRows && merged
                   ? getMergeGroupStartIndex(visibleRows, rowIndex, column.field)
                   : rowIndex;
               const focusRow = visibleRows[focusRowIndex];
@@ -585,7 +619,9 @@ const GridRowInner = <T extends object>({
                 rowId: focusRow[rowKey] as F1GridRowId,
                 columnIndex,
               });
-              onSelectRow(rowId, {} as MouseEvent<HTMLElement>);
+              if (selectionMode === 'cell' || event.detail === 0) {
+                onSelectRow(rowId, selectionMode === 'row' ? event : {} as MouseEvent<HTMLElement>);
+              }
             }}
             onMouseDown={(event: MouseEvent<HTMLElement>) =>
               handleCellMouseDown(event, cell)
@@ -593,6 +629,7 @@ const GridRowInner = <T extends object>({
             onMouseEnter={() => handleCellMouseEnter(cell)}
             onMouseUp={onCellSelectionEnd}
             onBlur={onCommitEdit}
+            onStopEdit={onStopEdit}
             onDoubleClick={() => onStartEdit(rowId, columnIndex)}
             onDraftChange={onDraftChange}
             onKeyDown={onKeyDown}

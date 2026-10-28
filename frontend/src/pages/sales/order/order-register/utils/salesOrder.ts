@@ -1,4 +1,4 @@
-import type { ExcelColumn } from '../../../../shared/utils/excelFile';
+import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
 
 // 영업관리 > 수주등록 화면 한 줄. key 는 화면에서만 쓰는 줄 구분값(저장 전 줄은 id 가 없다).
 export type OrderRow = {

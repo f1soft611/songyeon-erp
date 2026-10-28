@@ -107,6 +107,9 @@ describe('원재료BOM 규칙', () => {
     expect(filterSubMaterialMasterRows(rows, '', 'Y').map((row) => row.id)).toEqual(['a']);
     expect(filterSubMaterialMasterRows(rows, '', 'ALL', '003').map((row) => row.id)).toEqual(['b']);
     expect(filterSubMaterialMasterRows(rows, '', 'ALL', '', '000007').map((row) => row.id)).toEqual(['a']);
+    // 2026-10-28 납품업체는 글자 칸: 이름 일부로도 찾는다
+    expect(filterSubMaterialMasterRows(rows, '', 'ALL', '', '가나').map((row) => row.id)).toEqual(['a']);
+    expect(filterSubMaterialMasterRows(rows, '', 'ALL', '', '없는업체')).toEqual([]);
   });
 });
 

@@ -30,6 +30,7 @@ type GridBodyProps<T extends object> = {
   resizableRows: boolean;
   selectedIds: F1GridRowId[];
   rowSelection: F1GridRowSelection;
+  selectionMode?: 'cell' | 'row';
   focusedCell?: { rowId: F1GridRowId; columnIndex: number };
   editingCell?: { rowId: F1GridRowId; columnIndex: number };
   selectedCellRange?: F1GridCellRange;
@@ -123,6 +124,7 @@ export function GridBody<T extends object>({
   resizableRows,
   selectedIds,
   rowSelection,
+  selectionMode = 'cell',
   focusedCell,
   editingCell,
   selectedCellRange,
@@ -260,6 +262,7 @@ export function GridBody<T extends object>({
             columnLine={columnLine}
             stripeRows={stripeRows}
             isSelected={isSelected}
+            selectionMode={selectionMode}
             focusedCell={focusedCell}
             editingCell={editingCell}
             selectedCellRange={selectedCellRange}

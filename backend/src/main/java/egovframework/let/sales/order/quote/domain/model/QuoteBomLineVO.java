@@ -1,4 +1,4 @@
-package egovframework.let.sa.quote.domain.model;
+package egovframework.let.sales.order.quote.domain.model;
 
 import java.io.Serializable;
 

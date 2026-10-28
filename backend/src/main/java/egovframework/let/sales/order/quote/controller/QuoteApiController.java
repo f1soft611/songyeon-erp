@@ -1,4 +1,4 @@
-package egovframework.let.sa.quote.controller;
+package egovframework.let.sales.order.quote.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.quote.domain.model.QuoteSaveRequestVO;
-import egovframework.let.sa.quote.domain.model.QuoteVO;
-import egovframework.let.sa.quote.service.QuoteService;
+import egovframework.let.sales.order.quote.domain.model.QuoteSaveRequestVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteVO;
+import egovframework.let.sales.order.quote.service.QuoteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -35,7 +35,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/quotes")
+@RequestMapping("/api/v1/sales/order/quote")
 @Tag(name = "QuoteApiController", description = "영업관리 - 견적")
 public class QuoteApiController {
 

@@ -1,4 +1,4 @@
-package egovframework.let.sa.product.service.impl;
+package egovframework.let.sales.product.productregister.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -23,9 +23,9 @@ import egovframework.let.co.master.itemmaster.domain.model.BomLineInputVO;
 import egovframework.let.co.master.itemmaster.domain.model.BomLineVO;
 import egovframework.let.co.master.itemmaster.domain.repository.ItemMasterDAO;
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.product.domain.model.ProductRegisterRequestVO;
-import egovframework.let.sa.product.domain.model.ProductRegisterVO;
-import egovframework.let.sa.product.domain.repository.ProductRegisterDAO;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterRequestVO;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterVO;
+import egovframework.let.sales.product.productregister.domain.repository.ProductRegisterDAO;
 
 class ProductRegisterServiceImplTest {
 
@@ -124,7 +124,7 @@ class ProductRegisterServiceImplTest {
 		ProductRegisterRequestVO request = new ProductRegisterRequestVO();
 		request.setProductName("떡볶이소스");
 		request.setQuoteId(5L);
-		egovframework.let.sa.quote.domain.model.QuoteCostsVO costs = new egovframework.let.sa.quote.domain.model.QuoteCostsVO();
+		egovframework.let.sales.order.quote.domain.model.QuoteCostsVO costs = new egovframework.let.sales.order.quote.domain.model.QuoteCostsVO();
 		costs.setMarkupRate(10d); // 100
 		costs.setLossRate(1d); // (1000 + 100) × 1% = 11
 		costs.setLaborCost(50d);
@@ -168,5 +168,36 @@ class ProductRegisterServiceImplTest {
 		assertEquals(0d, p.getMarkupCost(), 1e-9);
 		assertEquals(550.5d, p.getTotalPrice(), 1e-9);
 		assertNull(p.getCurrentPrice());
+	}
+
+	@DisplayName("삭제(2026-10-28): 없는 제품 · 재고 있는 제품 · 수주 · 생산 등에 쓰인 제품은 막고, 아니면 견적을 가견적으로 돌리고 배합비 · 이력 · 단가표 · 제품을 지운다")
+	@Test
+	void deleteProduct() throws Exception {
+		ProductRegisterDAO dao = mock(ProductRegisterDAO.class);
+		ProductRegisterServiceImpl service = new ProductRegisterServiceImpl(dao, mock(ItemMasterDAO.class), mock(ItemMasterService.class));
+		assertEquals("제품을 찾을 수 없습니다", assertThrows(IllegalArgumentException.class, () -> service.deleteProduct("999999")).getMessage());
+
+		for (String code : Arrays.asList("000010", "000011", "000012")) {
+			when(dao.existsProduct(code)).thenReturn(true);
+		}
+		when(dao.selectProductStockQty("000010")).thenReturn(5d);
+		assertEquals("재고가 있는 제품은 삭제할 수 없어요. 제품마스터에서 사용안함으로 바꿔주세요",
+				assertThrows(IllegalArgumentException.class, () -> service.deleteProduct("000010")).getMessage());
+
+		when(dao.selectProductStockQty("000011")).thenReturn(0d);
+		when(dao.countProductUsage("000011")).thenReturn(2);
+		assertEquals("이미 수주 · 생산 · 출하 등에 쓰인 제품이라 삭제할 수 없어요. 제품마스터에서 사용안함으로 바꿔주세요",
+				assertThrows(IllegalArgumentException.class, () -> service.deleteProduct("000011")).getMessage());
+		verify(dao, never()).deleteProduct(any());
+
+		when(dao.selectProductStockQty("000012")).thenReturn(null); // 재고 칸이 비어 있어도 0 으로 본다
+		when(dao.countProductUsage("000012")).thenReturn(0);
+		service.deleteProduct(" 000012 ");
+		InOrder order = inOrder(dao);
+		order.verify(dao).revertConfirmedQuotes("000012");
+		order.verify(dao).deleteProductBom("000012");
+		order.verify(dao).deleteProductBomLog("000012");
+		order.verify(dao).deleteProductPricing("000012");
+		order.verify(dao).deleteProduct("000012");
 	}
 }

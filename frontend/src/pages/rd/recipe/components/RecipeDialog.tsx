@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, MenuItem, TextField, Typography } from '@mui/material';
-import { MaterialMatchDialog } from '../../../sa/product/components/MaterialMatchDialog';
+import { MaterialMatchDialog } from '../../../sales/product/product-register/components/MaterialMatchDialog';
 import { checkMaterialNames } from '../../../co/master/item-master/services/itemMaster.service';
 import type { MaterialCheck, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
-import { RecipeDropzone } from '../../../sa/product/components/RecipeDropzone';
+import { RecipeDropzone } from '../../../sales/product/product-register/components/RecipeDropzone';
 import {
   addTestVersion, createDraft, downloadVersionExcel, fetchDraft, fetchVersion, saveVersionBom, updateDraft,
   type RecipeBomSave, type RecipeHeader,

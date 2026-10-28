@@ -30,12 +30,12 @@ import { PartnerMasterManagementPage } from '../../co/master/partner-master/Part
 import { PartnerItemManagementPage } from '../../co/master/partner-item/PartnerItemManagementPage';
 import { MaterialMasterManagementPage } from '../../co/master/material-master/MaterialMasterManagementPage';
 import { SubMaterialMasterManagementPage } from '../../co/master/sub-material-master/SubMaterialMasterManagementPage';
-import { ProductRegisterManagementPage } from '../../sa/product/ProductRegisterManagementPage';
-import { PricingPage } from '../../sa/pricing/PricingPage';
-import { QuotePage } from '../../sa/quote/QuotePage';
-import { SalesOrderPage } from '../../sa/order/SalesOrderPage';
-import { ShipmentPage } from '../../sa/shipment/ShipmentPage';
-import { FeasibilityPage } from '../../sa/feasibility/FeasibilityPage';
+import { ProductRegisterManagementPage } from '../../sales/product/product-register/ProductRegisterManagementPage';
+import { PricingManagementPage } from '../../sales/product/pricing/PricingManagementPage';
+import { QuoteManagementPage } from '../../sales/order/quote/QuoteManagementPage';
+import { SalesOrderPage } from '../../sales/order/order-register/SalesOrderPage';
+import { ShipmentPage } from '../../sales/shipment/shipment-register/ShipmentPage';
+import { ProdCheckPage } from '../../sales/order/prod-check/ProdCheckPage';
 import { ProductionConfirmPage } from '../../pd/confirm/ProductionConfirmPage';
 import { ProductionActualPage } from '../../pd/actual/ProductionActualPage';
 import { ProductionStatusPage } from '../../pd/status/ProductionStatusPage';
@@ -415,8 +415,8 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 제품등록 (송연 SA0001)
-  if (selectedModule.id === 'sa' && currentPageKey === 'product') {
+  // 영업관리 > 제품관리 > 제품등록 (화면ID PMProductRegisterView, 송연 SA0001)
+  if (selectedModule.id === 'sales' && currentPageKey === 'PMProductRegisterView') {
     return (
       <ProductRegisterManagementPage
         selectedModule={selectedModule}
@@ -428,10 +428,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 단가관리 (송연 SA0002)
-  if (selectedModule.id === 'sa' && currentPageKey === 'pricing') {
+  // 영업관리 > 제품관리 > 단가관리 (화면ID PMPricingView, 송연 SA0002)
+  if (selectedModule.id === 'sales' && currentPageKey === 'PMPricingView') {
     return (
-      <PricingPage
+      <PricingManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -441,10 +441,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 견적 (송연 SA0003)
-  if (selectedModule.id === 'sa' && currentPageKey === 'quote') {
+  // 영업관리 > 수주관리 > 견적 (화면ID OMQuoteView, 송연 SA0003)
+  if (selectedModule.id === 'sales' && currentPageKey === 'OMQuoteView') {
     return (
-      <QuotePage
+      <QuoteManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -454,8 +454,8 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 수주등록 (송연 SA0004)
-  if (selectedModule.id === 'sa' && currentPageKey === 'order') {
+  // 영업관리 > 수주관리 > 수주등록 (화면ID OMOrderRegisterView, 송연 SA0004)
+  if (selectedModule.id === 'sales' && currentPageKey === 'OMOrderRegisterView') {
     return (
       <SalesOrderPage
         selectedModule={selectedModule}
@@ -467,10 +467,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 생산가능확인 (송연 SA0006)
-  if (selectedModule.id === 'sa' && currentPageKey === 'prod-check') {
+  // 영업관리 > 수주관리 > 생산가능확인 (화면ID OMProdCheckView, 송연 SA0006)
+  if (selectedModule.id === 'sales' && currentPageKey === 'OMProdCheckView') {
     return (
-      <FeasibilityPage
+      <ProdCheckPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -480,8 +480,8 @@ export function DashboardContent({
     );
   }
 
-  // 송연 영업관리 > 출하등록 (송연 SA0005)
-  if (selectedModule.id === 'sa' && currentPageKey === 'shipment') {
+  // 영업관리 > 출하관리 > 출하등록 (화면ID SHShipmentRegisterView, 송연 SA0005)
+  if (selectedModule.id === 'sales' && currentPageKey === 'SHShipmentRegisterView') {
     return (
       <ShipmentPage
         selectedModule={selectedModule}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, TextField, Typography } from '@mui/material';
 import { todayDash } from '../../../../shared/utils/excelFile';
 import { fetchClientNames } from '../../../co/master/item-master/services/itemMaster.service';
-import { fetchOrderProducts } from '../../../sa/order/services/salesOrder.service';
+import { fetchOrderProducts } from '../../../sales/order/order-register/services/salesOrder.service';
 import { createManualSale } from '../services/salesRegister.service';
 import type { ManualSaleForm } from '../utils/salesRegister';
 

@@ -47,13 +47,13 @@
     </sql>
 
     <!-- 최근 것부터 -->
-    <select id="selectQuoteList" resultType="egovframework.let.sa.quote.domain.model.QuoteVO">
+    <select id="selectQuoteList" resultType="egovframework.let.sales.order.quote.domain.model.QuoteVO">
         SELECT <include refid="quoteColumns"/>
         FROM quotes
         ORDER BY quote_id DESC
     </select>
 
-    <select id="selectQuote" parameterType="long" resultType="egovframework.let.sa.quote.domain.model.QuoteVO">
+    <select id="selectQuote" parameterType="long" resultType="egovframework.let.sales.order.quote.domain.model.QuoteVO">
         SELECT <include refid="quoteColumns"/>
         FROM quotes
         WHERE quote_id = #{quoteId}
@@ -65,7 +65,7 @@
         WHERE quote_id = #{quoteId}
     </select>
 
-    <insert id="insertQuote" parameterType="egovframework.let.sa.quote.domain.model.QuoteVO"
+    <insert id="insertQuote" parameterType="egovframework.let.sales.order.quote.domain.model.QuoteVO"
             useGeneratedKeys="true" keyProperty="quoteId" keyColumn="quote_id">
         INSERT INTO quotes (
             product_name, spec, product_type, storage, client_code, bom_json,
@@ -86,7 +86,7 @@
     </insert>
 
     <!-- 상태·작성 시각은 바꾸지 않는다 -->
-    <update id="updateQuote" parameterType="egovframework.let.sa.quote.domain.model.QuoteVO">
+    <update id="updateQuote" parameterType="egovframework.let.sales.order.quote.domain.model.QuoteVO">
         UPDATE quotes
         SET product_name = #{productName},
             spec = #{spec},

@@ -1,4 +1,4 @@
-package egovframework.let.sa.shipment.domain.model;
+package egovframework.let.sales.shipment.shipmentregister.domain.model;
 
 import java.io.Serializable;
 import java.util.List;

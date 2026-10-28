@@ -5,7 +5,7 @@
 
     <!-- ① 출하등록에서 넣은 줄. 출하량은 실출하량이 있으면 그것, 없으면 예정량 -->
     <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <select id="selectManualShipments" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+    <select id="selectManualShipments" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO">
         SELECT
             ls.id AS "id",
             'manual' AS "source",
@@ -29,7 +29,7 @@
     <!-- ② 물류출고일이 있는 생산확정 줄. 출하등록 줄이 그 로트를 가리키면 그 줄이 출하 기록이라 숨긴다(출하확정된 것은 남긴다) -->
     <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
     <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
-    <select id="selectProductionShipments" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+    <select id="selectProductionShipments" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO">
         SELECT
             p.id AS "id",
             'production' AS "source",
@@ -51,7 +51,7 @@
     </select>
 
     <!-- 그 날짜 출하 줄들의 로트 배분(로트 생산일 순) -->
-    <select id="selectAllocationsByDate" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotAllocationVO">
+    <select id="selectAllocationsByDate" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO">
         SELECT
             a.shipment_id AS "shipmentId",
             a.lot_id AS "lotId",
@@ -82,7 +82,7 @@
     </select>
 
     <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <insert id="insertShipment" parameterType="egovframework.let.sa.shipment.domain.model.ShipmentVO"
+    <insert id="insertShipment" parameterType="egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO"
             useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO logistics_schedule (
             schedule_date,
@@ -125,7 +125,7 @@
         WHERE id = #{orderId}
     </update>
 
-    <select id="selectShipmentState" parameterType="long" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+    <select id="selectShipmentState" parameterType="long" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO">
         SELECT
             ls.id AS "id",
             ls.lot_id AS "lotId",
@@ -163,7 +163,7 @@
         WHERE id = #{id}
     </delete>
 
-    <select id="selectAllocations" parameterType="long" resultType="egovframework.let.sa.shipment.domain.model.LotAllocationVO">
+    <select id="selectAllocations" parameterType="long" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO">
         SELECT
             a.shipment_id AS "shipmentId",
             a.lot_id AS "lotId",
@@ -209,7 +209,7 @@
     <!-- 그 품목의 로트(생산확정 줄) -->
     <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
     <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
-    <select id="selectLotsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+    <select id="selectLotsByProduct" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO">
         SELECT
             id AS "id",
             schedule_date AS "scheduleDate",
@@ -224,7 +224,7 @@
 
     <!-- 로트 출하량 세기 ① 로트 배분 합계 -->
     <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
-    <select id="selectAllocationSumsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+    <select id="selectAllocationSumsByProduct" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO">
         SELECT
             a.lot_id AS "lotId",
             SUM(a.qty) AS "qty"
@@ -237,7 +237,7 @@
 
     <!-- ② 로트를 가리키는 출하등록 줄(배분이 있는 줄은 ①에서 셌다) -->
     <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
-    <select id="selectLinkedShipmentsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+    <select id="selectLinkedShipmentsByProduct" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO">
         SELECT
             ls.id AS "id",
             ls.lot_id AS "lotId",
@@ -254,7 +254,7 @@
 
     <!-- ③ 물류출고일이 있는 생산확정 줄(그 줄 자신이 출하) -->
     <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
-    <select id="selectLotShipmentsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+    <select id="selectLotShipmentsByProduct" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO">
         SELECT
             id AS "id",
             logistics_actual_qty AS "logisticsActualQty",
@@ -268,7 +268,7 @@
 
     <!-- 로트 선택의 생산예정 수주: 그 품목의 아직 생산확정으로 안 넘어간 수주 -->
     <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <select id="selectPlannedOrders" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.PendingOrderVO">
+    <select id="selectPlannedOrders" parameterType="string" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.PendingOrderVO">
         SELECT
             id AS "id",
             order_date AS "orderDate",
@@ -286,7 +286,7 @@
 
     <!-- 수주등록 가져오기: 물류출고일이 기간 안이고 아직 출하로 안 가져간 수주 -->
     <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
-    <select id="selectImportOrders" parameterType="map" resultType="egovframework.let.sa.shipment.domain.model.PendingOrderVO">
+    <select id="selectImportOrders" parameterType="map" resultType="egovframework.let.sales.shipment.shipmentregister.domain.model.PendingOrderVO">
         SELECT
             id AS "id",
             order_date AS "orderDate",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -7,19 +7,27 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   F1Grid,
   type F1GridColumn,
-} from '../../../../shared/components/f1-grid';
-import type { BoxTypeRow } from '../../../co/master/box-type/types/boxType.types';
-import { formatPrice, percentText } from '../../../../shared/utils/numberFormat';
-import type { PricingBomLine, PricingDetail } from '../services/pricing.service';
+} from '../../../../../shared/components/f1-grid';
+import type { BoxTypeRow } from '../../../../co/master/box-type/types/boxType.types';
+import { fetchClientOptions } from '../../../../co/master/item-master/services/itemMaster.service';
+import type { ClientOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import { clientPickerOptions, clientPickerValueOf } from '../../../../co/master/item-master/utils/itemMaster';
+import { MasterPickerDialog } from '../../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
+import { formatPrice, percentText } from '../../../../../shared/utils/numberFormat';
+import type { PricingBomLine, PricingDetail } from '../types/pricing.types';
 import {
   computedHints,
   pricingFormFrom,
@@ -52,6 +60,15 @@ export function PricingDetailDialog({
     setForm(pricingFormFrom(detail));
   }, [detail]);
   const set = (patch: Partial<PricingForm>) => setForm((current) => ({ ...current, ...patch }));
+
+  // 거래처 팝업(2026-10-28, 제품마스터 거래처 칸과 같은 모양 · 같은 팝업): 사용 중 거래처에서 고른다
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  useEffect(() => {
+    fetchClientOptions().then(setClients).catch(() => undefined);
+  }, []);
+  const clientPickerValue = clientPickerValueOf(clients, form.clientCode, form.clientCode === detail.clientCode ? detail.clientName : '');
+  const searchClients = useCallback(async (keyword: string): Promise<MasterPickerOption[]> => clientPickerOptions(clients, keyword), [clients]);
 
   const hints = computedHints(detail.materialCost, form.markupRate, form.lossRate);
 
@@ -86,18 +103,42 @@ export function PricingDetailDialog({
   const top5 = useMemo(() => topAmountNames(bom), [bom]);
   const bomColumns = useMemo<F1GridColumn<PricingBomLine>[]>(
     () => [
-      { field: 'id', type: 'rownumber', width: 56, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
+      {
+        field: 'id',
+        headerName: 'No',
+        type: 'rownumber',
+        width: 56,
+        align: 'center',
+        pinned: 'left',
+        form: { hidden: true },
+        search: { hidden: true },
+      },
       {
         field: 'materialName',
         headerName: '원재료',
-        // 늘어나는 칸(flex)은 세로 스크롤바 폭까지 채워 가로 스크롤이 생긴다. 스크롤바 자리를 남기도록 고정 폭으로 둔다
-        width: 286,
+        width: 305,
         headerAlign: 'center',
         align: 'left',
         getCellStyle: ({ row }) => (top5.has(row.materialName) ? { fontWeight: 700, color: '#1d4ed8' } : undefined),
       },
-      { field: 'ratio', headerName: '배합비율', width: 90, headerAlign: 'center', align: 'right', renderCell: ({ row }) => percentText(row.ratio) },
-      { field: 'amountPerKg', headerName: '적용단가(원)', width: 110, headerAlign: 'center', align: 'right', renderCell: ({ row }) => formatPrice(row.amountPerKg) },
+      {
+        field: 'ratio',
+        headerName: '배합비율',
+        type: 'decimal',
+        decimalPlaces: 4,
+        width: 90,
+        align: 'right',
+        renderCell: ({ row }) => percentText(row.ratio)
+      },
+      {
+        field: 'amountPerKg',
+        headerName: '적용단가(원)',
+        type: 'currency',
+        decimalPlaces: 4,
+        width: 110,
+        align: 'right',
+        renderCell: ({ row }) => formatPrice(row.amountPerKg)
+      },
     ],
     [top5],
   );
@@ -192,7 +233,39 @@ export function PricingDetailDialog({
               placeholder: '비우면 최종계산단가로 판다',
               helperText: '실제로 받는 값입니다. 적으면 매출·거래명세표·채권관리대장이 이 값으로 계산합니다.',
             })}
-            <TextField size="small" margin="none" fullWidth label="거래처명" value={form.clientName} onChange={(event) => set({ clientName: event.target.value })} slotProps={shrink} />
+            {/* 거래처명: 칸 안 🔍 → 거래처 팝업에서 고른다(2026-10-28). 저장은 거래처코드 */}
+            <TextField
+              size="small"
+              margin="none"
+              fullWidth
+              label="거래처명"
+              value={clientPickerValue ? `${clientPickerValue.code} · ${clientPickerValue.name}` : ''}
+              slotProps={{
+                ...shrink,
+                htmlInput: { readOnly: true },
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="거래처명 선택">
+                        <IconButton aria-label="거래처명 선택" edge="end" size="small" sx={{ p: 0.75 }} onClick={() => setClientPickerOpen(true)}>
+                          <SearchIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+            <MasterPickerDialog
+              label="거래처명"
+              open={clientPickerOpen}
+              search={searchClients}
+              onClose={() => setClientPickerOpen(false)}
+              onChange={(option) => {
+                set({ clientCode: option.code });
+                setClientPickerOpen(false);
+              }}
+            />
           </Stack>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'primary.main', mb: 1.5 }}>원재료 구성</Typography>

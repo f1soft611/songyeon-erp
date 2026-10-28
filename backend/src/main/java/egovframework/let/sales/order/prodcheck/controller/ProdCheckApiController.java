@@ -1,4 +1,4 @@
-package egovframework.let.sa.feasibility.controller;
+package egovframework.let.sales.order.prodcheck.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.feasibility.domain.model.FeasibilityRequestVO;
-import egovframework.let.sa.feasibility.service.FeasibilityService;
+import egovframework.let.sales.order.prodcheck.domain.model.ProdCheckRequestVO;
+import egovframework.let.sales.order.prodcheck.service.ProdCheckService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,31 +31,31 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/feasibility")
-@Tag(name = "FeasibilityApiController", description = "영업관리 - 생산가능확인")
-public class FeasibilityApiController {
+@RequestMapping("/api/v1/sales/order/prod-check")
+@Tag(name = "ProdCheckApiController", description = "영업관리 - 생산가능확인")
+public class ProdCheckApiController {
 
-    private static final String TAG = "FeasibilityApiController";
+    private static final String TAG = "ProdCheckApiController";
 
     private final ResultVoHelper resultVoHelper;
-    private final FeasibilityService feasibilityService;
+    private final ProdCheckService prodCheckService;
 
     @Operation(summary = "고를 수 있는 제품(배합비가 있는 사용 중 제품)", security = { @SecurityRequirement(name = "Authorization") }, tags = { TAG })
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "조회 성공") })
     @GetMapping("/products")
     public ResultVO listProducts() throws Exception {
         Map<String, Object> resultMap = new HashMap<>();
-        resultMap.put("resultList", feasibilityService.listProducts());
+        resultMap.put("resultList", prodCheckService.listProducts());
         return resultVoHelper.buildFromMap(resultMap, ResponseCode.SUCCESS);
     }
 
     @Operation(summary = "생산가능 확인(조회만)", security = { @SecurityRequirement(name = "Authorization") }, tags = { TAG })
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "확인 성공. result.item") })
     @PostMapping("/check")
-    public ResultVO check(@RequestBody FeasibilityRequestVO request) throws Exception {
+    public ResultVO check(@RequestBody ProdCheckRequestVO request) throws Exception {
         try {
             Map<String, Object> resultMap = new HashMap<>();
-            resultMap.put("item", feasibilityService.check(request));
+            resultMap.put("item", prodCheckService.check(request));
             return resultVoHelper.buildFromMap(resultMap, ResponseCode.SUCCESS);
         } catch (IllegalArgumentException ex) {
             return resultVoHelper.buildFromMap(new HashMap<String, Object>(), ResponseCode.INPUT_CHECK_ERROR, ex.getMessage());

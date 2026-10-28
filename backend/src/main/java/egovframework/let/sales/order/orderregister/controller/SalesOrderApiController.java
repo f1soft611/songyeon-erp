@@ -1,4 +1,4 @@
-package egovframework.let.sa.order.controller;
+package egovframework.let.sales.order.orderregister.controller;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.order.domain.model.SalesOrderVO;
-import egovframework.let.sa.order.service.SalesOrderService;
+import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
+import egovframework.let.sales.order.orderregister.service.SalesOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -34,7 +34,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/orders")
+@RequestMapping("/api/v1/sales/order/order-register")
 @Tag(name = "SalesOrderApiController", description = "영업관리 - 수주등록")
 public class SalesOrderApiController {
 

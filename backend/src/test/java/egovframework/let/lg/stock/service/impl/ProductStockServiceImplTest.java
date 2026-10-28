@@ -17,8 +17,8 @@ import org.junit.jupiter.api.Test;
 import egovframework.let.lg.stock.domain.model.ProductStockVO;
 import egovframework.let.lg.stock.domain.model.StockAsOfVO;
 import egovframework.let.lg.stock.domain.repository.ProductStockDAO;
-import egovframework.let.sa.shipment.domain.model.ProductLotListVO;
-import egovframework.let.sa.shipment.service.ShipmentService;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotListVO;
+import egovframework.let.sales.shipment.shipmentregister.service.ShipmentService;
 
 class ProductStockServiceImplTest {
 

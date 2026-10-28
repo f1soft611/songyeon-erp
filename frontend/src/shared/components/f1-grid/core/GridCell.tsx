@@ -30,6 +30,7 @@ type GridCellProps<T extends object> = {
   columnLine: boolean;
   stripeRows: boolean;
   focused: boolean;
+  selectionMode?: 'cell' | 'row';
   editing: boolean;
   selected: boolean;
   selectionRangeActive?: boolean;
@@ -45,11 +46,12 @@ type GridCellProps<T extends object> = {
   isLastRow?: boolean;
   draftValue: F1GridDraftValue;
   dirtyCell?: boolean;
-  onFocus: () => void;
+  onFocus: (event: MouseEvent<HTMLElement>) => void;
   onMouseDown: (event: MouseEvent<HTMLElement>) => void;
   onMouseEnter: () => void;
   onMouseUp: () => void;
   onBlur?: () => void;
+  onStopEdit: () => void;
   onDoubleClick: () => void;
   onDraftChange: (value: F1GridDraftValue) => void;
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
@@ -94,6 +96,7 @@ const areGridCellPropsEqual = <T extends object>(
     prev.columnLine === next.columnLine &&
     prev.stripeRows === next.stripeRows &&
     prev.focused === next.focused &&
+    prev.selectionMode === next.selectionMode &&
     prev.editing === next.editing &&
     prev.selected === next.selected &&
     prev.selectionRangeActive === next.selectionRangeActive &&
@@ -126,6 +129,7 @@ const GridCellInner = <T extends object>({
   columnLine,
   stripeRows,
   focused,
+  selectionMode = 'cell',
   editing,
   selected,
   selectionRangeActive = false,
@@ -146,6 +150,7 @@ const GridCellInner = <T extends object>({
   onMouseEnter,
   onMouseUp,
   onBlur,
+  onStopEdit,
   onDoubleClick,
   onDraftChange,
   onKeyDown,
@@ -196,9 +201,18 @@ const GridCellInner = <T extends object>({
   const hideRangeStartBorder = rangeStart && !editing;
   const activeHighlight =
     !selectionRangeActive &&
+    (selectionMode === 'cell' || editing) &&
     (focused || editing || mergeGroupActive) &&
     !(selected && !editing && !mergeGroupActive && (rangeStart || !focused));
   const mergedCellHidden = Boolean(merged && !mergeInfo?.isStart);
+  const pinnedMergeContent = Boolean(
+    pinOffset &&
+      mergeInfo?.isStart &&
+      mergeInfo.span > 1 &&
+      column.renderCell &&
+      column.type !== 'checkbox' &&
+      !editing,
+  );
   const cellClassName = useMemo(
     () => [customCellProps.className].filter(Boolean).join(' ') || undefined,
     [customCellProps.className],
@@ -304,12 +318,24 @@ const GridCellInner = <T extends object>({
         borderColor:
           hideRangeStartBorder || activeHighlight ? 'transparent' : 'divider',
         opacity: mergedCellHidden ? 0 : 1,
-        pointerEvents: 'auto',
+        pointerEvents: pinnedMergeContent ? 'none' : 'auto',
         position: pinOffset ? 'sticky' : 'relative',
         left: pinOffset?.side === 'left' ? pinOffset.offset : undefined,
         right: pinOffset?.side === 'right' ? pinOffset.offset : undefined,
-        zIndex: pinOffset ? 2 : undefined,
+        zIndex: pinOffset ? (pinnedMergeContent ? 3 : 2) : undefined,
         isolation: pinOffset ? 'isolate' : undefined,
+        // Keep later physical rows clickable beneath the raised merged content.
+        '&::before': pinnedMergeContent
+          ? {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: rowHeight,
+              pointerEvents: 'auto',
+            }
+          : undefined,
         bgcolor: errorMessage ? 'error.lighter' : undefined,
         boxShadow: pinOffset
           ? pinOffset.shadow === false
@@ -392,15 +418,23 @@ const GridCellInner = <T extends object>({
           onChange={onDraftChange}
           onUserChange={onDraftChange}
           onCommitEdit={() => onBlur?.()}
+          onStopEdit={onStopEdit}
           onKeyDown={onKeyDown}
           onSelectChange={onSelectChange}
           onCodePick={onCodePick}
         />
       ) : column.renderCell ? (
-        <>
-          {adornment}
-          {column.renderCell(cellRenderContext)}
-        </>
+        pinnedMergeContent ? (
+          <Box component="span" sx={{ display: 'contents', pointerEvents: 'auto' }}>
+            {adornment}
+            {column.renderCell(cellRenderContext)}
+          </Box>
+        ) : (
+          <>
+            {adornment}
+            {column.renderCell(cellRenderContext)}
+          </>
+        )
       ) : (
         <>
           {adornment}
@@ -448,11 +482,12 @@ export function GridCell<T extends object>(props: GridCellProps<T>) {
 
   // Visual memoization must not retain handlers that captured an older edit.
   const handlers = useMemo(() => ({
-    onFocus: () => latestProps.current.onFocus(),
+    onFocus: (event: MouseEvent<HTMLElement>) => latestProps.current.onFocus(event),
     onMouseDown: (event: MouseEvent<HTMLElement>) => latestProps.current.onMouseDown(event),
     onMouseEnter: () => latestProps.current.onMouseEnter(),
     onMouseUp: () => latestProps.current.onMouseUp(),
     onBlur: () => latestProps.current.onBlur?.(),
+    onStopEdit: () => latestProps.current.onStopEdit(),
     onDoubleClick: () => latestProps.current.onDoubleClick(),
     onDraftChange: (value: F1GridDraftValue) => latestProps.current.onDraftChange(value),
     onKeyDown: (event: KeyboardEvent<HTMLElement>) => latestProps.current.onKeyDown(event),

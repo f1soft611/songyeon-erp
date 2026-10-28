@@ -1,4 +1,4 @@
-package egovframework.let.sa.pricing.service.impl;
+package egovframework.let.sales.product.pricing.service.impl;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -11,10 +11,10 @@ import java.util.Set;
 import org.egovframe.rte.fdl.cmmn.EgovAbstractServiceImpl;
 import org.springframework.stereotype.Service;
 
-import egovframework.let.sa.pricing.domain.model.PricingBomLineVO;
-import egovframework.let.sa.pricing.domain.model.PricingVO;
-import egovframework.let.sa.pricing.domain.repository.PricingDAO;
-import egovframework.let.sa.pricing.service.PricingService;
+import egovframework.let.sales.product.pricing.domain.model.PricingBomLineVO;
+import egovframework.let.sales.product.pricing.domain.model.PricingVO;
+import egovframework.let.sales.product.pricing.domain.repository.PricingDAO;
+import egovframework.let.sales.product.pricing.service.PricingService;
 
 /**
  * 영업관리 - 단가관리 서비스 구현 클래스
@@ -28,13 +28,14 @@ public class PricingServiceImpl extends EgovAbstractServiceImpl implements Prici
 
     static final String NOT_FOUND_MESSAGE = "단가표를 찾을 수 없습니다";
     static final String NO_FIELDS_MESSAGE = "고칠 항목이 없습니다";
+    static final String CLIENT_NOT_FOUND_MESSAGE = "거래처마스터에 없거나 사용하지 않는 거래처예요. 거래처를 다시 골라주세요";
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     // 송연 update_pricing 의 simple_fields 중 숫자 칸·글자 칸(이 목록에 있는 키만 그대로 저장)
     private static final Set<String> NUMBER_FIELDS = new HashSet<>(Arrays.asList("laborCost", "packagingCost",
             "logisticsCost", "margin", "otherCost1", "otherCost2", "otherCost3", "otherCost4", "currentPrice"));
     private static final Set<String> TEXT_FIELDS = new HashSet<>(Arrays.asList("otherCost1Note", "otherCost2Note",
-            "otherCost3Note", "otherCost4Note", "clientName", "productType"));
+            "otherCost3Note", "otherCost4Note", "productType"));
 
     private final PricingDAO pricingDAO;
 
@@ -99,6 +100,17 @@ public class PricingServiceImpl extends EgovAbstractServiceImpl implements Prici
                 fields.add(field);
             }
         }
+        // 거래처(2026-10-28): 팝업에서 고른 거래처코드. 사용 중 거래처만 받고, 지금 값은 그대로 둘 수 있으며, 비우면 비운다
+        if (values.containsKey("clientCode")) {
+            Object raw = values.get("clientCode");
+            String clientCode = raw == null ? "" : raw.toString().trim();
+            if (!clientCode.isEmpty() && !clientCode.equals(current.getClientCode())
+                    && pricingDAO.selectActiveClientCode(clientCode) == null) {
+                throw new IllegalArgumentException(CLIENT_NOT_FOUND_MESSAGE);
+            }
+            row.setClientCode(clientCode.isEmpty() ? null : clientCode);
+            fields.add("clientCode");
+        }
         if (fields.isEmpty()) {
             throw new IllegalArgumentException(NO_FIELDS_MESSAGE);
         }
@@ -127,7 +139,6 @@ public class PricingServiceImpl extends EgovAbstractServiceImpl implements Prici
             case "otherCost2Note": row.setOtherCost2Note(value); break;
             case "otherCost3Note": row.setOtherCost3Note(value); break;
             case "otherCost4Note": row.setOtherCost4Note(value); break;
-            case "clientName": row.setClientName(value); break;
             case "productType": row.setProductType(value); break;
             default: break;
         }

@@ -13,7 +13,8 @@ import { resetGridStorageIfColumnsChanged } from '../../../../../shared/utils/gr
 import { formatPrice, formatQty } from '../../../../../shared/utils/numberFormat';
 import {
   createMaterialMasterRow,
-  supplierNamesOf,
+  supplierLabelsOf,
+  vendorNameMap,
   withRowValues,
 } from '../../material-master/components/MaterialMasterGrid';
 import type { MaterialMasterRow, VendorOption } from '../../material-master/types/materialMaster.types';
@@ -67,13 +68,9 @@ export function createSubMaterialMasterColumns(
   categoryOptions: F1GridOption[],
   rows: MaterialMasterRow[],
   onHistory: (row: MaterialMasterRow) => void,
+  onPickSupplier: F1GridColumn<MaterialMasterRow>['onOpenCodePicker'], // 납품업체 [선택] → 팝업
 ): F1GridColumn<MaterialMasterRow>[] {
-  const vendorOptions = withRowValues(
-    vendors.flatMap((vendor) => (vendor.code ? [{ value: vendor.code, label: vendor.name }] : [])),
-    rows,
-    (row) => row.suppliers.flatMap((vendor) => (vendor.code ? [{ value: vendor.code, label: vendor.name }] : [])),
-  );
-  const vendorNames = new Map(vendorOptions.map((option) => [String(option.value), option.label]));
+  const vendorNames = vendorNameMap(vendors, rows);
   const units = [
     { value: '', label: '선택 안 함' },
     ...withRowValues(unitOptions, rows, (row) => [{ value: row.unit, label: row.unitNm || row.unit }]),
@@ -148,36 +145,28 @@ export function createSubMaterialMasterColumns(
       search: { hidden: true },
     },
     {
-      // 납품업체: 매입 거래처(거래처코드)에서 고른다. 여러 곳은 상세 창에서 고른다(원재료마스터와 같음)
+      // 납품업체(2026-10-28): [선택] → 팝업에서 매입 거래처 한 곳을 고른다(원재료마스터와 같은 code 칸)
       field: 'supplierCodes',
       headerName: '납품업체',
-      type: 'select',
-      options: vendorOptions,
+      type: 'code',
       flex: 1,
       width: 120,
       align: 'left',
       editable: canEdit,
-      onValueChange: (_row, value) => ({
-        supplierCodes: Array.isArray(value) ? value.map(String) : value ? [String(value)] : [],
-      }),
-      getValue: (row) => supplierNamesOf(row, vendorNames).join(', '),
-      renderCell: ({ row }) => {
-        const names = supplierNamesOf(row, vendorNames);
-        if (names.length === 0) return '';
-        if (names.length === 1) return names[0];
-        return (
-          <>
-            {names[0]} <Chip size="small" label={`외 ${names.length - 1}`} sx={{ height: 20, fontSize: 11 }} />
-          </>
-        );
+      onOpenCodePicker: onPickSupplier,
+      onValueChange: () => {
+        throw new Error('[선택]으로 납품업체를 골라 주세요.');
       },
-      form: { multiple: true, group: '기본정보', order: 5, span: 2 },
+      getValue: (row) => supplierLabelsOf(row, vendorNames).join(', '),
+      form: { group: '기본정보', order: 5, span: 2 },
+      // 상세 조회: 납품업체 이름 · 거래처코드 일부로 찾는다
       search: { label: '납품업체', order: 2 },
     },
     {
       field: 'unitPrice',
       headerName: '단가(원)',
-      type: 'decimal',
+      type: 'currency',
+      decimalPlaces: 4,
       width: 100,
       align: 'right',
       editable: canEdit,

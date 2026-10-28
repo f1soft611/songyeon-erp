@@ -11,11 +11,11 @@ import {
   F1Grid,
   type F1GridColumn,
   type F1GridRef,
-} from '../../../../shared/components/f1-grid';
-import type { BomEditRow, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
-import { appliedPrice, emptyBomEditRow, INITIAL_BOM_ROWS, materialNamePatch } from '../../../co/master/item-master/utils/productBom';
-import { formatPrice } from '../../../../shared/utils/numberFormat';
-import { formatOptionalNumber } from '../../../co/master/box-type/utils/boxType';
+} from '../../../../../shared/components/f1-grid';
+import type { BomEditRow, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import { appliedPrice, emptyBomEditRow, INITIAL_BOM_ROWS, materialNamePatch } from '../../../../co/master/item-master/utils/productBom';
+import { formatPrice } from '../../../../../shared/utils/numberFormat';
+import { formatOptionalNumber } from '../../../../co/master/box-type/utils/boxType';
 
 export type BomEditGridHandle = {
   // 지금 그리드의 줄(숫자 칸은 숫자로, 원재료 코드는 맞춘 값으로)
@@ -38,7 +38,9 @@ export const BomEditGrid = forwardRef<BomEditGridHandle, {
   height?: number | string;
   // 줄이 바뀔 때마다(이름·배합비율·단가) 지금 줄을 알려준다. 견적 창이 원재료비·견적단가를 바로 계산할 때 쓴다.
   onRowsChange?: (rows: BomEditRow[]) => void;
-}>(function BomEditGrid({ materials, sourceRows, sourceKey, storageKey, height = 260, onRowsChange }, ref) {
+  // 보기 전용(2026-10-28, 제품등록 [저장] 뒤): 칸을 고치지 못하고 행 추가 · 삭제 단추를 숨긴다
+  readOnly?: boolean;
+}>(function BomEditGrid({ materials, sourceRows, sourceKey, storageKey, height = 260, onRowsChange, readOnly = false }, ref) {
   const gridRef = useRef<F1GridRef<BomEditRow>>(null);
   const [rows, setRows] = useState<BomEditRow[]>(sourceRows);
   const [gridKey, setGridKey] = useState(0);
@@ -195,17 +197,21 @@ export const BomEditGrid = forwardRef<BomEditGridHandle, {
           rowHeight={32}
           showCheckbox={false}
           createRow={() => emptyBomEditRow(newBomRowId())}
-          editorPlugins={[{ id: `${storageKey}-editor`, enabled: true, canEdit: () => true }]}
-          allowAddRowInContextMenu={true}
+          editorPlugins={[{ id: `${storageKey}-editor`, enabled: true, canEdit: () => !readOnly }]}
+          allowAddRowInContextMenu={!readOnly}
           allowDuplicateRowInContextMenu={false}
-          allowDeleteRowInContextMenu={true}
+          allowDeleteRowInContextMenu={!readOnly}
           onChangesChange={handleChanges}
         />
       </Box>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1, alignItems: { sm: 'center' } }}>
-        <Button size="small" variant="outlined" onClick={() => gridRef.current?.addRow()}>+ 원재료 행 추가</Button>
-        <Button size="small" variant="outlined" onClick={() => gridRef.current?.deleteSelectedRows()}>선택 행 삭제</Button>
-        <Button size="small" variant="outlined" color="error" onClick={() => reset(emptyBomEditRows())}>전체 초기화</Button>
+        {!readOnly && (
+          <>
+            <Button size="small" variant="outlined" onClick={() => gridRef.current?.addRow()}>+ 원재료 행 추가</Button>
+            <Button size="small" variant="outlined" onClick={() => gridRef.current?.deleteSelectedRows()}>선택 행 삭제</Button>
+            <Button size="small" variant="outlined" color="error" onClick={() => reset(emptyBomEditRows())}>전체 초기화</Button>
+          </>
+        )}
         <Box sx={{ flex: 1 }} />
         <Typography variant="body2">배합비율 합계: <b>{sum.toFixed(3)}%</b></Typography>
       </Stack>

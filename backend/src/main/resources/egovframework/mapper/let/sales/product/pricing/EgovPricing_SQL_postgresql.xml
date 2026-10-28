@@ -3,7 +3,7 @@
 <!-- 영업관리 - 단가관리 (송연 SA0002, 기존 /api/pricing·/api/summary 와 같은 값) -->
 <mapper namespace="PricingDAO">
 
-    <resultMap id="pricing" type="egovframework.let.sa.pricing.domain.model.PricingVO">
+    <resultMap id="pricing" type="egovframework.let.sales.product.pricing.domain.model.PricingVO">
         <result property="productCode" column="product_code"/>
         <result property="productName" column="product_name"/>
         <result property="spec" column="spec"/>
@@ -27,8 +27,12 @@
         <result property="otherCost4Note" column="other_cost4_note"/>
         <result property="currentPrice" column="current_price"/>
         <result property="totalPrice" column="total_price"/>
+        <result property="clientCode" column="client_code"/>
         <result property="clientName" column="client_name"/>
     </resultMap>
+
+    <!-- 거래처(2026-10-28): pricing.client_code(거래처코드)에 거래처마스터 이름을 붙인다 -->
+    <sql id="clientNameOfPricing">(SELECT c.name FROM clients c WHERE c.client_code = p.client_code LIMIT 1)</sql>
 
     <!-- 송연 /api/pricing: q 가 있으면 제품명·제품코드·거래처 부분 일치(송연 SQLite LIKE 처럼 대소문자 무시 → ILIKE), 제품코드 순 -->
     <select id="selectPricingList" parameterType="string" resultMap="pricing">
@@ -43,12 +47,14 @@
             margin,
             total_price,
             current_price,
-            client_name
-        FROM pricing
+            p.client_code,
+            <include refid="clientNameOfPricing"/> AS client_name
+        FROM pricing p
         <if test="_parameter != null and _parameter != ''">
         WHERE product_name ILIKE '%' || #{_parameter} || '%'
            OR product_code ILIKE '%' || #{_parameter} || '%'
-           OR client_name ILIKE '%' || #{_parameter} || '%'
+           OR p.client_code ILIKE '%' || #{_parameter} || '%'
+           OR <include refid="clientNameOfPricing"/> ILIKE '%' || #{_parameter} || '%'
         </if>
         ORDER BY product_code
     </select>
@@ -78,12 +84,13 @@
             other_cost4_note,
             current_price,
             total_price,
-            client_name
-        FROM pricing
+            p.client_code,
+            <include refid="clientNameOfPricing"/> AS client_name
+        FROM pricing p
         WHERE product_code = #{productCode}
     </select>
 
-    <select id="selectPricingBom" parameterType="string" resultType="egovframework.let.sa.pricing.domain.model.PricingBomLineVO">
+    <select id="selectPricingBom" parameterType="string" resultType="egovframework.let.sales.product.pricing.domain.model.PricingBomLineVO">
         SELECT
             material_name AS "materialName",
             ratio_percent AS "ratioPercent",
@@ -114,10 +121,19 @@
             <if test="fields.contains('otherCost4')">other_cost4 = #{row.otherCost4,jdbcType=DOUBLE},</if>
             <if test="fields.contains('otherCost4Note')">other_cost4_note = #{row.otherCost4Note},</if>
             <if test="fields.contains('currentPrice')">current_price = #{row.currentPrice,jdbcType=DOUBLE},</if>
-            <if test="fields.contains('clientName')">client_name = #{row.clientName},</if>
+            <if test="fields.contains('clientCode')">client_code = #{row.clientCode},</if>
         </set>
         WHERE product_code = #{row.productCode}
     </update>
+
+    <!-- 사용 중 거래처코드인지(2026-10-28, 제품마스터 selectActiveClientCode 와 같음) -->
+    <select id="selectActiveClientCode" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE client_code = #{clientCode}
+          AND COALESCE(use_yn, 'Y') = 'Y'
+        LIMIT 1
+    </select>
 
     <!-- 제품단가 = 원재료비 + 로스 + 고정마진 + 인건비 + 포장비 + 물류비 + 마진 + 기타1~4 (빈 값은 0) -->
     <update id="updatePricingTotal" parameterType="string">

@@ -1,4 +1,4 @@
-package egovframework.let.sa.shipment.domain.repository;
+package egovframework.let.sales.shipment.shipmentregister.domain.repository;
 
 import java.util.HashMap;
 import java.util.List;
@@ -7,10 +7,10 @@ import java.util.Map;
 import org.egovframe.rte.psl.dataaccess.EgovAbstractMapper;
 import org.springframework.stereotype.Repository;
 
-import egovframework.let.sa.shipment.domain.model.LotAllocationVO;
-import egovframework.let.sa.shipment.domain.model.LotRowVO;
-import egovframework.let.sa.shipment.domain.model.PendingOrderVO;
-import egovframework.let.sa.shipment.domain.model.ShipmentVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.PendingOrderVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO;
 
 /**
  * 영업관리 - 출하등록 데이터 접근 클래스 (송연 logistics_schedule · production_schedule · shipment_lot_allocation · sales_order)

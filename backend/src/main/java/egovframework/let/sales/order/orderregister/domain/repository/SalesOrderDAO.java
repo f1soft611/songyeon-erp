@@ -1,4 +1,4 @@
-package egovframework.let.sa.order.domain.repository;
+package egovframework.let.sales.order.orderregister.domain.repository;
 
 import java.util.HashMap;
 import java.util.List;
@@ -7,8 +7,8 @@ import java.util.Map;
 import org.egovframe.rte.psl.dataaccess.EgovAbstractMapper;
 import org.springframework.stereotype.Repository;
 
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.domain.model.SalesOrderVO;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
 
 /**
  * 영업관리 - 수주등록 데이터 접근 클래스 (송연 sales_order · clients · products)

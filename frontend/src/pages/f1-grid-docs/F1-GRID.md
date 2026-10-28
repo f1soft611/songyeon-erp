@@ -68,6 +68,44 @@ Grid의 핵심 렌더링 및 상태 관리는 직접 구현한다.
 
 ## 추가 반영 기능 요약 (2026-09-01 기준)
 
+### 고정 병합 셀의 사용자 정의 콘텐츠 클릭 (2026-10-27)
+
+- `mergeRows: true`인 컬럼의 `renderCell` 링크/버튼은 왼쪽·오른쪽 고정 및 가로 스크롤 후에도 클릭할 수 있다.
+- 고정 병합 시작 셀의 콘텐츠만 후속 투명 셀보다 위에서 포인터를 받으며, 병합 영역의 빈 공간은 실제 상세 행 선택/드래그 동작을 유지한다.
+- 일반 셀, 고정 해제 상태와 편집기의 이벤트 계약은 변경하지 않는다.
+
+### select 편집 취소 시 셀 범위 드래그 차단 (2026-10-27)
+
+- `type: 'select'` 셀 편집 중 목록을 열거나 다른 셀을 클릭해도 셀 범위 드래그를 시작하지 않는다.
+- 다른 셀 또는 그리드 밖을 클릭하면 select 편집을 취소하고 원래 값을 유지한다.
+- 목록에서 옵션을 선택하면 선택값을 기존처럼 반영한다.
+
+### 선택 단위 옵션 (2026-10-27)
+
+`selectionMode?: 'cell' | 'row'`로 선택 표시와 복사 단위를 정한다. 기본값은 `cell`이며 기존 편집 화면은 변경되지 않는다. 현황처럼 한 행을 확인하는 화면은 다음과 같이 설정한다.
+
+```tsx
+<F1Grid
+  rows={rows}
+  columns={columns}
+  rowKey="id"
+  selectionMode="row"
+  showCheckbox={false}
+/>
+```
+
+- `row`: 셀 클릭 시 행 전체를 강조하고 비편집 셀 포커스 테두리/셀 범위 드래그는 표시하지 않는다. 내부 포커스와 편집 기능은 유지한다.
+- `multiSelect?: boolean` 기본값은 `false`다. `cell`/`row` 표시 모드와 독립적으로 행 선택 개수를 제한한다. 기본값에서는 Ctrl/Command/Shift 클릭이나 Shift 위/아래 키도 대상 한 행만 선택하며, checkbox 선택은 이전 행을 대체하고 재클릭하면 해제한다.
+- `multiSelect={true}`일 때만 Ctrl/Command 클릭으로 행 추가/해제, Shift 클릭으로 마지막 일반 클릭 행부터 연속 행을 선택한다. 위/아래 키는 선택 행도 이동하며 Shift로 범위를 확장한다. 좌/우 이동은 다중 행 선택을 유지한다.
+- 행 선택용 헤더 전체 선택 checkbox는 `multiSelect={true}`에서만 표시한다. `showCheckbox`의 컬럼 폭과 개별 행 checkbox는 유지하며 데이터 컬럼의 `headerCheckbox` 일괄 값 편집은 영향받지 않는다.
+- 단일 선택에서 `initialSelectedRowIds`/ref `setSelectedRowIds`에 복수 ID를 전달하면 현재 표시 순서에서 첫 유효 행만 선택한다. 실행 중 true→false 전환도 첫 선택 행만 유지하며 다시 true로 바꿔도 이전 다중 선택을 복구하지 않는다. 콜백/ref/강조/행 복사는 같은 선택 상태를 사용한다.
+- Ctrl+C는 선택된 표시 행의 모든 표시 컬럼을 TSV로 복사한다. `cell`의 기존 셀/범위 복사와 붙여넣기·편집 계약은 유지한다.
+- `showCheckbox`와 독립적이다. 체크박스, `initialSelectedRowIds`, `onSelectionChange`, 선택 ref API는 동일한 행 선택 상태를 사용한다.
+- 강조는 실제 행 높이 단위이므로 병합 셀 그룹 전체가 아닌 선택된 상세 행에만 표시된다. 고정 열과 가로 스크롤에서도 정렬된다. `selectRowOnContextMenu={false}`이면 우클릭으로 선택 행을 바꾸지 않는다.
+- 실행 중 모드를 바꾸면 이전 셀 범위와 복사 표시를 해제하고 행 선택은 유지한다. 옵션은 수주현황·문서현황에 적용되며 다른 화면은 명시적으로 설정해야 한다.
+
+다중 행 작업이 필요한 화면만 `<F1Grid selectionMode="row" multiSelect ... />`로 명시한다. `multiSelect`는 셀 모드의 직사각형 범위 선택·복사 및 F1Tree의 `treeCheckbox` 부모·자식 값 전파를 제한하지 않는다.
+
 ### 선택·편집 렌더 성능 (2026-10-23)
 
 - 고정열 위치는 객체 참조가 아니라 방향·오프셋·그림자 값으로 비교한다. 동일 위치의 셀은 다른 셀을 선택해도 불필요하게 다시 표시하지 않는다.
@@ -134,9 +172,14 @@ const currentRows = grid.acceptSavedRows(savedRows);
 - `stripeRows` 기본값은 `true`이며, 홀수 행에 스트라이프 배경을 적용해 가독성을 높인다. 고정(pinned) 컬럼에서도 동일한 규칙을 유지하며, sticky 레이어가 다른 셀과 겹치지 않도록 별도 stacking context를 유지한다.
 - `rowHeight`, `minRowHeight`, `maxRowHeight`, `resizableRows`를 통해 Grid 인스턴스 단위의 행 높이를 제어한다.
 - `loading` 상태에서는 그리드 전체 입력을 막는 오버레이의 중앙에 공통 `AppLoadingSpinner`를 34px·2.4px 두께로 표시한다. 색상은 테마 기본값을 사용하고, 오버레이는 테마 `background.default`를 84% 불투명도로 적용한다. 스피너는 MUI 기본 indeterminate 애니메이션을 사용해 원호 길이가 변하면서 회전한다. F1Grid/F1Tree와 다른 기본 로딩 화면은 같은 2.4px 기본 두께를 사용한다. 앱 첫 접속 로더만 기존 외형 보존을 위해 3.6px를 명시한다. F1Tree의 `loading`도 내부 F1Grid로 전달된다. 화면별 loading 정책은 변경하지 않는다. `minHeight`를 넘겨 부모 영역에서 내부 스크롤을 유지할 수 있다.
+- 외부 `loading`, 내부 조회 또는 data-source loading이 시작되면 셀 범위 선택·복사 표시와 진행 중 포인터 드래그를 초기화한다. 행 checkbox 선택, 행 데이터와 편집 변경은 유지한다. 포인터가 가리키는 행과 선택 오버레이의 행 위치는 기존 `rowIndexById` 인덱스로 조회해 드래그마다 전체 행을 선형 탐색하지 않는다.
 - 부모의 조회 결과 `rows`는 내부 그리드 편집 모델에 브라우저 페인트 전에 반영한다. 조회 로딩이 종료되는 화면 프레임에 이전 빈 상태가 먼저 노출되지 않으며, API 요청과 페이지별 `loading` 상태 계약은 유지한다.
 - `F1GridColumn.pinned` 옵션으로 초기 좌/우 고정 컬럼을 지정할 수 있다.
 - `F1Tree.defaultExpandAll` 옵션으로 최초 렌더링 시 전체 트리를 펼친 상태로 시작할 수 있다.
+- 품목·거래처 분류 설정 팝업은 `F1Tree`의 `id`/`parentId` 계층과 `name` 트리 컬럼을 사용한다. 분류명·정렬순서·사용여부를 셀에서 직접 편집하고 여러 변경 행을 저장한다. 신규 부모·자식은 부모부터 생성하고 반환된 ID로 연결하며, 기존 분류의 사용 해제는 자식부터 저장한다. 단건 API 중간 실패 시 성공한 행은 재전송하지 않고 나머지 입력을 유지한다. 추가는 화면 버튼으로만 허용하며 품목 3단계·거래처 2단계, 메뉴별 등록/수정 권한을 적용한다. 공통 F1Tree 자체의 API나 동작은 변경하지 않는다.
+- 분류 트리는 `CommonDialog` 안에 표시한다. 타이틀 아래 description에 최대 단계·셀 더블클릭 편집·사용여부 해제 안내를 표시하고, 추가 버튼은 트리 위 우측에 배치한다. 헤더 X와 하단 닫기는 같은 미저장 변경 보호를 적용하며 저장 중에는 닫히지 않는다.
+- 분류 설정 저장과 저장 후 목록 재조회는 조용한 로딩을 사용한다. 트리 행을 유지하고 `저장` 버튼에만 16px `AppLoadingSpinner`를 표시한다. 최초 조회/수동 재조회는 기존 트리 로딩을 유지하며, 저장 중 편집·추가·중복 저장·닫기 차단도 유지한다.
+- 품목·거래처 분류 설정의 저장 버튼은 추가/수정 행 또는 편집 중 변경값이 있을 때만 활성화한다. 초기 조회·원복·저장 완료 후에는 비활성화하고 부분 실패 시 미저장 행은 재시도할 수 있다. 편집 중 저장 클릭은 먼저 셀 편집과 변경 상태를 동기 확정하여 첫 클릭 누락을 방지한다.
 - `showCheckbox={false}`는 Row Selector 체크박스 전체 제거용이고, `column.type === 'checkbox'`의 `headerCheckbox`는 데이터 셀 편집용으로 구분된다.
 - `rowProjection`과 `cellAdornment`를 통해 Grid UI의 표시 전/후 장식을 확장할 수 있다.
 - `disableSorting`, `disableFiltering` 옵션으로 특정 화면에서 정렬/필터 기능을 비활성화할 수 있다.
@@ -534,7 +577,7 @@ const columns: F1GridColumn<Item>[] = [
 
 ## number/decimal 컬럼 소수점 표시
 
-`F1GridColumn.decimalPlaces`로 숫자 컬럼의 소수점 자릿수를 지정한다. `number`와 `decimal` 컬럼에서 생략하면 화면 및 Excel에서 소수점 이하 최대 5자리까지 표시하며 끝의 0과 불필요한 소수점은 생략한다. 예를 들어 `1`은 `1`, `1.2`는 `1.2`, `1.234567`은 `1.23457`로 표시한다.
+`F1GridColumn.decimalPlaces`로 숫자 컬럼의 소수점 자릿수를 지정한다. `number`와 `decimal` 컬럼에서 생략하면 화면 및 Excel에서 소수점 이하 최대 5자리까지 표시하며 끝의 0과 불필요한 소수점은 생략한다. 정수 값은 불필요한 소수점 없이 `1`, 소수 값은 `1.2`, `1.234567`은 `1.23457`로 표시한다.
 
 `decimalPlaces`를 지정하면 기존처럼 표시 소수점 자릿수를 고정한다. 예를 들어 `decimalPlaces: 2`는 `1.2`를 `1.20`으로 표시한다. 이 옵션은 편집 입력 정규화에도 사용되며, 옵션을 생략해도 편집 입력을 5자리로 제한하지 않는다.
 
@@ -544,7 +587,7 @@ const columns: F1GridColumn<Item>[] = [
 { field: 'price', headerName: '가격', type: 'currency', format: 'currency' } // KRW, 기본 소수점 0자리
 ```
 
-`format: 'currency'`의 기본 0자리 KRW 표시와 명시적 `decimalPlaces` 동작은 유지한다. Excel 숫자 서식도 일반 숫자는 `#,##0.#####`, 명시 자릿수는 고정 서식으로 적용한다.
+`format: 'currency'`의 기본 0자리 KRW 표시와 명시적 `decimalPlaces` 동작은 유지한다. Excel 숫자 서식은 기본 숫자의 정수 값에 `#,##0`, 소수 값에 `#,##0.#####`, 명시 자릿수에 고정 서식을 적용한다. 정수와 소수 값이 같은 컬럼에 있어도 셀 값별 서식을 적용한다.
 
 ## PageSearchArea 상세 검색 연결
 
@@ -757,6 +800,12 @@ Escape
 
 코드 선택(`type: 'code'`) 컬럼은 편집 모드에서 버튼이 셀 너비를 꽉 채우도록 렌더된다. 선택 버튼은 셀 높이와 너비를 유지하면서, 다른 에디터와 동일한 여백/테두리 규칙을 따른다.
 
+코드를 선택하지 않고 다른 셀이나 그리드 밖을 클릭하면 편집이 종료되며, 기존 값과 타입 및 변경 상태는 유지한다. 코드 값은 `onOpenCodePicker`의 선택 결과 패치로만 변경한다. 공통코드 드롭다운(`type: 'select'`)도 다른 셀/외부 클릭 시 편집을 취소하며, 목록을 연 뒤 선택 없이 바깥 영역을 클릭하거나 Escape로 닫으면 셀 편집까지 종료한다. select 편집 중에는 목록 열기와 셀 클릭이 범위 드래그를 시작하지 않는다. 옵션을 선택한 경우에는 해당 옵션의 원래 타입 값을 반영한다.
+
+행 폼의 `type: 'code'`도 같은 선택 콜백을 사용한다. `onOpenCodePicker` 실행 중 전달한 패치와 반환 패치는 병합하여 한 번 적용하고, 팝업에서 나중에 전달하는 비동기 패치는 도착 시 행 폼 초안에 반영한다. 취소하면 초안과 원본 값은 변경하지 않는다.
+
+품목관리의 `품목분류`는 `itemClsId`를 저장하고 `itemClsPath` 경로를 표시한다. 거래처관리의 `거래처 대분류/소분류`는 `businessKind1/2`를 저장하고 서버의 표시명을 보여 준다. 셀 더블클릭 → 코드 선택 또는 행 폼의 선택 버튼 → CommonDialog의 읽기 전용 F1Tree에서 선택한 뒤 기존 페이지 저장으로 확정한다. 선택창 하단은 왼쪽부터 `선택`, `취소`만 배치하며 `선택 해제` 버튼은 제공하지 않는다. 취소와 헤더 X는 기존 값을 유지한다. 품목은 1~3단계 선택을 허용하며 거래처 소분류 선택은 대분류도 자동 지정한다. 대분류 변경은 소분류를 비운다. 미사용 분류와 미사용 조상을 가진 분류는 새로 선택할 수 없지만 기존 참조는 표시·유지한다. 기존 문자열 분류 `matCataType`은 별도로 보존하며 이 기능의 저장값으로 사용하지 않는다.
+
 ### 수주등록 상세 적용 예
 
 [수주등록 상세 그리드](../sales/order/create/components/SalesOrderDetailGrid.tsx)는
@@ -764,11 +813,17 @@ Escape
 선택한 ID·코드·명을 `applyPatch`로 같은 행에 반영하며, 행 추가/삭제는
 `F1GridRef.addRow()`와 `deleteSelectedRows()`를 사용한다.
 
+상세 그리드 제목 옆의 `품목 선택` 버튼은 행을 하나 선택했을 때 활성화된다.
+버튼은 키보드로도 실행할 수 있으며, 도움창에서 고른 마스터 옵션을
+`F1GridRef.setCellValue()`로 선택 행에 전달한다. 품목코드 컬럼의
+`onValueChange`는 옵션 ID·코드·명을 한 번의 행 변경으로 함께 반영한다.
+기존 코드 셀 편집 및 `코드 선택` 버튼도 계속 사용할 수 있다.
+
 주문수량 또는 단가가 바뀌면 공급가와 VAT 10%를 소수 둘째 자리까지 다시
 계산한다. VAT 셀을 직접 수정하면 해당 행의 총액만 갱신하고, 이후 수량이나
 단가가 변경될 때 VAT를 기본 10%로 재계산한다. 출하수량과 라인상태는 신규
-수주 작성 단계에서 읽기 전용으로 둔다. 이 값 계산은 화면 입력 상태에만
-적용되며 저장 API나 DB 동작을 추가하지 않는다.
+수주 작성 단계에서 읽기 전용으로 둔다. 화면 금액은 입력 중 미리보기이며,
+저장 시 서버가 금액을 다시 계산한다.
 
 ## 행 폼 모달 플러그인
 
@@ -1739,7 +1794,7 @@ F1Tree는 `루트 추가` 항목이 `컬럼 길이 자동 조정` 아래, `행 �
 
 동작 요약:
 
-- **엑셀 내보내기**: 화면에 보이는 컬럼/행(필터·정렬·숨김·순서 반영) 기준으로 `.xlsx` 파일을 생성한다. `exceljs`를 클릭 시점에 동적 로딩(`await import('exceljs')`)해 초기 번들 크기에 영향을 주지 않는다. `number`/`decimal`/`currency`는 숫자 셀, `date`는 Grid `format`이 적용된 텍스트 셀, `datetime`은 Excel 날짜·시간 셀, `time`은 시간 서식이 적용된 Excel 숫자 serial, `checkbox`는 Boolean 셀로 기록한다. 숫자는 그룹 구분자를 적용하고 기본 소수점은 최대 5자리 선택 표시(`#,##0.#####`), 명시한 `decimalPlaces`는 고정 자릿수로 내보낸다. `format: 'currency'`는 KRW 서식을 적용하며 기본 소수점은 0자리다. Excel 헤더와 데이터 셀은 각각 Grid의 `headerAlign`과 `align`을 따르며, 미지정 시 헤더는 가운데, 본문은 `number`/`rownumber` 오른쪽 및 그 외 왼쪽 정렬이다. `date`는 Grid 화면과 동일한 문자열 표현을 우선하므로 Excel 날짜 계산/정렬용 날짜 값으로 저장하지 않는다. select/autocomplete/user/code 등은 기존 화면 표시 텍스트(label 포함)를 유지한다. `null`/`undefined`/빈 문자열은 빈 셀, 변환할 수 없는 비어 있지 않은 typed 값은 원문 텍스트로 보존한다. date-only 문자열과 offset이 포함된 timestamp는 그리드 표시와 동일하게 문자열에 적힌 날짜 부분을 사용해 timezone에 의해 날짜가 바뀌지 않는다. npm에 공개된 `xlsx`(SheetJS) 패키지는 미패치 상태의 High 심각도 취약점(Prototype Pollution, ReDoS)이 있어 채택하지 않았다.
+- **엑셀 내보내기**: 화면에 보이는 컬럼/행(필터·정렬·숨김·순서 반영) 기준으로 `.xlsx` 파일을 생성한다. `exceljs`를 클릭 시점에 동적 로딩(`await import('exceljs')`)해 초기 번들 크기에 영향을 주지 않는다. `number`/`decimal`/`currency`는 숫자 셀, `date`는 Grid `format`이 적용된 텍스트 셀, `datetime`은 Excel 날짜·시간 셀, `time`은 시간 서식이 적용된 Excel 숫자 serial, `checkbox`는 Boolean 셀로 기록한다. 숫자는 그룹 구분자를 적용하며 기본 `number`/`decimal`은 정수 값에 `#,##0`, 소수 값에 `#,##0.#####`를 사용해 정수 뒤 불필요한 소수점 구분자를 표시하지 않는다. 명시한 `decimalPlaces`는 고정 자릿수로 내보낸다. `format: 'currency'`는 KRW 서식을 적용하며 기본 소수점은 0자리다. Excel 헤더와 데이터 셀은 각각 Grid의 `headerAlign`과 `align`을 따르며, 미지정 시 헤더는 가운데, 본문은 `number`/`rownumber` 오른쪽 및 그 외 왼쪽 정렬이다. `date`는 Grid 화면과 동일한 문자열 표현을 우선하므로 Excel 날짜 계산/정렬용 날짜 값으로 저장하지 않는다. select/autocomplete/user/code 등은 기존 화면 표시 텍스트(label 포함)를 유지하고, 문자열 셀은 Excel 텍스트 서식(`@`)을 적용해 `000004` 같은 코드값을 Excel에서 편집한 뒤에도 문자열로 보존한다. `null`/`undefined`/빈 문자열은 빈 셀, 변환할 수 없는 비어 있지 않은 typed 값은 원문 텍스트로 보존한다. date-only 문자열과 offset이 포함된 timestamp는 그리드 표시와 동일하게 문자열에 적힌 날짜 부분을 사용해 timezone에 의해 날짜가 바뀌지 않는다. 숫자로 이미 전달된 원본의 선행 0은 내보내기에서 복원하지 않으므로 품목코드 같은 식별자는 데이터와 컬럼에서 문자열로 유지한다. npm에 공개된 `xlsx`(SheetJS) 패키지는 미패치 상태의 High 심각도 취약점(Prototype Pollution, ReDoS)이 있어 채택하지 않았다.
 - **컬럼 길이 자동 조정**: 현재 표시된 컬럼 전체에 `getAutoFitColumnWidth`를 적용해 폭을 일괄 재계산한다.
 - **루트 추가**(F1Tree 전용): 우클릭 위치와 무관하게 최상위 루트 행을 추가한다.
 - **행 추가**: 일반 F1Grid에서는 데이터 순서의 맨 아래에 새 행을 추가한다. F1Tree에서는 우클릭한 행의 자식으로 추가하고(대상이 없으면 루트로 추가) 기존 트리 동작을 유지한다.
@@ -2139,7 +2194,7 @@ F1-Grid는 전체 데이터/선택/편집 상태와 실제 DOM 렌더 범위를 
 - `columnOverscan`: viewport 좌/우에 추가 렌더링할 일반 컬럼 수이며 기본값은 2이다.
 - `fixedRowHeightThreshold`: 기본값 10,000이며, 이상에서는 행 높이를 고정하고 행 리사이즈 핸들을 비활성화한다.
 - pinned 컬럼, 편집 중 컬럼, 선택 범위의 anchor/focus 컬럼은 viewport 밖이어도 DOM에 유지한다.
-- 스크롤 위치는 `requestAnimationFrame`당 한 번만 React state에 반영한다.
+- 세로 스크롤 위치와 viewport 크기/스크롤바 gutter는 기존처럼 `requestAnimationFrame`으로 측정한다. 가로 스크롤은 네이티브 본문 스크롤과 헤더 동기화를 유지하며, 컬럼 가상화가 꺼져 있거나 현재 표시할 열 집합이 바뀌지 않으면 수평 위치만으로 React viewport 상태를 다시 렌더하지 않는다. 표시 열 집합이 바뀌면 pinned/protected 컬럼을 포함해 새 범위를 반영한다.
 - 세로 스크롤바가 생기는 대용량 그리드에서는 본문 스크롤 영역의 scrollbar gutter 폭을 헤더 스크롤 영역 끝에도 반영해, 가로 스크롤을 마지막으로 이동해도 헤더와 데이터 셀의 최대 `scrollLeft` 기준이 일치해야 한다.
 - 선택 범위는 셀마다 state를 만들지 않고 `{ anchor, focus }`로 저장한 뒤 숫자 bounds를 한 번 계산해 렌더 셀에서 비교한다.
 - export, validate, 전체 선택, 정렬/필터, dirty/edit 데이터는 virtual window가 아니라 전체 visible rows를 기준으로 동작한다.
@@ -2153,6 +2208,7 @@ F1-Grid는 전체 데이터/선택/편집 상태와 실제 DOM 렌더 범위를 
 - 일반 행 선택은 `Set`, 전체 선택은 `allSelected + excludedIds`로 보관한다. 배열은 callback/Ref 호출처럼 실제 ID 목록이 필요할 때만 만든다.
 - Tab 이동은 전체 `행 × 컬럼` 편집 가능 행렬을 만들지 않고 현재 위치부터 다음 편집 가능 셀까지만 검사한다.
 - 10,000행 이상 로컬 데이터에 정렬/필터가 적용되면 Web Worker query를 사용한다. Worker를 사용할 수 없거나 `getValue` 컬럼이 있으면 동기 query로 fallback한다.
+- 셀 드래그 포인터 hit 테스트와 범위 오버레이 좌표 계산은 `rowIndexById`를 재사용해 행 수에 비례하는 반복 ID 검색을 피한다.
 - F1Tree는 구조 index를 재사용하며 expand/collapse 시 visible row sequence만 다시 계산한다.
 
 ### Server-side data source

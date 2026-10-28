@@ -99,17 +99,28 @@ export function withRowValues(
   return options;
 }
 
-// 납품업체 칸에 보일 이름. 창에서 고친 줄은 고른 코드의 이름, 그대로인 줄은 서버가 준 이름(거래처코드가 없는 옛 업체 포함)
-export function supplierNamesOf(row: MaterialMasterRow, nameOf: Map<string, string>): string[] {
-  const savedCodes = row.suppliers.flatMap((vendor) => (vendor.code ? [vendor.code] : []));
-  const unchanged = savedCodes.length === row.supplierCodes.length && savedCodes.every((code, index) => code === row.supplierCodes[index]);
-  return unchanged ? row.suppliers.map((vendor) => vendor.name) : row.supplierCodes.map((code) => nameOf.get(code) ?? code);
+// 거래처코드 → 업체명. 매입 거래처 목록에 없는(사용안함 등) 지금 값은 서버가 준 이름으로(원재료 · 부자재 같이 씀)
+export function vendorNameMap(vendors: VendorOption[], rows: MaterialMasterRow[]): Map<string, string> {
+  return new Map(
+    [...rows.flatMap((row) => row.suppliers), ...vendors].flatMap((vendor) => (vendor.code ? [[vendor.code, vendor.name] as const] : [])),
+  );
+}
+
+// 납품업체 칸에 보일 글자: '000006 · (주)케이프라이드'(2026-10-28, 제품마스터 거래처 칸과 같은 모양).
+// 거래처코드가 없는 옛 업체는 이름만
+export function supplierLabelsOf(row: MaterialMasterRow, nameOf: Map<string, string>): string[] {
+  if (row.supplierCodes.length === 0) return row.suppliers.map((vendor) => vendor.name).filter(Boolean);
+  return row.supplierCodes.map((code) => {
+    const name = nameOf.get(code);
+    return name ? `${code} · ${name}` : code;
+  });
 }
 
 type MaterialMasterColumnHandlers = {
   onUsage: (row: MaterialMasterRow) => void; // 역전개
   onReplace: (row: MaterialMasterRow) => void; // 일괄적용
   onHistory: (row: MaterialMasterRow) => void; // 이력(단가 변경로그 · 예약)
+  onPickSupplier: F1GridColumn<MaterialMasterRow>['onOpenCodePicker']; // 납품업체 [선택] → 팝업
 };
 
 // 등록 · 수정은 F1-Grid 내장 상세 창(오른쪽 클릭 [행 추가] · 제목줄 [신규 원재료 등록] · 줄 상세). 저장은 제목줄 [저장]
@@ -121,12 +132,7 @@ export function createMaterialMasterColumns(
   rows: MaterialMasterRow[],
   handlers: MaterialMasterColumnHandlers,
 ): F1GridColumn<MaterialMasterRow>[] {
-  const vendorOptions = withRowValues(
-    vendors.flatMap((vendor) => (vendor.code ? [{ value: vendor.code, label: vendor.name }] : [])),
-    rows,
-    (row) => row.suppliers.flatMap((vendor) => (vendor.code ? [{ value: vendor.code, label: vendor.name }] : [])),
-  );
-  const vendorNames = new Map(vendorOptions.map((option) => [String(option.value), option.label]));
+  const vendorNames = vendorNameMap(vendors, rows);
   const units = [
     { value: '', label: '선택 안 함' },
     ...withRowValues(unitOptions, rows, (row) => [{ value: row.unit, label: row.unitNm || row.unit }]),
@@ -205,31 +211,22 @@ export function createMaterialMasterColumns(
       search: { hidden: true },
     },
     {
-      // 납품업체(2026-10-23): 매입 거래처(거래처코드)에서 고른다. 여러 곳은 상세 창에서 고른다(form.multiple).
-      // 내장 창은 고칠 수 있는 칸만 보여 줘서 표에서도 고칠 수 있게 두었다. 표 칸 고르기는 한 곳만 고르므로 목록으로 바꿔 넣는다
+      // 납품업체(2026-10-28): [선택] → 팝업에서 매입 거래처 한 곳을 고른다(S_ERP 품목관리 품목분류 칸과 같은 code 칸).
+      // DB materials.client_code 도 거래처코드 한 곳(20261028_001)
       field: 'supplierCodes',
       headerName: '납품업체',
-      type: 'select',
-      options: vendorOptions,
+      type: 'code',
       flex: 1.2,
       width: 160,
       align: 'left',
       editable: canEdit,
-      onValueChange: (_row, value) => ({
-        supplierCodes: Array.isArray(value) ? value.map(String) : value ? [String(value)] : [],
-      }),
-      getValue: (row) => supplierNamesOf(row, vendorNames).join(', '),
-      renderCell: ({ row }) => {
-        const names = supplierNamesOf(row, vendorNames);
-        if (names.length === 0) return '';
-        if (names.length === 1) return names[0];
-        return (
-          <>
-            {names[0]} <Chip size="small" label={`외 ${names.length - 1}`} sx={{ height: 20, fontSize: 11 }} />
-          </>
-        );
+      onOpenCodePicker: handlers.onPickSupplier,
+      onValueChange: () => {
+        throw new Error('[선택]으로 납품업체를 골라 주세요.');
       },
-      form: { multiple: true, group: '기본정보', order: 4, span: 2 },
+      getValue: (row) => supplierLabelsOf(row, vendorNames).join(', '),
+      form: { group: '기본정보', order: 4, span: 2 },
+      // 상세 조회: 납품업체 이름 · 거래처코드 일부로 찾는다
       search: { label: '납품업체', order: 1 },
     },
     {
@@ -246,7 +243,8 @@ export function createMaterialMasterColumns(
     {
       field: 'unitPrice',
       headerName: '단가(원)',
-      type: 'decimal',
+      type: 'currency',
+      decimalPlaces: 4,
       width: 100,
       align: 'right',
       editable: canEdit,

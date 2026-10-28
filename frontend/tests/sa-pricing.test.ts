@@ -9,8 +9,8 @@ import {
   pricingSaveBody,
   rateText,
   topAmountNames,
-} from '../src/pages/sa/pricing/utils/pricing';
-import type { PricingDetail, PricingRow } from '../src/pages/sa/pricing/services/pricing.service';
+} from '../src/pages/sales/product/pricing/utils/pricing';
+import type { PricingDetail, PricingRow } from '../src/pages/sales/product/pricing/types/pricing.types';
 
 const row = (overrides: Partial<PricingRow>): PricingRow => ({
   id: '000001',
@@ -24,6 +24,7 @@ const row = (overrides: Partial<PricingRow>): PricingRow => ({
   margin: null,
   totalPrice: 1000,
   currentPrice: null,
+  clientCode: '',
   clientName: '',
   diff: null,
   ...overrides,
@@ -76,8 +77,10 @@ describe('영업관리 > 단가관리 규칙', () => {
       currentPrice: 1500,
       otherCost1Note: '특별포장비',
       productType: null,
-      clientName: null,
+      clientCode: null, // 2026-10-28 거래처는 거래처코드로 보낸다
     });
+    expect(body).not.toHaveProperty('clientName');
+    expect(pricingSaveBody({ ...form, clientCode: '000006' }).clientCode).toBe('000006');
     expect(rateText(12.3456)).toBe('12.35');
     expect(rateText(null)).toBe('');
   });

@@ -16,9 +16,9 @@ import egovframework.let.lg.stock.domain.model.ProductStockVO;
 import egovframework.let.lg.stock.domain.model.StockAsOfVO;
 import egovframework.let.lg.stock.domain.repository.ProductStockDAO;
 import egovframework.let.lg.stock.service.ProductStockService;
-import egovframework.let.sa.shipment.domain.model.ProductLotListVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotVO;
-import egovframework.let.sa.shipment.service.ShipmentService;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotListVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotVO;
+import egovframework.let.sales.shipment.shipmentregister.service.ShipmentService;
 
 /**
  * 물류관리 - 제품재고관리 서비스 구현 클래스 (송연 LG0001Service)

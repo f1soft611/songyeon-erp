@@ -1,8 +1,8 @@
-package egovframework.let.sa.quote.service;
+package egovframework.let.sales.order.quote.service;
 
 import java.math.BigDecimal;
 
-import egovframework.let.sa.quote.domain.model.QuoteCostsVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteCostsVO;
 
 /**
  * 영업관리 - 견적 원가 계산 (송연 compute_cost_fields / update_pricing 규칙)

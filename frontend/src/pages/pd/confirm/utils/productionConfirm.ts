@@ -1,6 +1,6 @@
 import type { ExcelColumn } from '../../../../shared/utils/excelFile';
 import { formatQty } from '../../../../shared/utils/numberFormat';
-import { parseQtyNumber } from '../../../sa/order/utils/salesOrder';
+import { parseQtyNumber } from '../../../sales/order/order-register/utils/salesOrder';
 
 // 생산관리 > 생산확정 (송연 PD0001, 기존 20-production.js). 생산지시량은 '1,000kg' 처럼 단위가 붙은 글자다.
 

@@ -17,9 +17,9 @@ import type { MenuPermission, ModuleItem, PageContent } from '../../dashboard/ty
 import { ConfirmDialog } from '../../../shared/components/ConfirmDialog';
 import { unknownClientMessage } from '../../co/master/item-master/utils/productBom';
 import { fetchClientNames } from '../../co/master/item-master/services/itemMaster.service';
-import { fetchOrderProducts, type OrderProduct } from '../../sa/order/services/salesOrder.service';
-import { formatTotal } from '../../sa/order/utils/salesOrder';
-import { startOrderHandoff } from '../../sa/order/orderHandoff';
+import { fetchOrderProducts, type OrderProduct } from '../../sales/order/order-register/services/salesOrder.service';
+import { formatTotal } from '../../sales/order/order-register/utils/salesOrder';
+import { startOrderHandoff } from '../../sales/order/order-register/orderHandoff';
 import { LabelPrintDialog, type LabelPrintTarget } from '../../../shared/components/LabelPrintDialog';
 import { NO_PRODUCT_CODE_MESSAGE } from '../label/utils/labelPrint';
 import {
@@ -280,7 +280,7 @@ export function ProductionConfirmPage({
     }
     startOrderHandoff({ date: order.orderDate, orderId: order.id });
     setImportOpen(false);
-    navigate('/sa/order');
+    navigate('/sales/order/OMOrderRegisterView');
   }, [navigate]);
 
   // 송연 printPcBatchSheet: 먼저 받아보고, 배합이 없으면 종이를 만들지 않고 알려준다

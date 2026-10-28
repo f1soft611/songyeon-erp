@@ -1,4 +1,4 @@
-package egovframework.let.sa.order.domain.model;
+package egovframework.let.sales.order.orderregister.domain.model;
 
 import java.io.Serializable;
 

@@ -63,10 +63,10 @@ class MaterialMasterServiceImplTest {
 		ItemMasterDAO bomDao = mock(ItemMasterDAO.class);
 		// 납품업체는 목록 쿼리가 거래처와 조인해 한 줄로 모아(업체코드·업체명 배열) 준다
 		MaterialMasterVO salt = material("000001", "소금", 800d);
-		salt.setSupplier("[\"000003\",\"000005\"]"); // 2026-10-23 거래처코드 배열
-		salt.setSupplierName("가나상회, 다라상사");
-		salt.setSupplierCodes(new String[] {"000003", "000005"});
-		salt.setSupplierNames(new String[] {"가나상회", "다라상사"});
+		salt.setSupplier("000003"); // 2026-10-28 거래처코드 한 곳(예전 배열)
+		salt.setSupplierName("가나상회");
+		salt.setSupplierCodes(new String[] {"000003"});
+		salt.setSupplierNames(new String[] {"가나상회"});
 		when(dao.selectMaterialList("소금")).thenReturn(Arrays.asList(salt, material("000002", "설탕", 900d)));
 		MaterialPriceScheduleVO due = new MaterialPriceScheduleVO();
 		due.setId(7L);
@@ -78,28 +78,27 @@ class MaterialMasterServiceImplTest {
 		when(dao.selectBomProductCodesByMaterial("000002", null)).thenReturn(Collections.<String>emptyList());
 
 		List<MaterialMasterVO> rows = new MaterialMasterServiceImpl(dao, bomDao).listMaterials(" 소금 ");
-		assertEquals(2, rows.get(0).getSuppliers().size());
-		assertEquals("다라상사", rows.get(0).getSuppliers().get(1).getClientName());
-		assertEquals("000005", rows.get(0).getSuppliers().get(1).getClientCode());
+		assertEquals(1, rows.get(0).getSuppliers().size());
+		assertEquals("가나상회", rows.get(0).getSuppliers().get(0).getClientName());
+		assertEquals("000003", rows.get(0).getSuppliers().get(0).getClientCode());
 		assertTrue(rows.get(1).getSuppliers().isEmpty());
 		verify(dao).updateMaterialPrice("000002", 1000d);
 		verify(dao).insertMaterialPriceLog(eq("000002"), eq("설탕"), anyString(), eq(900d), eq(1000d));
 		verify(dao).markMaterialPriceScheduleApplied(7L);
 	}
 
-	@DisplayName("납품업체 칸: 거래처코드 배열 글자를 만들고 알아보며, 배열이 아닌 옛 업체명은 그 이름 그대로 보여준다(2026-10-23 id → 코드)")
+	@DisplayName("납품업체 칸: 거래처코드 한 곳을 그대로 넣고(2026-10-28), 코드 · 예전 코드 배열이 아닌 옛 업체명은 그 이름 그대로 보여준다")
 	@Test
-	void supplierCodesText_andLegacyName() throws Exception {
+	void supplierCodeText_andLegacyName() throws Exception {
 		MaterialSupplierVO a = new MaterialSupplierVO();
 		a.setClientCode("000003");
-		MaterialSupplierVO b = new MaterialSupplierVO();
-		b.setClientCode("000005");
-		assertEquals("[\"000003\",\"000005\"]", MaterialMasterServiceImpl.supplierCodesText(Arrays.asList(a, b)));
-		assertNull(MaterialMasterServiceImpl.supplierCodesText(Collections.<MaterialSupplierVO>emptyList()));
-		assertTrue(MaterialMasterServiceImpl.isSupplierCodesText("[\"000003\", \"000005\"]"));
-		assertTrue(MaterialMasterServiceImpl.isSupplierCodesText("[]"));
-		assertFalse(MaterialMasterServiceImpl.isSupplierCodesText("다온"));
-		assertFalse(MaterialMasterServiceImpl.isSupplierCodesText("[3,5]")); // 예전 id 배열은 아니다
+		assertEquals("000003", MaterialMasterServiceImpl.supplierCodeText(Arrays.asList(a)));
+		assertNull(MaterialMasterServiceImpl.supplierCodeText(Collections.<MaterialSupplierVO>emptyList()));
+		assertTrue(MaterialMasterServiceImpl.isSupplierCodeText("000003"));
+		assertTrue(MaterialMasterServiceImpl.isSupplierCodeText("[\"000003\"]")); // 바꾸기 전 배열도 코드로 본다
+		assertTrue(MaterialMasterServiceImpl.isSupplierCodeText("[]"));
+		assertFalse(MaterialMasterServiceImpl.isSupplierCodeText("다온"));
+		assertFalse(MaterialMasterServiceImpl.isSupplierCodeText("[3,5]")); // 예전 id 배열은 아니다
 
 		MaterialMasterDAO dao = mock(MaterialMasterDAO.class);
 		MaterialMasterVO legacy = material("000009", "옛원재료", null);
@@ -279,7 +278,7 @@ class MaterialMasterServiceImplTest {
 		body.put("safetyStock", "12.5");
 		body.put("boxQty", "2.6");
 		// 납품업체는 거래처코드로 온다(같은 코드는 한 번만, 빈 값은 건너뜀. 2026-10-23 id → 코드)
-		body.put("supplierCodes", Arrays.<Object>asList("000003", " ", "000005", "000003"));
+		body.put("supplierCodes", Arrays.<Object>asList("000003", " ", "000003"));
 		when(dao.selectClientNameByCode("000003")).thenReturn("가나상회");
 		when(dao.selectClientNameByCode("000005")).thenReturn("다라상사");
 		MaterialInfoSaveResultVO result = service.saveMaterialInfo("000001", body);
@@ -297,8 +296,15 @@ class MaterialMasterServiceImplTest {
 		assertEquals(Integer.valueOf(2), result.getCascadedRecipeVersion());
 		assertEquals(Integer.valueOf(1), result.getCascadedRecipeSkipped());
 		verify(dao, never()).updateNamelessRecipeBom(anyString(), anyString(), anyString());
-		// 납품업체는 materials.client_code 에 거래처코드 배열로(고른 순서, 같은 코드는 한 번)
-		assertEquals("[\"000003\",\"000005\"]", row.getValue().getSupplier());
+		// 납품업체는 materials.client_code 에 거래처코드 한 곳 그대로(빈 값 · 같은 코드는 한 번, 2026-10-28)
+		assertEquals("000003", row.getValue().getSupplier());
+
+		// 두 곳 이상이면 아무것도 고치지 않고 막는다
+		Map<String, Object> two = new HashMap<>();
+		two.put("name", "계피가루");
+		two.put("supplierCodes", Arrays.<Object>asList("000003", "000005"));
+		assertEquals("납품업체는 한 곳만 고를 수 있어요",
+				assertThrows(IllegalArgumentException.class, () -> service.saveMaterialInfo("000001", two)).getMessage());
 
 		// 거래처BOM 에 없는 업체코드면 아무것도 고치지 않고 막는다
 		Map<String, Object> unknown = new HashMap<>();

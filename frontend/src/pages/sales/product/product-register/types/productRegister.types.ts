@@ -1,4 +1,4 @@
-import type { QuoteCosts } from '../../quote/utils/quote';
+import type { QuoteCosts } from '../../../order/quote/utils/quote';
 
 // 영업관리 > 제품등록 입력값(제품코드는 저장할 때 서버가 발번한다)
 export type ProductRegisterForm = {

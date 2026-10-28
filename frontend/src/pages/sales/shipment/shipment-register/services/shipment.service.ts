@@ -1,8 +1,8 @@
-import { apiDelete, apiGet, apiPost, apiPut } from '../../../../shared/services/apiClient';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../../../../shared/services/apiClient';
 import type { LotAllocation, PendingOrder, ProductLot, ShipmentRecord, ShipmentSaveBody } from '../utils/shipment';
 
 // 영업관리 > 출하등록 (송연 SA0005). 거래처·품목 후보는 수주등록 API 를 같이 쓴다.
-const PATH = '/api/v1/sa/shipments';
+const PATH = '/api/v1/sales/shipment/shipment-register';
 
 export async function fetchShipments(date: string): Promise<ShipmentRecord[]> {
   const result = await apiGet<{ resultList: ShipmentRecord[] }>(`${PATH}?date=${encodeURIComponent(date)}`);

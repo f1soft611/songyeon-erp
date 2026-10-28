@@ -1,4 +1,4 @@
-package egovframework.let.sa.feasibility.domain.model;
+package egovframework.let.sales.order.prodcheck.domain.model;
 
 import java.io.Serializable;
 import java.util.List;
@@ -16,7 +16,7 @@ import lombok.Setter;
 @Schema(description = "생산가능확인 결과")
 @Getter
 @Setter
-public class FeasibilityResultVO implements Serializable {
+public class ProdCheckResultVO implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
@@ -24,13 +24,13 @@ public class FeasibilityResultVO implements Serializable {
     private String date;
 
     @Schema(description = "만들 것")
-    private List<FeasibilityLineVO> lines;
+    private List<ProdCheckLineVO> lines;
 
     @Schema(description = "원재료(합계)")
-    private List<FeasibilityRowVO> rows;
+    private List<ProdCheckRowVO> rows;
 
     @Schema(description = "제품별")
-    private List<FeasibilityByProductVO> byProduct;
+    private List<ProdCheckByProductVO> byProduct;
 
     @Schema(description = "BOM 을 못 찾은 제품")
     private List<String> unknownProducts;

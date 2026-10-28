@@ -1,4 +1,4 @@
-package egovframework.let.sa.shipment.controller;
+package egovframework.let.sales.shipment.shipmentregister.controller;
 
 import java.util.HashMap;
 import java.util.List;
@@ -17,8 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.cmm.util.ResultVoHelper;
-import egovframework.let.sa.shipment.domain.model.ShipmentVO;
-import egovframework.let.sa.shipment.service.ShipmentService;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO;
+import egovframework.let.sales.shipment.shipmentregister.service.ShipmentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -35,7 +35,7 @@ import lombok.RequiredArgsConstructor;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sa/shipments")
+@RequestMapping("/api/v1/sales/shipment/shipment-register")
 @Tag(name = "ShipmentApiController", description = "영업관리 - 출하등록")
 public class ShipmentApiController {
 

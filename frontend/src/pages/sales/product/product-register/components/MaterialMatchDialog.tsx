@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import type { MaterialCheck } from '../../../co/master/item-master/types/itemMaster.types';
+import type { MaterialCheck } from '../../../../co/master/item-master/types/itemMaster.types';
 
 const CUSTOM = '__custom__';
 

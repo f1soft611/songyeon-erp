@@ -1,5 +1,5 @@
 import type { ExcelColumn } from '../../../../shared/utils/excelFile';
-import { parseQtyNumber } from '../../../sa/order/utils/salesOrder';
+import { parseQtyNumber } from '../../../sales/order/order-register/utils/salesOrder';
 
 // 물류관리 > 출하확정 규칙 (송연 LG0002, 기존 21-logistics.js)
 // 출하 목록은 두 곳에서 온다: manual — 출하등록에서 넣은 줄, production — 물류출고일이 적힌 생산확정 줄(그 줄 자신이 로트)

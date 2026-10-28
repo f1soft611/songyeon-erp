@@ -66,18 +66,24 @@ function getBooleanOrText(value: unknown): boolean | string {
 
 function getNumericFormat<T extends object>(
   column: Pick<F1GridColumn<T>, 'format' | 'decimalPlaces'>,
+  value: number | string,
 ): string {
   const decimalPlaces =
     column.decimalPlaces !== undefined &&
     Number.isInteger(column.decimalPlaces)
       ? Math.max(0, column.decimalPlaces)
       : undefined;
+  const isDefaultInteger =
+    decimalPlaces === undefined &&
+    column.format !== 'currency' &&
+    typeof value === 'number' &&
+    Number.isInteger(value);
   const digits =
-    decimalPlaces === undefined
-      ? column.format === 'currency'
+    decimalPlaces !== undefined
+      ? '0'.repeat(decimalPlaces)
+      : column.format === 'currency' || isDefaultInteger
         ? ''
-        : '#####'
-      : '0'.repeat(decimalPlaces);
+        : '#####';
   const numberFormat = digits ? `#,##0.${digits}` : '#,##0';
 
   return column.format === 'currency'
@@ -110,12 +116,14 @@ function getTypedExcelCell<T extends object>(
   switch (column.type) {
     case 'number':
     case 'decimal':
-    case 'currency':
+    case 'currency': {
+      const value = getNumberOrText(rawValue);
       cell = {
-        value: getNumberOrText(rawValue),
-        numFmt: getNumericFormat(column),
+        value,
+        numFmt: getNumericFormat(column, value),
       };
       break;
+    }
     case 'date':
       cell = { value: getCellDisplayValue(column, rawValue) };
       break;
@@ -140,6 +148,7 @@ function getTypedExcelCell<T extends object>(
     default:
       cell = { value: getCellDisplayValue(column, rawValue) };
   }
+  if (typeof cell.value === 'string') cell.numFmt ??= '@';
   return { ...cell, alignment };
 }
 

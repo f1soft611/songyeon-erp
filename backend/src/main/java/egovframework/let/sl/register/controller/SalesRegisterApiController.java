@@ -27,7 +27,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 판매관리 > 판매등록 컨트롤러 클래스 (송연 sales.py /api/sales/shippable · /api/sales/pull · POST /api/sales 를 S_ERP 규칙으로 옮김).
- * 거래처·품목 후보는 기초정보(/api/v1/co/basic-info/clients)·수주등록(/api/v1/sa/orders/products)의 목록을 쓴다.
+ * 거래처·품목 후보는 기초정보(/api/v1/co/basic-info/clients)·수주등록(/api/v1/sales/order/order-register/products)의 목록을 쓴다.
  * @author SONGYEON ERP
  * @since 2026.10.07
  * @version 1.0

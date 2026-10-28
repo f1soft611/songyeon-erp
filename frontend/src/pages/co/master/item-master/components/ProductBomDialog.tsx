@@ -9,14 +9,17 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import SearchIcon from '@mui/icons-material/Search';
 import {
   F1Grid,
   type F1GridColumn,
@@ -24,10 +27,12 @@ import {
 import type { BomEditRow, BomLine, ClientOption, MaterialCheck, MaterialOption, ProductBomRow, SubMaterials } from '../types/itemMaster.types';
 import { checkMaterialNames, fetchBom, fetchClientOptions, fetchMaterialOptions, fetchSubMaterials, saveBom, saveProductInfo, saveSubMaterials } from '../services/itemMaster.service';
 import { formatPrice, formatQty, percentText, ratioToPercent } from '../../../../../shared/utils/numberFormat';
-import { MaterialMatchDialog } from '../../../../sa/product/components/MaterialMatchDialog';
-import { BomEditGrid, emptyBomEditRows, newBomRowId, type BomEditGridHandle } from '../../../../sa/product/components/BomEditGrid';
+import { MaterialMatchDialog } from '../../../../sales/product/product-register/components/MaterialMatchDialog';
+import { BomEditGrid, emptyBomEditRows, newBomRowId, type BomEditGridHandle } from '../../../../sales/product/product-register/components/BomEditGrid';
 import { useCommonCodeOptions } from '../../../../../shared/components/common-code/useCommonCodeOptions';
-import { ClientSelect } from '../../../../sa/product/components/ClientSelect';
+import { MasterPickerDialog } from '../../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
+import { clientPickerOptions, clientPickerValueOf } from '../utils/itemMaster';
 
 // 2026-10-27 변경로그 탭은 표의 [이력] 칸(ProductBomHistoryDialog)으로 옮겼다(원재료마스터와 같음)
 export type ProductBomDialogTab = 'view' | 'edit';
@@ -91,8 +96,6 @@ export function ProductBomDialog({
   const [totalInput, setTotalInput] = useState('');
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]); // 거래처 고르기(코드 · 이름, 2026-10-23)
-  // 업체명 칸에 목록에 없는 글자를 치고 고르지 않았으면 그 글자(2026-10-27). 칸을 떠나면 원래 거래처로 돌아가 저장되던 것을 막는다
-  const [unmatchedClient, setUnmatchedClient] = useState('');
   const [loadError, setLoadError] = useState('');
 
   const [info, setInfo] = useState({
@@ -188,23 +191,22 @@ export function ProductBomDialog({
   const viewSum = bom.reduce((sum, line) => sum + (line.ratio ?? 0), 0);
 
   // ===== 수정: 기본정보 =====
+  // 업체명 팝업: 사용 중 거래처 목록에서 코드 · 이름으로 찾는다. 지금 값이 목록에 없으면(사용안함) 그 이름으로 보여 준다
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const clientPickerValue = useMemo(
+    () => clientPickerValueOf(clients, info.clientCode, info.clientCode === product.clientCode ? product.clientName : ''),
+    [clients, info.clientCode, product.clientCode, product.clientName],
+  );
+  const searchClients = useCallback(async (keyword: string): Promise<MasterPickerOption[]> => clientPickerOptions(clients, keyword), [clients]);
   const saveInfo = async () => {
     const name = info.name.trim();
     if (!name) {
       setInfoMessage({ text: '제품명은 필수예요', error: true });
       return;
     }
-    if (unmatchedClient) {
-      setInfoMessage({ text: `'${unmatchedClient}' 은 거래처마스터에 없는 거래처예요. 목록에서 골라주세요(없으면 거래처마스터에 먼저 등록해주세요)`, error: true });
-      return;
-    }
-    // 2026-10-27 거래처는 필수이고 거래처마스터에 등록된 거래처만(목록에 없는 옛 값이면 다시 고르게 한다). 서버도 같은 규칙으로 막는다
+
     if (!info.clientCode) {
       setInfoMessage({ text: '거래처를 골라주세요(거래처마스터에 등록된 거래처만 저장할 수 있어요)', error: true });
-      return;
-    }
-    if (clients.length > 0 && !clients.some((client) => client.clientCode === info.clientCode) && info.clientCode !== product.clientCode) {
-      setInfoMessage({ text: '거래처마스터에 없는 거래처예요. 거래처를 목록에서 다시 골라주세요', error: true });
       return;
     }
     try {
@@ -337,14 +339,37 @@ export function ProductBomDialog({
               <SectionTitle>기본정보</SectionTitle>
               <Stack spacing={1.5}>
                 <TextField size="small" label="제품명" value={info.name} onChange={(event) => setInfo({ ...info, name: event.target.value })} />
-                {/* 업체명: 거래처마스터 목록에서 고른다(이름 표시, 저장은 거래처코드, 2026-10-23) */}
-                <ClientSelect
-                  label="업체명"
-                  options={clients}
-                  value={info.clientCode}
-                  currentName={product.clientName}
-                  onChange={(clientCode) => setInfo((current) => ({ ...current, clientCode }))}
-                  onUnmatchedInput={setUnmatchedClient}
+                {/* 거래처: 칸 안 🔍 → 거래처 팝업에서 고른다(2026-10-28). 원재료 · 부자재 상세 창의 납품업체 칸(F1-Grid code 칸)과 같은 모양 · 같은 팝업. 저장은 거래처코드 */}
+                <TextField
+                  size="small"
+                  margin="none"
+                  label="거래처"
+                  required
+                  value={clientPickerValue ? `${clientPickerValue.code} · ${clientPickerValue.name}` : ''}
+                  slotProps={{
+                    htmlInput: { readOnly: true },
+                    input: {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <Tooltip title="거래처 선택">
+                            <IconButton aria-label="거래처 선택" edge="end" size="small" sx={{ p: 0.75 }} onClick={() => setClientPickerOpen(true)}>
+                              <SearchIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                />
+                <MasterPickerDialog
+                  label="거래처"
+                  open={clientPickerOpen}
+                  search={searchClients}
+                  onClose={() => setClientPickerOpen(false)}
+                  onChange={(option) => {
+                    setInfo((current) => ({ ...current, clientCode: option.code }));
+                    setClientPickerOpen(false);
+                  }}
                 />
                 {/* 보관방법: 공통코드 STORAGE_METHOD 에서 고른다(2026-10-23, 저장은 코드) */}
                 <TextField
@@ -379,12 +404,12 @@ export function ProductBomDialog({
                 봉지 수 = 생산량(kg) ÷ 한 봉 내용량(kg) · 필름 M = 봉지 수 × 한 봉당 필름길이
               </Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-                <TextField size="small" type="number" label="한 봉 내용량 (kg)" placeholder="예: 1" value={sub.net} onChange={(event) => setSub({ ...sub, net: event.target.value })} slotProps={{ htmlInput: { step: '0.001' } }} sx={{ gridColumn: { sm: '1 / -1' } }} />
-                <Autocomplete freeSolo options={subOptions('필름')} inputValue={sub.film} onInputChange={(_, value) => setSub((current) => ({ ...current, film: value }))} renderInput={(params) => <TextField {...params} size="small" label="필름" placeholder="필름으로 등록된 원재료명" />} />
-                <TextField size="small" type="number" label="한 봉당 필름길이 (M)" placeholder="예: 0.35" value={sub.filmLength} onChange={(event) => setSub({ ...sub, filmLength: event.target.value })} slotProps={{ htmlInput: { step: '0.001' } }} />
-                <Autocomplete freeSolo options={subOptions('파우치')} inputValue={sub.pouch} onInputChange={(_, value) => setSub((current) => ({ ...current, pouch: value }))} renderInput={(params) => <TextField {...params} size="small" label="파우치" placeholder="파우치로 등록된 원재료명" />} />
-                <TextField size="small" type="number" label="한 봉당 파우치 수" placeholder="보통 1" value={sub.pouchPer} onChange={(event) => setSub({ ...sub, pouchPer: event.target.value })} slotProps={{ htmlInput: { step: '1' } }} />
-                <Autocomplete freeSolo options={subOptions('박스')} inputValue={sub.box} onInputChange={(_, value) => setSub((current) => ({ ...current, box: value }))} renderInput={(params) => <TextField {...params} size="small" label="박스" placeholder="박스로 등록된 원재료명" />} sx={{ gridColumn: { sm: '1 / -1' } }} />
+                <TextField size="small" margin="none" type="number" label="한 봉 내용량 (kg)" placeholder="예: 1" value={sub.net} onChange={(event) => setSub({ ...sub, net: event.target.value })} slotProps={{ htmlInput: { step: '0.001' } }} sx={{ gridColumn: { sm: '1 / -1' } }} />
+                <Autocomplete freeSolo options={subOptions('필름')} inputValue={sub.film} onInputChange={(_, value) => setSub((current) => ({ ...current, film: value }))} renderInput={(params) => <TextField {...params} size="small" margin="none" label="필름" placeholder="필름으로 등록된 원재료명" />} />
+                <TextField size="small" margin="none" type="number" label="한 봉당 필름길이 (M)" placeholder="예: 0.35" value={sub.filmLength} onChange={(event) => setSub({ ...sub, filmLength: event.target.value })} slotProps={{ htmlInput: { step: '0.001' } }} />
+                <Autocomplete freeSolo options={subOptions('파우치')} inputValue={sub.pouch} onInputChange={(_, value) => setSub((current) => ({ ...current, pouch: value }))} renderInput={(params) => <TextField {...params} size="small" margin="none" label="파우치" placeholder="파우치로 등록된 원재료명" />} />
+                <TextField size="small" margin="none" type="number" label="한 봉당 파우치 수" placeholder="보통 1" value={sub.pouchPer} onChange={(event) => setSub({ ...sub, pouchPer: event.target.value })} slotProps={{ htmlInput: { step: '1' } }} />
+                <Autocomplete freeSolo options={subOptions('박스')} inputValue={sub.box} onInputChange={(_, value) => setSub((current) => ({ ...current, box: value }))} renderInput={(params) => <TextField {...params} size="small" margin="none" label="박스" placeholder="박스로 등록된 원재료명" />} sx={{ gridColumn: { sm: '1 / -1' } }} />
               </Box>
               <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', mt: 1.5 }}>
                 <Button variant="contained" onClick={() => void saveSub()}>부자재 저장</Button>

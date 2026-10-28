@@ -5,6 +5,7 @@ import { exportGridRowsToExcel } from '../src/shared/components/f1-grid/export/G
 
 type ExportRow = {
   id: number;
+  materialCode: string;
   amount: number | string;
   price: number;
   date: string;
@@ -22,9 +23,16 @@ type ExportRow = {
   invalidCreatedAt: string;
   emptyDate: string | null;
   defaultAmount: number;
+  defaultIntegerNumber: number;
+  defaultIntegerAmount: number | string;
 };
 
 const columns: F1GridColumn<ExportRow>[] = [
+  {
+    field: 'materialCode',
+    headerName: '품목코드',
+    type: 'text',
+  },
   {
     field: 'amount',
     headerName: 'Amount',
@@ -75,6 +83,16 @@ const columns: F1GridColumn<ExportRow>[] = [
   {
     field: 'defaultAmount',
     headerName: 'Default amount',
+    type: 'number',
+  },
+  {
+    field: 'defaultIntegerNumber',
+    headerName: 'Default integer number',
+    type: 'number',
+  },
+  {
+    field: 'defaultIntegerAmount',
+    headerName: 'Default integer amount',
     type: 'number',
   },
 ];
@@ -135,6 +153,7 @@ describe('F1-Grid Excel export cell types', () => {
   it('exports typed values, Grid-aligned date text and invalid-value fallbacks', async () => {
     const row: ExportRow = {
       id: 1,
+      materialCode: '000004',
       amount: '1234.5',
       price: 12345.6,
       date: '2026-10-20T00:30:00+14:00',
@@ -152,56 +171,65 @@ describe('F1-Grid Excel export cell types', () => {
       invalidCreatedAt: '2026-02-29T09:21:00',
       emptyDate: null,
       defaultAmount: 1.234567,
+      defaultIntegerNumber: 4,
+      defaultIntegerAmount: '4',
     };
     const workbook = await readExportedWorkbook([row]);
     const sheet = workbook.getWorksheet('Sheet1');
 
     expect(sheet).toBeDefined();
-    expect(sheet?.getCell('A2').value).toBe(1234.5);
-    expect(sheet?.getCell('A2').numFmt).toBe('#,##0.00');
-    expect(sheet?.getCell('B2').value).toBe(12345.6);
-    expect(sheet?.getCell('B2').numFmt).toBe('"₩"#,##0');
+    expect(sheet?.getCell('A2').value).toBe('000004');
+    expect(sheet?.getCell('A2').type).toBe(ExcelJS.ValueType.String);
+    expect(sheet?.getCell('A2').numFmt).toBe('@');
+    expect(sheet?.getCell('B2').value).toBe(1234.5);
+    expect(sheet?.getCell('B2').numFmt).toBe('#,##0.00');
+    expect(sheet?.getCell('C2').value).toBe(12345.6);
+    expect(sheet?.getCell('C2').numFmt).toBe('"₩"#,##0');
 
-    expect(sheet?.getCell('C2').value).toBe('2026년 10월 20일');
-    expect(sheet?.getCell('C2').type).toBe(ExcelJS.ValueType.String);
-    expect(sheet?.getCell('C2').numFmt).toBeUndefined();
+    expect(sheet?.getCell('D2').value).toBe('2026년 10월 20일');
+    expect(sheet?.getCell('D2').type).toBe(ExcelJS.ValueType.String);
+    expect(sheet?.getCell('D2').numFmt).toBe('@');
     expect(sheet?.getCell('A1').alignment?.horizontal).toBe('center');
-    expect(sheet?.getCell('A2').alignment?.horizontal).toBe('right');
-    expect(sheet?.getCell('C1').alignment?.horizontal).toBe('right');
-    expect(sheet?.getCell('C2').alignment?.horizontal).toBe('center');
+    expect(sheet?.getCell('B2').alignment?.horizontal).toBe('right');
+    expect(sheet?.getCell('D1').alignment?.horizontal).toBe('right');
+    expect(sheet?.getCell('D2').alignment?.horizontal).toBe('center');
 
-    expect(sheet?.getCell('D2').value).toBeInstanceOf(Date);
-    expect(sheet?.getCell('D2').numFmt).toBe('yyyy-mm-dd hh:mm:ss');
-    const exportedTime = sheet?.getCell('E2').value;
+    expect(sheet?.getCell('E2').value).toBeInstanceOf(Date);
+    expect(sheet?.getCell('E2').numFmt).toBe('yyyy-mm-dd hh:mm:ss');
+    const exportedTime = sheet?.getCell('F2').value;
     if (!(exportedTime instanceof Date)) {
       throw new Error('Expected ExcelJS to read the formatted time serial as a Date.');
     }
     expect(exportedTime.getUTCHours()).toBe(9);
     expect(exportedTime.getUTCMinutes()).toBe(21);
     expect(exportedTime.toISOString().slice(0, 10)).toBe('1899-12-30');
-    expect(sheet?.getCell('E2').numFmt).toBe('hh:mm');
-    expect(sheet?.getCell('F2').value).toBe(true);
-    expect(sheet?.getCell('G2').value).toBe('Operating');
-    expect(sheet?.getCell('H2').value).toBeNull();
-    expect(sheet?.getCell('I2').value).toBe('not-a-number');
-    expect(sheet?.getCell('J2').value).toBe('2026-02-29');
-    expect(sheet?.getCell('J2').alignment?.horizontal).toBe('left');
-    expect(sheet?.getCell('K2').value).toBe(7);
-    const exportedTimeWithSeconds = sheet?.getCell('L2').value;
+    expect(sheet?.getCell('F2').numFmt).toBe('hh:mm');
+    expect(sheet?.getCell('G2').value).toBe(true);
+    expect(sheet?.getCell('H2').value).toBe('Operating');
+    expect(sheet?.getCell('I2').value).toBeNull();
+    expect(sheet?.getCell('J2').value).toBe('not-a-number');
+    expect(sheet?.getCell('K2').value).toBe('2026-02-29');
+    expect(sheet?.getCell('K2').alignment?.horizontal).toBe('left');
+    expect(sheet?.getCell('L2').value).toBe(7);
+    const exportedTimeWithSeconds = sheet?.getCell('M2').value;
     if (!(exportedTimeWithSeconds instanceof Date)) {
       throw new Error('Expected ExcelJS to read the formatted time serial as a Date.');
     }
     expect(exportedTimeWithSeconds.getUTCHours()).toBe(9);
     expect(exportedTimeWithSeconds.getUTCMinutes()).toBe(21);
     expect(exportedTimeWithSeconds.getUTCSeconds()).toBe(5);
-    expect(sheet?.getCell('L2').numFmt).toBe('hh:mm:ss');
-    expect(sheet?.getCell('M2').value).toBe('25:75');
-    expect(sheet?.getCell('N2').value).toBe('unknown');
-    expect(sheet?.getCell('O2').value).toBe('2026-02-29T09:21:00');
-    expect(sheet?.getCell('P2').value).toBeNull();
-    expect(sheet?.getCell('P2').alignment?.horizontal).toBe('left');
-    expect(sheet?.getCell('Q2').value).toBe(1.234567);
-    expect(sheet?.getCell('Q2').numFmt).toBe('#,##0.#####');
+    expect(sheet?.getCell('M2').numFmt).toBe('hh:mm:ss');
+    expect(sheet?.getCell('N2').value).toBe('25:75');
+    expect(sheet?.getCell('O2').value).toBe('unknown');
+    expect(sheet?.getCell('P2').value).toBe('2026-02-29T09:21:00');
+    expect(sheet?.getCell('Q2').value).toBeNull();
+    expect(sheet?.getCell('Q2').alignment?.horizontal).toBe('left');
+    expect(sheet?.getCell('R2').value).toBe(1.234567);
+    expect(sheet?.getCell('R2').numFmt).toBe('#,##0.#####');
+    expect(sheet?.getCell('S2').value).toBe(4);
+    expect(sheet?.getCell('S2').numFmt).toBe('#,##0');
+    expect(sheet?.getCell('T2').value).toBe(4);
+    expect(sheet?.getCell('T2').numFmt).toBe('#,##0');
     expect(row.date).toBe('2026-10-20T00:30:00+14:00');
   });
 });

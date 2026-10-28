@@ -1,8 +1,8 @@
-import { apiDelete, apiGet, apiPost, apiPut } from '../../../../shared/services/apiClient';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../../../../shared/services/apiClient';
 import type { QuoteDetail, QuoteRow, toQuoteSaveBody } from '../utils/quote';
 
 // 영업관리 > 견적 (송연 SA0003). 포장유형·거래처·원재료 목록은 기초정보 API 를 같이 쓴다.
-const PATH = '/api/v1/sa/quotes';
+const PATH = '/api/v1/sales/order/quote';
 type QuoteSaveBody = ReturnType<typeof toQuoteSaveBody>;
 
 export async function fetchQuotes(): Promise<QuoteRow[]> {

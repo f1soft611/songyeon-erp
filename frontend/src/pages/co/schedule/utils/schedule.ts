@@ -1,5 +1,5 @@
 import type { ExcelColumn } from '../../../../shared/utils/excelFile';
-import { parseQtyNumber } from '../../../sa/order/utils/salesOrder';
+import { parseQtyNumber } from '../../../sales/order/order-register/utils/salesOrder';
 import type { LogisticsScheduleRow, ProductionScheduleRow } from '../types/schedule.types';
 
 // 공통관리 > 생산스케줄(송연 CM0002)·물류스케줄(CM0003). 날짜 하루치를 보기만 하는 화면의 규칙(합계 · 상태 · 엑셀 칸). 줄 모양은 types/schedule.types

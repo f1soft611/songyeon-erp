@@ -1,12 +1,12 @@
-package egovframework.let.sa.shipment.service;
+package egovframework.let.sales.shipment.shipmentregister.service;
 
 import java.util.List;
 import java.util.Map;
 
-import egovframework.let.sa.shipment.domain.model.LotAllocationVO;
-import egovframework.let.sa.shipment.domain.model.PendingOrderVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotListVO;
-import egovframework.let.sa.shipment.domain.model.ShipmentVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.PendingOrderVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotListVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO;
 
 /**
  * 영업관리 - 출하등록 서비스 인터페이스 클래스

@@ -1,4 +1,4 @@
-package egovframework.let.sa.pricing.service.impl;
+package egovframework.let.sales.product.pricing.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -20,8 +20,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import egovframework.let.sa.pricing.domain.model.PricingVO;
-import egovframework.let.sa.pricing.domain.repository.PricingDAO;
+import egovframework.let.sales.product.pricing.domain.model.PricingVO;
+import egovframework.let.sales.product.pricing.domain.repository.PricingDAO;
 
 class PricingServiceImplTest {
 
@@ -44,7 +44,8 @@ class PricingServiceImplTest {
 		body.put("lossRate", 5);
 		body.put("laborCost", "250");
 		body.put("margin", null);
-		body.put("clientName", "(주) 디에이치식품");
+		body.put("clientCode", "000006"); // 2026-10-28 거래처는 거래처코드(팝업에서 고른다)
+		when(dao.selectActiveClientCode("000006")).thenReturn("000006");
 		new PricingServiceImpl(dao).updatePricing("000001", body);
 
 		ArgumentCaptor<PricingVO> row = ArgumentCaptor.forClass(PricingVO.class);
@@ -58,6 +59,8 @@ class PricingServiceImplTest {
 		assertNull(row.getValue().getMargin());
 		assertTrue(fields.getValue().contains("margin")); // 비우려고 보낸 칸은 null 로 고친다
 		assertFalse(fields.getValue().contains("packagingCost")); // 안 보낸 칸은 건드리지 않는다
+		assertEquals("000006", row.getValue().getClientCode());
+		assertTrue(fields.getValue().contains("clientCode"));
 		verify(dao).updatePricingTotal("000001");
 	}
 
@@ -97,5 +100,33 @@ class PricingServiceImplTest {
 		assertEquals("고칠 항목이 없습니다",
 				assertThrows(IllegalArgumentException.class, () -> service.updatePricing("000001", unknown)).getMessage());
 		verify(dao, never()).updatePricingTotal(anyString());
+	}
+
+	@DisplayName("거래처(2026-10-28): 사용 중 거래처코드만 받고, 지금 값은 그대로 둘 수 있으며, 비우면 비운다")
+	@Test
+	void clientCode_onlyActiveClients() throws Exception {
+		PricingDAO dao = mock(PricingDAO.class);
+		PricingVO current = pricing(1000d, null);
+		current.setClientCode("000003");
+		when(dao.selectPricing("000001")).thenReturn(current);
+		PricingServiceImpl service = new PricingServiceImpl(dao);
+
+		Map<String, Object> unknown = new HashMap<>();
+		unknown.put("clientCode", "999999");
+		assertEquals("거래처마스터에 없거나 사용하지 않는 거래처예요. 거래처를 다시 골라주세요",
+				assertThrows(IllegalArgumentException.class, () -> service.updatePricing("000001", unknown)).getMessage());
+		verify(dao, never()).updatePricingFields(any(), any());
+
+		Map<String, Object> same = new HashMap<>();
+		same.put("clientCode", "000003"); // 지금 값(사용안함이 됐어도)은 그대로 둔다
+		service.updatePricing("000001", same);
+		Map<String, Object> blank = new HashMap<>();
+		blank.put("clientCode", " ");
+		service.updatePricing("000001", blank);
+		ArgumentCaptor<PricingVO> rows = ArgumentCaptor.forClass(PricingVO.class);
+		verify(dao, org.mockito.Mockito.times(2)).updatePricingFields(rows.capture(), any());
+		assertEquals("000003", rows.getAllValues().get(0).getClientCode());
+		assertNull(rows.getAllValues().get(1).getClientCode());
+		verify(dao, never()).selectActiveClientCode("000003");
 	}
 }

@@ -3,14 +3,14 @@ import { Alert, Box, Button, Card, Chip, Typography } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SearchIcon from '@mui/icons-material/Search';
-import { PageHeader } from '../../../shared/components/PageHeader';
-import { type PermissionActionGroupDefinition } from '../../../shared/components/PermissionGroup';
-import { PageMessageArea } from '../../../shared/components/PageMessageArea';
-import { F1Grid, type F1GridColumn, type F1GridRef } from '../../../shared/components/f1-grid';
-import { downloadExcel, todayDash } from '../../../shared/utils/excelFile';
-import type { MenuPermission, ModuleItem, PageContent } from '../../dashboard/types/dashboard';
-import { checkFeasibility, fetchFeasibilityProducts } from './services/feasibility.service';
-import { FeasibilityPickDialog } from './components/FeasibilityPickDialog';
+import { PageHeader } from '../../../../shared/components/PageHeader';
+import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
+import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
+import { F1Grid, type F1GridColumn, type F1GridRef } from '../../../../shared/components/f1-grid';
+import { downloadExcel, todayDash } from '../../../../shared/utils/excelFile';
+import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
+import { checkProdCheck, fetchProdCheckProducts } from './services/prodCheck.service';
+import { ProdCheckPickDialog } from './components/ProdCheckPickDialog';
 import {
   addLines,
   conditionText,
@@ -20,18 +20,18 @@ import {
   qtyText,
   toGridRows,
   verdictOf,
-  type FeasibilityGridRow,
-  type FeasibilityLine,
-  type FeasibilityResult,
-  type FeasibilityRow,
-} from './utils/feasibility';
+  type ProdCheckGridRow,
+  type ProdCheckLine,
+  type ProdCheckResult,
+  type ProdCheckRow,
+} from './utils/prodCheck';
 
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 const rowButton = { minWidth: 0, px: 1, py: 0 };
 const cardSx = { borderRadius: 1, border: '1px solid rgba(148,163,184,0.18)', boxShadow: 'none', p: 1.5 };
 
-type FeasibilityPageProps = {
+type ProdCheckPageProps = {
   selectedModule: ModuleItem;
   currentMenuName: string;
   content: PageContent;
@@ -42,29 +42,29 @@ type FeasibilityPageProps = {
 // 영업관리 > 생산가능확인 (송연 SA0006, 기존 34-prod-check.js)
 // 만들 제품·수량을 적으면 그 날짜 원재료 재고로 다 만들 수 있는지 본다. 여기서는 아무것도 바꾸지 않는다.
 // 합계 표는 모자란 원재료가 위에 오고, 제품이 둘 이상이면 제품마다 '상세보기'(그 제품만 만들 때)가 붙는다.
-export function FeasibilityPage({
+export function ProdCheckPage({
   selectedModule,
   currentMenuName,
   content,
   breadcrumbItems,
   selectedMenuPermissions,
-}: FeasibilityPageProps) {
-  const linesGridRef = useRef<F1GridRef<FeasibilityLine>>(null);
+}: ProdCheckPageProps) {
+  const linesGridRef = useRef<F1GridRef<ProdCheckLine>>(null);
   // 고를 수 있는 제품(배합비가 있는 것). 검색 창을 처음 열 때 받는다(비어 있으면 열 때마다 다시)
   const [products, setProducts] = useState<string[]>([]);
-  const [lines, setLines] = useState<FeasibilityLine[]>([]);
+  const [lines, setLines] = useState<ProdCheckLine[]>([]);
   // 줄을 담거나 뺄 때만 표를 새로 그린다(수량은 표 안에서 고치고, 확인할 때 표에서 읽는다)
   const [linesVersion, setLinesVersion] = useState(0);
   const [date, setDate] = useState(() => todayDash());
-  const [data, setData] = useState<FeasibilityResult | null>(null);
+  const [data, setData] = useState<ProdCheckResult | null>(null);
   const [one, setOne] = useState<string | null>(null); // 상세보기로 고른 제품(없으면 합계)
   const [pickerOpen, setPickerOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
 
   // 표 안에서 고친 수량을 함께 읽는다
-  const currentLines = (): FeasibilityLine[] => linesGridRef.current?.getActiveRows() ?? lines;
-  const replaceLines = (next: FeasibilityLine[]) => {
+  const currentLines = (): ProdCheckLine[] => linesGridRef.current?.getActiveRows() ?? lines;
+  const replaceLines = (next: ProdCheckLine[]) => {
     setLines(next);
     setLinesVersion((v) => v + 1);
     setData(null); // 날짜나 제품이 바뀌었으면 앞의 결과는 그것에 대한 답이 아니다
@@ -73,7 +73,7 @@ export function FeasibilityPage({
 
   const openPicker = async () => {
     setError('');
-    if (products.length === 0) setProducts(await fetchFeasibilityProducts().catch(() => [])); // 못 받으면 빈 목록으로 연다
+    if (products.length === 0) setProducts(await fetchProdCheckProducts().catch(() => [])); // 못 받으면 빈 목록으로 연다
     setPickerOpen(true);
   };
 
@@ -97,7 +97,7 @@ export function FeasibilityPage({
     setChecking(true);
     try {
       setLines(current);
-      setData(await checkFeasibility(date, current));
+      setData(await checkProdCheck(date, current));
       setOne(null);
     } catch (requestError) {
       setError(errorText(requestError, '확인하지 못했어요'));
@@ -112,7 +112,7 @@ export function FeasibilityPage({
       return;
     }
     try {
-      await downloadExcel<FeasibilityRow>(data.rows, excelColumnsOf(data), `생산가능확인_${data.date}.xlsx`, '생산가능확인');
+      await downloadExcel<ProdCheckRow>(data.rows, excelColumnsOf(data), `생산가능확인_${data.date}.xlsx`, '생산가능확인');
     } catch (requestError) {
       setError(errorText(requestError, '엑셀을 만들지 못했어요'));
     }
@@ -122,8 +122,8 @@ export function FeasibilityPage({
   const oneResult = one && data ? data.byProduct.find((item) => item.product === one) : undefined;
   const verdict = verdictOf(data);
 
-  const lineColumns = useMemo<F1GridColumn<FeasibilityLine>[]>(() => [
-    { field: 'id' as keyof FeasibilityLine, type: 'rownumber', width: 60, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
+  const lineColumns = useMemo<F1GridColumn<ProdCheckLine>[]>(() => [
+    { field: 'id' as keyof ProdCheckLine, type: 'rownumber', width: 60, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
     {
       field: 'product', headerName: '제품명', flex: 1, width: 240, headerAlign: 'center', align: 'left',
       renderCell: ({ row }) => {
@@ -146,7 +146,7 @@ export function FeasibilityPage({
         : Number(row.qty).toLocaleString('ko-KR', { maximumFractionDigits: 3 })),
     },
     {
-      field: 'detail' as keyof FeasibilityLine, headerName: '', width: 170, headerAlign: 'center', align: 'center', pinned: 'right',
+      field: 'detail' as keyof ProdCheckLine, headerName: '', width: 170, headerAlign: 'center', align: 'center', pinned: 'right',
       renderCell: ({ row }) => (
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
           {canDetail && <Button size="small" variant="outlined" sx={rowButton} onClick={() => setOne(row.product)}>상세보기</Button>}
@@ -162,9 +162,9 @@ export function FeasibilityPage({
   const shownRows = oneResult ? oneResult.rows : data?.rows ?? [];
   const perCount = !oneResult && data && data.lines.length > 1 ? data.lines.length : 0;
   const footer = footerOf(shownRows, perCount);
-  const resultColumns = useMemo<F1GridColumn<FeasibilityGridRow>[]>(() => {
+  const resultColumns = useMemo<F1GridColumn<ProdCheckGridRow>[]>(() => {
     if (!data) return [];
-    const num = (field: keyof FeasibilityGridRow, headerName: string, extra: Partial<F1GridColumn<FeasibilityGridRow>> = {}): F1GridColumn<FeasibilityGridRow> => ({
+    const num = (field: keyof ProdCheckGridRow, headerName: string, extra: Partial<F1GridColumn<ProdCheckGridRow>> = {}): F1GridColumn<ProdCheckGridRow> => ({
       field, headerName, width: 110, headerAlign: 'center', align: 'right',
       getValue: (row) => row[field] as number,
       renderCell: ({ row }) => qtyText(row[field] as number),
@@ -184,7 +184,7 @@ export function FeasibilityPage({
       { field: 'spec', headerName: '규격', width: 90, headerAlign: 'center', align: 'left', getValue: (row) => row.spec || '' },
       num('stockQty', `${data.date} 재고`),
       ...Array.from({ length: perCount }, (_, i) =>
-        num(`per${i}` as keyof FeasibilityGridRow, `필요량${i + 1} ${data.lines[i].product}`, {
+        num(`per${i}` as keyof ProdCheckGridRow, `필요량${i + 1} ${data.lines[i].product}`, {
           width: 130,
           renderCell: ({ row }) => (row[`per${i}`] ? qtyText(row[`per${i}`]) : ''),
         })),
@@ -310,7 +310,7 @@ export function FeasibilityPage({
         )}
       </Box>
       {pickerOpen && (
-        <FeasibilityPickDialog
+        <ProdCheckPickDialog
           date={date}
           products={products}
           onPick={(day, picked) => {

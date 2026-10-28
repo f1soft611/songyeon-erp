@@ -1,4 +1,4 @@
-package egovframework.let.sa.order.service.impl;
+package egovframework.let.sales.order.orderregister.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -18,9 +18,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.domain.model.SalesOrderVO;
-import egovframework.let.sa.order.domain.repository.SalesOrderDAO;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
+import egovframework.let.sales.order.orderregister.domain.repository.SalesOrderDAO;
 
 class SalesOrderServiceImplTest {
 

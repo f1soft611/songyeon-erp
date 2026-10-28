@@ -11,7 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { F1Grid, type F1GridColumn } from '../../../../shared/components/f1-grid';
+import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
 import type { PendingOrder } from '../utils/shipment';
 
 // 수주등록 가져오기 창(송연 SA0005OrderImportModal)

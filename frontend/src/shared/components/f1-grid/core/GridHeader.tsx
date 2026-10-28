@@ -57,6 +57,7 @@ type GridHeaderProps<T extends object> = {
   resizableColumns?: boolean;
   minColumnWidth?: number;
   showCheckbox?: boolean;
+  multiSelect?: boolean;
   onResizeColumn: (column: F1GridColumn<T>, nextWidth: number) => void;
   getColumnCheckboxState: (column: F1GridColumn<T>) => {
     allChecked: boolean;
@@ -107,6 +108,7 @@ function GridHeaderInner<T extends object>({
   resizableColumns = true,
   minColumnWidth = 50,
   showCheckbox = true,
+  multiSelect = false,
   onResizeColumn,
   getColumnCheckboxState,
   onToggleAllRows,
@@ -345,13 +347,15 @@ function GridHeaderInner<T extends object>({
                   : 'rgb(232, 236, 244)',
             }}
           >
-            <Checkbox
-              size="small"
-              aria-label="전체 행 선택"
-              checked={selectedAll}
-              indeterminate={selectedCount > 0 && !selectedAll}
-              onChange={onToggleAllRows}
-            />
+            {multiSelect ? (
+              <Checkbox
+                size="small"
+                aria-label="전체 행 선택"
+                checked={selectedAll}
+                indeterminate={selectedCount > 0 && !selectedAll}
+                onChange={onToggleAllRows}
+              />
+            ) : null}
           </Box>
         ) : null}
         {groupLabelNodes}

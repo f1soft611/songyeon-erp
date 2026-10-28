@@ -1,4 +1,4 @@
-package egovframework.let.sa.quote.service.impl;
+package egovframework.let.sales.order.quote.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -23,10 +23,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import egovframework.let.co.master.itemmaster.domain.model.MaterialOptionVO;
 import egovframework.let.co.master.itemmaster.domain.repository.ItemMasterDAO;
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.quote.domain.model.QuoteBomLineVO;
-import egovframework.let.sa.quote.domain.model.QuoteSaveRequestVO;
-import egovframework.let.sa.quote.domain.model.QuoteVO;
-import egovframework.let.sa.quote.domain.repository.QuoteDAO;
+import egovframework.let.sales.order.quote.domain.model.QuoteBomLineVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteSaveRequestVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteVO;
+import egovframework.let.sales.order.quote.domain.repository.QuoteDAO;
 
 class QuoteServiceImplTest {
 
@@ -151,5 +151,19 @@ class QuoteServiceImplTest {
 		assertTrue(service.getQuote(4L).getBom().isEmpty());
 		assertThrows(IllegalArgumentException.class, () -> service.getQuote(99L));
 		verify(dao, never()).deleteQuote(eq(3L));
+	}
+
+	@DisplayName("삭제(2026-10-28): 없는 견적 · 확정된 견적은 막고, 가견적만 지운다")
+	@Test
+	void deleteRules() throws Exception {
+		QuoteDAO dao = mock(QuoteDAO.class);
+		when(dao.selectQuoteStatus(1L)).thenReturn("confirmed");
+		when(dao.selectQuoteStatus(2L)).thenReturn("draft");
+		QuoteServiceImpl service = service(dao, mock(ItemMasterDAO.class), mock(ItemMasterService.class));
+		assertEquals("견적을 찾을 수 없습니다", assertThrows(IllegalArgumentException.class, () -> service.deleteQuote(9L)).getMessage());
+		assertEquals("이미 확정된 견적은 삭제할 수 없습니다", assertThrows(IllegalArgumentException.class, () -> service.deleteQuote(1L)).getMessage());
+		verify(dao, never()).deleteQuote(eq(1L));
+		service.deleteQuote(2L);
+		verify(dao).deleteQuote(2L);
 	}
 }

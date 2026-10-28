@@ -1,4 +1,4 @@
-package egovframework.let.sa.pricing.domain.model;
+package egovframework.let.sales.product.pricing.domain.model;
 
 import java.io.Serializable;
 

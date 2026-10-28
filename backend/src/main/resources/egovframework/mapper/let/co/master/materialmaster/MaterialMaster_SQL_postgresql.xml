@@ -42,7 +42,7 @@
             m.spec,
             m.unit_price,
             m.stock_qty,
-            m.client_code AS supplier, <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            m.client_code AS supplier, <!-- 납품업체 거래처코드 한 곳(2026-10-28, 예전 배열) -->
             (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = m.warehouse_cd LIMIT 1) AS warehouse,
             m.safety_stock,
             m.base_order_qty,
@@ -74,22 +74,23 @@
             sp.supplier_codes,
             sp.supplier_names
         FROM materials m
-        <!-- 납품업체(2026-10-23): materials.client_code 의 거래처코드 배열('["000001","000002"]', 예전 supplier = 거래처 id 배열)을
-             풀어 거래처와 조인하고 원재료 한 줄로 모은다(배열 순서).
-             supplier_name 은 '다온, 대영산업' 처럼 이어서, supplier_codes·supplier_names 는 화면 칩용 배열.
-             배열이 아닌 옛 값(업체명)·빈 값은 셋 다 NULL. 지워진 거래처는 '삭제된 업체(코드)' -->
+        <!-- 납품업체(2026-10-28): materials.client_code 의 거래처코드 한 곳('000001')을 거래처와 조인한다.
+             바꾸기 전 거래처코드 배열('["000001"]')이 남아 있어도 첫 코드로 읽는다(20261028_001 적용 전후 모두 동작).
+             supplier_name 은 업체명, supplier_codes·supplier_names 는 화면 칩용 한 칸 배열.
+             코드가 아닌 옛 값(업체명)·빈 값은 셋 다 NULL. 지워진 거래처는 '삭제된 업체(코드)' -->
         LEFT JOIN LATERAL (
             SELECT
-                string_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')'), ', ' ORDER BY e.ord) AS supplier_name,
-                array_agg(e.code ORDER BY e.ord) AS supplier_codes,
-                array_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')') ORDER BY e.ord) AS supplier_names
-            FROM jsonb_array_elements_text(
-                CASE
-                    WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]("[0-9]+"(,"[0-9]+")*)?[]]$' THEN m.client_code::jsonb
-                    ELSE '[]'::jsonb
-                END
-            ) WITH ORDINALITY AS e(code, ord)
-            LEFT JOIN clients c ON c.client_code = e.code
+                COALESCE(c.name, '삭제된 업체(' || s.code || ')') AS supplier_name,
+                ARRAY[s.code] AS supplier_codes,
+                ARRAY[COALESCE(c.name, '삭제된 업체(' || s.code || ')')] AS supplier_names
+            FROM (
+                SELECT CASE
+                    WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[0-9]+$' THEN replace(m.client_code, ' ', '')
+                    WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]"[0-9]+"' THEN m.client_code::jsonb ->> 0
+                END AS code
+            ) s
+            LEFT JOIN clients c ON c.client_code = s.code
+            WHERE s.code IS NOT NULL
         ) sp ON TRUE
         <if test="_parameter != null and _parameter != ''">
         WHERE m.name LIKE '%' || #{_parameter} || '%'
@@ -161,7 +162,7 @@
              JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
              WHERE i.item_code = sub_category
              LIMIT 1) AS sub_category_nm,
-            client_code AS supplier, <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            client_code AS supplier, <!-- 납품업체 거래처코드 한 곳(2026-10-28, 예전 배열) -->
             spec
         FROM materials
         WHERE code = #{code}
@@ -217,7 +218,7 @@
         UPDATE materials
         SET
             name = #{row.name},
-            client_code = #{row.supplier} <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            client_code = #{row.supplier} <!-- 납품업체 거래처코드 한 곳(2026-10-28, 예전 배열) -->
             <if test="fields.contains('spec')">, spec = #{row.spec}</if>
             <if test="fields.contains('warehouse')">, warehouse_cd = (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{row.warehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1)</if>
             <if test="fields.contains('subCategory')">, sub_category = #{row.subCategory}</if>

@@ -318,9 +318,12 @@ export function GridFormField<T extends object>({
   if (column.type === 'code') {
     const openCodePicker = () => {
       const mergedPatch: Partial<T> = {};
+      let opening = true;
       const returnedPatch = column.onOpenCodePicker?.(row, (patch) => {
-        Object.assign(mergedPatch, patch);
+        if (opening) Object.assign(mergedPatch, patch);
+        else onPatch(patch);
       });
+      opening = false;
       if (returnedPatch) Object.assign(mergedPatch, returnedPatch);
       if (Object.keys(mergedPatch).length > 0) onPatch(mergedPatch);
     };

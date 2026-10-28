@@ -1,9 +1,9 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { Box } from '@mui/material';
-import { readExcelValues } from '../../../../shared/utils/excelFile';
-import type { BomEditRow, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
+import { readExcelValues } from '../../../../../shared/utils/excelFile';
+import type { BomEditRow, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
 import { newBomRowId } from './BomEditGrid';
-import { materialNamePatch } from '../../../co/master/item-master/utils/productBom';
+import { materialNamePatch } from '../../../../co/master/item-master/utils/productBom';
 import { parseRecipeRows, RECIPE_NOT_FOUND_MESSAGE, recipeLoadedMessage } from '../utils/recipeExcel';
 
 const errorText = (error: unknown, fallback: string) =>

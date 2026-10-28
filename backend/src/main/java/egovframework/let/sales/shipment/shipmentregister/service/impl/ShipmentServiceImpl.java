@@ -1,4 +1,4 @@
-package egovframework.let.sa.shipment.service.impl;
+package egovframework.let.sales.shipment.shipmentregister.service.impl;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
@@ -18,16 +18,16 @@ import java.util.regex.Pattern;
 import org.egovframe.rte.fdl.cmmn.EgovAbstractServiceImpl;
 import org.springframework.stereotype.Service;
 
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.service.SalesOrderService;
-import egovframework.let.sa.shipment.domain.model.LotAllocationVO;
-import egovframework.let.sa.shipment.domain.model.LotRowVO;
-import egovframework.let.sa.shipment.domain.model.PendingOrderVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotListVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotVO;
-import egovframework.let.sa.shipment.domain.model.ShipmentVO;
-import egovframework.let.sa.shipment.domain.repository.ShipmentDAO;
-import egovframework.let.sa.shipment.service.ShipmentService;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.service.SalesOrderService;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.PendingOrderVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotListVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.repository.ShipmentDAO;
+import egovframework.let.sales.shipment.shipmentregister.service.ShipmentService;
 
 /**
  * 영업관리 - 출하등록 서비스 구현 클래스

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { useNotification } from '../../../../shared/context/NotificationContext';
-import { useCommonCodeOptions } from '../../../../shared/components/common-code/useCommonCodeOptions';
-import { formatPrice } from '../../../../shared/utils/numberFormat';
-import type { BomEditRow, ClientOption, MaterialCheck, MaterialOption } from '../../../co/master/item-master/types/itemMaster.types';
-import { checkMaterialNames, fetchClientOptions, fetchMaterialOptions } from '../../../co/master/item-master/services/itemMaster.service';
-import { fetchBoxTypeRows } from '../../../co/master/box-type/services/boxType.service';
-import { cancelQuoteHandoff, finishQuoteHandoff, useQuoteHandoff } from '../../quote/quoteHandoff';
-import { bomRowsFromQuote } from '../../quote/utils/quote';
+import { useNotification } from '../../../../../shared/context/NotificationContext';
+import { useCommonCodeOptions } from '../../../../../shared/components/common-code/useCommonCodeOptions';
+import { formatPrice } from '../../../../../shared/utils/numberFormat';
+import type { BomEditRow, ClientOption, MaterialCheck, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import { checkMaterialNames, fetchClientOptions, fetchMaterialOptions } from '../../../../co/master/item-master/services/itemMaster.service';
+import { fetchBoxTypeRows } from '../../../../co/master/box-type/services/boxType.service';
+import { cancelQuoteHandoff, finishQuoteHandoff, useQuoteHandoff } from '../../../order/quote/quoteHandoff';
+import { bomRowsFromQuote } from '../../../order/quote/utils/quote';
 import { emptyBomEditRows, newBomRowId, type BomEditGridHandle } from '../components/BomEditGrid';
-import { registerProduct } from '../services/productRegister.service';
+import { deleteProduct, registerProduct } from '../services/productRegister.service';
 import type { ProductRegisterBody, ProductRegisterForm } from '../types/productRegister.types';
 import { buildRegisterBody, EMPTY_PRODUCT_FORM, STORAGE_METHOD_GROUP, storageCodeOf } from '../utils/productRegister';
 
@@ -30,6 +30,9 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState<{ body: ProductRegisterBody; unmatched: MaterialCheck[] } | null>(null);
+  // [저장]한 제품(2026-10-28): 입력칸을 비우지 않고 보기 전용으로 남긴다. 이때 [삭제]로 지울 수 있다. 고칠 것은 제품마스터에서
+  const [savedProduct, setSavedProduct] = useState<{ productCode: string } | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const materialsRef = useRef<MaterialOption[]>([]);
   materialsRef.current = materials;
 
@@ -66,14 +69,48 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
   const resetForm = useCallback(() => {
     setForm(EMPTY_PRODUCT_FORM);
     setBomSource((current) => ({ rows: emptyBomEditRows(), key: current.key + 1 }));
+    setSavedProduct(null);
   }, []);
 
-  // 제목줄 [초기화]: 입력칸 · 배합비를 비우고, 견적에서 넘어온 것도 버린다
-  const clearAll = useCallback(() => {
+  // 저장하지 않은 입력이 있는가(제품 정보 칸 · 배합비 줄)
+  const hasUnsavedInput = () =>
+    !savedProduct &&
+    (Object.values(form).some((value) => String(value ?? '').trim() !== '') ||
+      (bomGridRef.current?.getRows() ?? bomSource.rows).some((row) => row.materialName.trim() || row.ratioPercent !== null));
+
+  // 제목줄 [신규](S_ERP 수주등록과 같음): 저장하지 않은 입력이 있으면 묻고, 입력칸 · 배합비를 비우고, 견적에서 넘어온 것도 버린다
+  const startNew = () => {
+    if (savingRef.current) return;
+    if (hasUnsavedInput() && !window.confirm('저장되지 않은 제품 내용이 있습니다. 신규로 초기화하면 입력 내용이 사라집니다. 계속하시겠습니까?')) {
+      return;
+    }
     setError('');
     resetForm();
     cancelQuoteHandoff();
-  }, [resetForm]);
+  };
+
+  // 제목줄 [삭제]: 방금 [저장]한 제품을 지운다(확인 창 뒤). 견적에서 만든 제품이면 그 견적은 가견적으로 돌아간다
+  const requestDelete = () => {
+    if (savingRef.current || !savedProduct) return;
+    setDeleteConfirmOpen(true);
+  };
+  const confirmDelete = async () => {
+    setDeleteConfirmOpen(false);
+    if (savingRef.current || !savedProduct) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError('');
+    try {
+      await deleteProduct(savedProduct.productCode);
+      resetForm();
+      showSuccess(`제품이 삭제되었습니다. 제품코드: ${savedProduct.productCode}`);
+    } catch (requestError) {
+      setError(errorText(requestError, '제품을 삭제하지 못했어요'));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
 
   // 레시피 엑셀을 불러오면 그 줄로 배합비를 다시 시작한다
   const loadBomRows = useCallback((rows: BomEditRow[], message: string) => {
@@ -82,11 +119,11 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
     showSuccess(message);
   }, [showSuccess]);
 
-  // 송연 doRegister: 등록 뒤에는 입력칸과 배합비(빈 줄 3개)를 비운다. 견적 확정이면 다른 문구.
+  // 송연 doRegister. 2026-10-28 S_ERP 수주등록처럼 등록 뒤에도 입력칸을 남기고(보기 전용) [삭제]를 켠다. 다음 제품은 [신규]. 견적 확정이면 다른 문구.
   const register = async (body: ProductRegisterBody) => {
     try {
       const saved = await registerProduct(body);
-      resetForm();
+      setSavedProduct({ productCode: saved.productCode });
       if (body.quoteId != null) {
         finishQuoteHandoff();
         showSuccess(`등록되었습니다 (제품코드 ${saved.productCode}, 견적 확정 완료 — 인건비 등 원가항목도 단가관리에 자동 반영됨)`);
@@ -102,7 +139,7 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
 
   // 송연 p-save: 제품명 확인 → 배합비가 있으면 원재료명 확인 → 모두 정확하면 바로 등록, 아니면 확인 창
   const save = async () => {
-    if (savingRef.current) return;
+    if (savingRef.current || savedProduct) return;
     setError('');
     const body: ProductRegisterBody = {
       ...buildRegisterBody(form, bomGridRef.current?.getRows() ?? bomSource.rows),
@@ -169,7 +206,12 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
     saving,
     pending,
     setPending,
-    clearAll,
+    savedProduct,
+    deleteConfirmOpen,
+    setDeleteConfirmOpen,
+    startNew,
+    requestDelete,
+    confirmDelete,
     loadBomRows,
     save,
     confirmMatch,

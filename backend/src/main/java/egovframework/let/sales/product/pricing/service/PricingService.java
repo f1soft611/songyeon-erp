@@ -1,10 +1,10 @@
-package egovframework.let.sa.pricing.service;
+package egovframework.let.sales.product.pricing.service;
 
 import java.util.List;
 import java.util.Map;
 
-import egovframework.let.sa.pricing.domain.model.PricingBomLineVO;
-import egovframework.let.sa.pricing.domain.model.PricingVO;
+import egovframework.let.sales.product.pricing.domain.model.PricingBomLineVO;
+import egovframework.let.sales.product.pricing.domain.model.PricingVO;
 
 /**
  * 영업관리 - 단가관리 서비스 인터페이스 클래스

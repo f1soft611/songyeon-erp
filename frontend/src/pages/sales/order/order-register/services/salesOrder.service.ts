@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut } from '../../../../shared/services/apiClient';
+import { apiDelete, apiGet, apiPost, apiPut } from '../../../../../shared/services/apiClient';
 import type { OrderSaveBody, SavedOrder } from '../utils/salesOrder';
 
 // 영업관리 > 수주등록 (송연 SA0004)
@@ -10,7 +10,7 @@ export type OrderProduct = {
   display: string; // 규격이 있으면 '이름(규격)'
 };
 
-const PATH = '/api/v1/sa/orders';
+const PATH = '/api/v1/sales/order/order-register';
 
 // 그 수주일의 수주(생산예정일 → 순서 순)
 export async function fetchOrders(orderDate: string): Promise<SavedOrder[]> {

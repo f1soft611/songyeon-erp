@@ -1,4 +1,4 @@
-package egovframework.let.sa.quote.service.impl;
+package egovframework.let.sales.order.quote.service.impl;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -20,12 +20,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import egovframework.let.co.master.itemmaster.domain.model.MaterialOptionVO;
 import egovframework.let.co.master.itemmaster.domain.repository.ItemMasterDAO;
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.quote.domain.model.QuoteBomLineVO;
-import egovframework.let.sa.quote.domain.model.QuoteSaveRequestVO;
-import egovframework.let.sa.quote.domain.model.QuoteVO;
-import egovframework.let.sa.quote.domain.repository.QuoteDAO;
-import egovframework.let.sa.quote.service.QuoteCostCalculator;
-import egovframework.let.sa.quote.service.QuoteService;
+import egovframework.let.sales.order.quote.domain.model.QuoteBomLineVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteSaveRequestVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteVO;
+import egovframework.let.sales.order.quote.domain.repository.QuoteDAO;
+import egovframework.let.sales.order.quote.service.QuoteCostCalculator;
+import egovframework.let.sales.order.quote.service.QuoteService;
 
 /**
  * 영업관리 - 견적 서비스 구현 클래스
@@ -42,6 +42,7 @@ public class QuoteServiceImpl extends EgovAbstractServiceImpl implements QuoteSe
     static final String NAME_REQUIRED_MESSAGE = "제품명은 필수입니다";
     static final String NOT_FOUND_MESSAGE = "견적을 찾을 수 없습니다";
     static final String CONFIRMED_MESSAGE = "이미 확정된 견적은 수정할 수 없습니다";
+    static final String CONFIRMED_DELETE_MESSAGE = "이미 확정된 견적은 삭제할 수 없습니다";
 
     private static final DateTimeFormatter CREATED_AT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
@@ -115,6 +116,14 @@ public class QuoteServiceImpl extends EgovAbstractServiceImpl implements QuoteSe
 
     @Override
     public void deleteQuote(long quoteId) throws Exception {
+        // 2026-10-28 확정된 견적은 제품 · 단가표와 이어져 있어 지우지 않는다(화면은 가견적만 지우게 한다)
+        String status = quoteDAO.selectQuoteStatus(quoteId);
+        if (status == null) {
+            throw new IllegalArgumentException(NOT_FOUND_MESSAGE);
+        }
+        if ("confirmed".equals(status)) {
+            throw new IllegalArgumentException(CONFIRMED_DELETE_MESSAGE);
+        }
         quoteDAO.deleteQuote(quoteId);
     }
 

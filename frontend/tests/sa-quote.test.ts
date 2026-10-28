@@ -12,8 +12,9 @@ import {
   quoteStatusLabel,
   toQuoteSaveBody,
   type QuoteRow,
-} from '../src/pages/sa/quote/utils/quote';
+} from '../src/pages/sales/order/quote/utils/quote';
 import type { BomEditRow } from '../src/pages/co/master/item-master/types/itemMaster.types';
+import { quoteDeletePlan } from '../src/pages/sales/order/quote/hooks/useQuoteManagement';
 
 const row = (overrides: Partial<BomEditRow>): BomEditRow => ({
   id: 'r', materialName: '', ratioPercent: null, unitPrice: null, autoPrice: false, materialCode: null, ...overrides,
@@ -85,5 +86,18 @@ describe('견적 utils(송연 05-quote.js)', () => {
     expect(html).toContain('>123<'); // Math.round(1234.5 × 0.1)
     expect((html.match(/<tr><td>&nbsp;<\/td>/g) || []).length).toBe(9);
     expect(html).toContain('468-86-01233');
+  });
+});
+
+describe('견적 삭제(2026-10-28, [삭제] · [행 삭제] 뒤 [저장])', () => {
+  it('가견적만 지우고, 확정된 견적이 섞이면 그 이름을 알린다', () => {
+    const rows = [
+      { quoteId: 1, productName: '예시소스', status: 'draft' },
+      { quoteId: 2, productName: '예시분말', status: 'confirmed' },
+      { quoteId: 3, productName: '', status: 'draft' },
+    ];
+    expect(quoteDeletePlan([rows[0], rows[2]])).toEqual({ ids: [1, 3], confirmedNames: [] });
+    expect(quoteDeletePlan(rows).confirmedNames).toEqual(['예시분말']);
+    expect(quoteDeletePlan([{ quoteId: 9, status: 'confirmed' }]).confirmedNames).toEqual(['견적 9']);
   });
 });

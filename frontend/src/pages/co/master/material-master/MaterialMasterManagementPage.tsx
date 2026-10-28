@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Box, Card, CardContent, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
@@ -13,6 +13,8 @@ import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { toPageSearchFields, type PageSearchField, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import type { F1GridRef, F1GridValidationError } from '../../../../shared/components/f1-grid';
+import { MasterPickerDialog } from '../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../shared/components/master-picker/masterPicker.types';
 import { useCommonCodeOptions } from '../../../../shared/components/common-code/useCommonCodeOptions';
 import { downloadExcel, todayFileTag } from '../../../../shared/utils/excelFile';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
@@ -20,7 +22,7 @@ import { MaterialHistoryDialog } from './components/MaterialHistoryDialog';
 import { MaterialMasterGrid, createMaterialMasterColumns } from './components/MaterialMasterGrid';
 import { MaterialReplaceDialog } from './components/MaterialReplaceDialog';
 import { MaterialUsageDialog } from './components/MaterialUsageDialog';
-import { filterMaterialMasterRows, matchMaterialKeyword, useMaterialMasterManagement } from './hooks/useMaterialMasterManagement';
+import { filterMaterialMasterRows, matchMaterialKeyword, useMaterialMasterManagement, vendorPickerOptions } from './hooks/useMaterialMasterManagement';
 import type { MaterialMasterRow } from './types/materialMaster.types';
 import { MATERIAL_EXCEL_COLUMNS, STALE_UNITS, type MaterialUseFilter, type StaleUnit } from './utils/materialMaster';
 
@@ -74,8 +76,10 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<MaterialUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [stale, setStale] = useState(staleOf(DEFAULT_DETAIL_VALUES));
-  // 상세 조회 납품업체(거래처코드, 열의 search 설정)
-  const [supplierCode, setSupplierCode] = useState('');
+  // 상세 조회 납품업체(이름 · 거래처코드 일부, 열의 search 설정)
+  const [supplierKeyword, setSupplierKeyword] = useState('');
+  // 납품업체 [선택] 팝업: 고르면 상세 창(또는 표 칸)에 넣을 함수(S_ERP 품목관리 품목분류 팝업과 같음)
+  const [supplierPicker, setSupplierPicker] = useState<{ apply: (changes: Partial<MaterialMasterRow>) => void } | null>(null);
   const [confirmReload, setConfirmReload] = useState(false);
   const [usage, setUsage] = useState<MaterialMasterRow | null>(null);
   const [replace, setReplace] = useState<MaterialMasterRow | null>(null);
@@ -98,13 +102,22 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
         onUsage: setUsage,
         onReplace: setReplace,
         onHistory: setHistory,
+        onPickSupplier: (_row, apply) => {
+          setSupplierPicker({ apply });
+          return undefined;
+        },
       }),
     [canEdit, permissions.write, management.vendors, unitOptions, management.rows],
   );
   const detailFields = useMemo(() => [...toPageSearchFields(columns), ...STALE_FIELDS], [columns]);
   const visibleRows = useMemo(
-    () => filterMaterialMasterRows(management.rows, searchQuery, useFilter, stale, new Date(), supplierCode),
-    [management.rows, searchQuery, useFilter, stale, supplierCode],
+    () => filterMaterialMasterRows(management.rows, searchQuery, useFilter, stale, new Date(), supplierKeyword),
+    [management.rows, searchQuery, useFilter, stale, supplierKeyword],
+  );
+  // 납품업체 팝업 검색: 매입 거래처 목록에서 거래처코드 · 이름으로 찾는다
+  const searchSuppliers = useCallback(
+    async (keyword: string): Promise<MasterPickerOption[]> => vendorPickerOptions(management.vendors, keyword),
+    [management.vendors],
   );
 
   // 저장하지 않은 변경이 있으면 먼저 묻는다
@@ -196,7 +209,7 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
         onDetailSearch={(values) => {
           setUseFilter(useFilterOf(values));
           setStale(staleOf(values));
-          setSupplierCode(typeof values.supplierCodes === 'string' ? values.supplierCodes : '');
+          setSupplierKeyword(typeof values.supplierCodes === 'string' ? values.supplierCodes.trim() : '');
         }}
         detailLoading={management.loading}
       />
@@ -223,6 +236,16 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
       {replace && (
         <MaterialReplaceDialog code={replace.code} name={replace.name} onReplaced={() => management.reload()} onClose={() => setReplace(null)} />
       )}
+      <MasterPickerDialog
+        label="납품업체"
+        open={supplierPicker !== null}
+        search={searchSuppliers}
+        onClose={() => setSupplierPicker(null)}
+        onChange={(option) => {
+          supplierPicker?.apply({ supplierCodes: [option.code] });
+          setSupplierPicker(null);
+        }}
+      />
       {history && (
         <MaterialHistoryDialog code={history.code} name={history.name} canWrite={permissions.write} onClose={() => setHistory(null)} />
       )}

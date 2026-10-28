@@ -1,5 +1,5 @@
-import type { ExcelColumn } from '../../../../shared/utils/excelFile';
-import type { PricingBomLine, PricingDetail, PricingRow } from '../services/pricing.service';
+import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
+import type { PricingBomLine, PricingDetail, PricingRow } from '../types/pricing.types';
 
 // 송연 단가관리 화면 규칙(SA0002Page · useSA0002 · SA0002PricingDetailModal 에서 옮김)
 
@@ -82,7 +82,7 @@ export function pricingFormFrom(detail: PricingDetail) {
     otherCost4: t(detail.otherCost4),
     otherCost4Note: detail.otherCost4Note,
     currentPrice: t(detail.currentPrice),
-    clientName: detail.clientName,
+    clientCode: detail.clientCode, // 거래처(2026-10-28 팝업에서 고른다, 저장은 거래처코드)
   };
 }
 export type PricingForm = ReturnType<typeof pricingFormFrom>;
@@ -108,7 +108,7 @@ export function pricingSaveBody(form: PricingForm): Record<string, unknown> {
     otherCost4: amountOrNull(form.otherCost4),
     otherCost4Note: form.otherCost4Note || null,
     currentPrice: amountOrNull(form.currentPrice),
-    clientName: form.clientName || null,
+    clientCode: form.clientCode || null,
   };
 }
 

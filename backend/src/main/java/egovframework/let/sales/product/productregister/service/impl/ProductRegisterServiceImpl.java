@@ -1,4 +1,4 @@
-package egovframework.let.sa.product.service.impl;
+package egovframework.let.sales.product.productregister.service.impl;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -9,12 +9,12 @@ import org.springframework.stereotype.Service;
 import egovframework.let.co.master.itemmaster.domain.model.BomLineVO;
 import egovframework.let.co.master.itemmaster.domain.repository.ItemMasterDAO;
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.product.domain.model.ProductRegisterRequestVO;
-import egovframework.let.sa.product.domain.model.ProductRegisterVO;
-import egovframework.let.sa.product.domain.repository.ProductRegisterDAO;
-import egovframework.let.sa.product.service.ProductRegisterService;
-import egovframework.let.sa.quote.domain.model.QuoteCostsVO;
-import egovframework.let.sa.quote.service.QuoteCostCalculator;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterRequestVO;
+import egovframework.let.sales.product.productregister.domain.model.ProductRegisterVO;
+import egovframework.let.sales.product.productregister.domain.repository.ProductRegisterDAO;
+import egovframework.let.sales.product.productregister.service.ProductRegisterService;
+import egovframework.let.sales.order.quote.domain.model.QuoteCostsVO;
+import egovframework.let.sales.order.quote.service.QuoteCostCalculator;
 
 /**
  * 영업관리 - 제품등록 서비스 구현 클래스
@@ -28,6 +28,9 @@ import egovframework.let.sa.quote.service.QuoteCostCalculator;
 public class ProductRegisterServiceImpl extends EgovAbstractServiceImpl implements ProductRegisterService {
 
     static final String NAME_REQUIRED_MESSAGE = "제품명은 필수입니다";
+    static final String NOT_FOUND_MESSAGE = "제품을 찾을 수 없습니다";
+    static final String HAS_STOCK_MESSAGE = "재고가 있는 제품은 삭제할 수 없어요. 제품마스터에서 사용안함으로 바꿔주세요";
+    static final String IN_USE_MESSAGE = "이미 수주 · 생산 · 출하 등에 쓰인 제품이라 삭제할 수 없어요. 제품마스터에서 사용안함으로 바꿔주세요";
     static final String QUOTE_NOT_CONFIRMABLE_MESSAGE = "견적을 찾을 수 없거나 이미 확정된 견적입니다. 견적 목록을 다시 확인해주세요.";
 
     private final ProductRegisterDAO productRegisterDAO;
@@ -77,6 +80,27 @@ public class ProductRegisterServiceImpl extends EgovAbstractServiceImpl implemen
             throw new IllegalArgumentException(QUOTE_NOT_CONFIRMABLE_MESSAGE);
         }
         return product;
+    }
+
+    @Override
+    public void deleteProduct(String productCode) throws Exception {
+        String code = productCode == null ? "" : productCode.trim();
+        if (code.isEmpty() || !productRegisterDAO.existsProduct(code)) {
+            throw new IllegalArgumentException(NOT_FOUND_MESSAGE);
+        }
+        Double stock = productRegisterDAO.selectProductStockQty(code);
+        if (stock != null && stock != 0d) {
+            throw new IllegalArgumentException(HAS_STOCK_MESSAGE);
+        }
+        if (productRegisterDAO.countProductUsage(code) > 0) {
+            throw new IllegalArgumentException(IN_USE_MESSAGE);
+        }
+        // 견적에서 확정해 만든 제품이면 그 견적을 가견적으로 돌린다(견적 화면에서 다시 고쳐 확정할 수 있게)
+        productRegisterDAO.revertConfirmedQuotes(code);
+        productRegisterDAO.deleteProductBom(code);
+        productRegisterDAO.deleteProductBomLog(code);
+        productRegisterDAO.deleteProductPricing(code);
+        productRegisterDAO.deleteProduct(code);
     }
 
     // 새 제품의 단가표. 보통은 로스·고정마진 0, 제품단가 = 원재료비.

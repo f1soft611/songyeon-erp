@@ -1,9 +1,9 @@
-package egovframework.let.sa.quote.service;
+package egovframework.let.sales.order.quote.service;
 
 import java.util.List;
 
-import egovframework.let.sa.quote.domain.model.QuoteSaveRequestVO;
-import egovframework.let.sa.quote.domain.model.QuoteVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteSaveRequestVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteVO;
 
 /**
  * 영업관리 - 견적 서비스 인터페이스 클래스

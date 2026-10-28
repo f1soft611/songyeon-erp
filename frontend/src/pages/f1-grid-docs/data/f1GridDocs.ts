@@ -385,6 +385,16 @@ export const f1GridDocs: F1GridDoc[] = [
         heading: 'Selection props',
         rows: [
           [
+            'selectionMode',
+            "'cell' | 'row'",
+            "기본 cell. row는 행 전체 강조·선택 행 복사, 셀 범위 드래그 비활성화. 체크박스 표시와 독립적.",
+          ],
+          [
+            'multiSelect',
+            'boolean',
+            '기본 false: 최대 한 행. true에서만 Ctrl/Command·Shift·checkbox 누적·헤더 행 전체 선택을 허용. 셀 범위 선택과 독립적.',
+          ],
+          [
             'showCheckbox',
             'boolean',
             '행 선택용 체크박스 컬럼(Row Selector) 전체 표시 여부',
@@ -396,6 +406,33 @@ export const f1GridDocs: F1GridDoc[] = [
           ],
           ['onSelectionChange', '(ids) => void', '선택 변경 콜백'],
         ],
+      },
+      {
+        type: 'code',
+        heading: '현황 화면의 행 선택',
+        code: `<F1Grid
+  rows={rows}
+  columns={columns}
+  rowKey="id"
+  selectionMode="row"
+  showCheckbox={false}
+/>`,
+      },
+      {
+        type: 'code',
+        heading: '명시적 다중 행 선택',
+        code: `<F1Grid
+  rows={rows}
+  columns={columns}
+  rowKey="id"
+  selectionMode="row"
+  multiSelect
+/>`,
+      },
+      {
+        type: 'prose',
+        heading: '행 단위 선택 동작',
+        body: 'row 모드는 클릭한 행 전체를 표시합니다. multiSelect 기본값은 false이므로 Ctrl/Command/Shift 클릭과 Shift 방향키도 한 행만 선택하며 checkbox는 이전 선택을 대체합니다. true에서만 Ctrl/Command 추가·해제, Shift 연속 범위와 헤더 전체 선택을 지원합니다. 초기/ref 복수 ID 및 true→false 전환은 표시 순서 첫 유효 행만 유지하고 다시 true로 바꿔도 복구하지 않습니다. Ctrl+C는 선택 행 전체를 표시 순서로 복사합니다. 병합 그룹의 상세 행은 별개로 강조하고 고정 열도 같은 행 높이를 사용합니다. 셀 범위·편집·데이터 checkbox·treeCheckbox는 독립적이며 우클릭은 selectRowOnContextMenu 설정을 따릅니다.',
       },
       {
         type: 'prose',

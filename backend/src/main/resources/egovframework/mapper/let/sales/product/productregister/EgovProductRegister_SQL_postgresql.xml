@@ -17,7 +17,7 @@
 
     <!-- 제품코드는 넣기 직전 발번한다(위 nextProductCode).
          같은 때 둘이 넣어 같은 번호가 나오면 기본키 중복 → 그 저장을 통째로 취소하고 다시 한다 -->
-    <insert id="insertProduct" parameterType="egovframework.let.sa.product.domain.model.ProductRegisterVO">
+    <insert id="insertProduct" parameterType="egovframework.let.sales.product.productregister.domain.model.ProductRegisterVO">
         <selectKey keyProperty="productCode" resultType="string" order="BEFORE">
             <include refid="nextProductCode"/>
         </selectKey>
@@ -44,16 +44,16 @@
 
     <!-- 새 제품의 단가표. 보통은 로스·고정마진 0, 제품단가 = 원재료비(인건비 등은 단가관리에서 이어서 넣는다).
          견적 확정이면 견적의 원가 항목이 함께 들어간다(서비스가 값을 채운다) -->
-    <insert id="insertPricing" parameterType="egovframework.let.sa.product.domain.model.ProductRegisterVO">
+    <insert id="insertPricing" parameterType="egovframework.let.sales.product.productregister.domain.model.ProductRegisterVO">
         INSERT INTO pricing (
-            product_code, product_name, spec, product_type, client_name,
+            product_code, product_name, spec, product_type, client_code, <!-- 2026-10-28 거래처코드(예전 거래처명) -->
             material_cost, loss_cost, loss_rate, markup_cost, markup_rate,
             labor_cost, packaging_cost, logistics_cost, margin,
             other_cost1, other_cost1_note, other_cost2, other_cost2_note,
             other_cost3, other_cost3_note, other_cost4, other_cost4_note,
             current_price, total_price
         ) VALUES (
-            #{productCode}, #{productName}, #{spec}, #{productType}, #{clientName},
+            #{productCode}, #{productName}, #{spec}, #{productType}, #{clientCode},
             #{materialCost,jdbcType=DOUBLE}, #{lossCost,jdbcType=DOUBLE}, #{lossRate,jdbcType=DOUBLE},
             #{markupCost,jdbcType=DOUBLE}, #{markupRate,jdbcType=DOUBLE},
             #{laborCost,jdbcType=DOUBLE}, #{packagingCost,jdbcType=DOUBLE}, #{logisticsCost,jdbcType=DOUBLE}, #{margin,jdbcType=DOUBLE},
@@ -71,4 +71,49 @@
         WHERE quote_id = #{quoteId}
           AND COALESCE(status, '') &lt;&gt; 'confirmed'
     </update>
+
+    <!-- ===== 제품등록 [삭제](2026-10-28): 방금 등록한 제품만 지운다(재고 · 사용 이력이 있으면 서비스가 막는다) ===== -->
+    <select id="existsProduct" parameterType="string" resultType="string">
+        SELECT code FROM products WHERE code = #{productCode} LIMIT 1
+    </select>
+
+    <select id="selectProductStockQty" parameterType="string" resultType="double">
+        SELECT stock_qty FROM products WHERE code = #{productCode}
+    </select>
+
+    <!-- 이 제품을 쓰는 줄(외래키가 없어 표마다 센다) -->
+    <select id="countProductUsage" parameterType="string" resultType="int">
+        SELECT (SELECT count(*) FROM sales_order WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM sales_record WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM production_schedule WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM logistics_schedule WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM product_stock_movement WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM product_stock_schedule WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM delivery_carryover WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM product_label_versions WHERE product_code = #{productCode})
+             + (SELECT count(*) FROM label_requests WHERE moved_product_code = #{productCode})
+    </select>
+
+    <update id="revertConfirmedQuotes" parameterType="string">
+        UPDATE quotes
+        SET status = 'draft',
+            confirmed_product_code = NULL
+        WHERE confirmed_product_code = #{productCode}
+    </update>
+
+    <delete id="deleteProductBom" parameterType="string">
+        DELETE FROM bom WHERE product_code = #{productCode}
+    </delete>
+
+    <delete id="deleteProductBomLog" parameterType="string">
+        DELETE FROM bom_change_log WHERE product_code = #{productCode}
+    </delete>
+
+    <delete id="deleteProductPricing" parameterType="string">
+        DELETE FROM pricing WHERE product_code = #{productCode}
+    </delete>
+
+    <delete id="deleteProduct" parameterType="string">
+        DELETE FROM products WHERE code = #{productCode}
+    </delete>
 </mapper>

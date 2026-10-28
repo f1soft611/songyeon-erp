@@ -549,6 +549,22 @@ describe('typed form field', () => {
     });
   });
 
+  it('applies a code picker callback after the picker has opened', () => {
+    let choose!: (patch: Partial<TypedFormRow>) => void;
+    const onPatch = vi.fn();
+    render(
+      <GridFormField
+        column={{ field: 'code', headerName: '품목 코드', type: 'code',
+          onOpenCodePicker: (_row, applyPatch) => { choose = applyPatch; } }}
+        row={typedRow} mode="edit" value={typedRow.code} readOnly={false} onPatch={onPatch}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '품목 코드 선택' }));
+    expect(onPatch).not.toHaveBeenCalled();
+    act(() => choose({ code: 'C03', codeName: '선택 코드' }));
+    expect(onPatch).toHaveBeenCalledWith({ code: 'C03', codeName: '선택 코드' });
+  });
+
   it('merges code picker callback and return patches', () => {
     const onPatch = vi.fn();
     const onOpenCodePicker = vi.fn((_row, applyPatch) => {

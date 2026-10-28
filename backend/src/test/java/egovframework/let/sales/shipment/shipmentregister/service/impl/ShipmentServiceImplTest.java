@@ -1,4 +1,4 @@
-package egovframework.let.sa.shipment.service.impl;
+package egovframework.let.sales.shipment.shipmentregister.service.impl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -24,13 +24,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.service.SalesOrderService;
-import egovframework.let.sa.shipment.domain.model.LotAllocationVO;
-import egovframework.let.sa.shipment.domain.model.LotRowVO;
-import egovframework.let.sa.shipment.domain.model.ProductLotListVO;
-import egovframework.let.sa.shipment.domain.model.ShipmentVO;
-import egovframework.let.sa.shipment.domain.repository.ShipmentDAO;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.service.SalesOrderService;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotAllocationVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.LotRowVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ProductLotListVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.model.ShipmentVO;
+import egovframework.let.sales.shipment.shipmentregister.domain.repository.ShipmentDAO;
 
 class ShipmentServiceImplTest {
 

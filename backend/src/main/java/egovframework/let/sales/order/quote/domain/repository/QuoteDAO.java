@@ -1,11 +1,11 @@
-package egovframework.let.sa.quote.domain.repository;
+package egovframework.let.sales.order.quote.domain.repository;
 
 import java.util.List;
 
 import org.egovframe.rte.psl.dataaccess.EgovAbstractMapper;
 import org.springframework.stereotype.Repository;
 
-import egovframework.let.sa.quote.domain.model.QuoteVO;
+import egovframework.let.sales.order.quote.domain.model.QuoteVO;
 
 /**
  * 영업관리 - 견적 데이터 접근 클래스 (송연 quotes)

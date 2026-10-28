@@ -15,7 +15,7 @@ const expectedPublicApiByContract: Record<string, string[]> = {
     columnLine stripeRows storageKey height minHeight maxHeight rowHeight
     minRowHeight maxRowHeight resizableRows resizableColumns minColumnWidth
     virtualizeRows virtualizeColumns rowOverscan columnOverscan
-    fixedRowHeightThreshold queryWorkerThreshold disableQueryWorker showCheckbox
+    fixedRowHeightThreshold queryWorkerThreshold disableQueryWorker showCheckbox selectionMode multiSelect
     createRow createDuplicate editorPlugins editors onBeforeEdit beforeEdit
     onAfterEdit afterEdit onChangesChange onSelectionChange initialSelectedRowIds
     rowProjection cellAdornment disableSorting disableFiltering

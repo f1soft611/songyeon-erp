@@ -1,4 +1,5 @@
 import { Box, Input, MenuItem, Select } from '@mui/material';
+import { useRef } from 'react';
 import type { F1GridOption } from '../types/grid.types';
 
 type SelectEditorProps = {
@@ -6,6 +7,7 @@ type SelectEditorProps = {
   options: F1GridOption[];
   selectOptionIcon?: (option: F1GridOption) => React.ReactNode;
   onChange: (value: string | number | boolean) => void;
+  onClose?: () => void;
 };
 
 const isRenderableIcon = (icon: React.ReactNode | undefined) =>
@@ -16,7 +18,9 @@ export function SelectEditor({
   options,
   selectOptionIcon,
   onChange,
+  onClose,
 }: SelectEditorProps) {
+  const selectionCommittedRef = useRef(false);
   const selectedOption =
     options.find((option) => String(option.value) === String(value)) ??
     options[0];
@@ -52,12 +56,20 @@ export function SelectEditor({
       input={<Input disableUnderline />}
       value={String(value ?? selectedOption?.value ?? '')}
       renderValue={(selected) => renderSelectedValue(selected)}
-      onChange={(event) =>
+      onOpen={() => {
+        selectionCommittedRef.current = false;
+      }}
+      onClose={() => {
+        // Selecting an option already ends editing through onChange.
+        if (!selectionCommittedRef.current) onClose?.();
+      }}
+      onChange={(event) => {
+        selectionCommittedRef.current = true;
         onChange(
           options.find((option) => String(option.value) === event.target.value)
             ?.value ?? event.target.value,
-        )
-      }
+        );
+      }}
       sx={{
         width: '100%',
         height: '100%',

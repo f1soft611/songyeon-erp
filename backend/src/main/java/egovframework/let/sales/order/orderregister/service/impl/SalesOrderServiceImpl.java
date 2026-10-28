@@ -1,4 +1,4 @@
-package egovframework.let.sa.order.service.impl;
+package egovframework.let.sales.order.orderregister.service.impl;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -10,10 +10,10 @@ import org.egovframe.rte.fdl.cmmn.EgovAbstractServiceImpl;
 import org.springframework.stereotype.Service;
 
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
-import egovframework.let.sa.order.domain.model.OrderProductVO;
-import egovframework.let.sa.order.domain.model.SalesOrderVO;
-import egovframework.let.sa.order.domain.repository.SalesOrderDAO;
-import egovframework.let.sa.order.service.SalesOrderService;
+import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
+import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
+import egovframework.let.sales.order.orderregister.domain.repository.SalesOrderDAO;
+import egovframework.let.sales.order.orderregister.service.SalesOrderService;
 
 /**
  * 영업관리 - 수주등록 서비스 구현 클래스
