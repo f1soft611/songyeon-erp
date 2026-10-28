@@ -1,4 +1,4 @@
-import markers from '../data/legacy-calendar-markers.json';
+import { LEGACY_CALENDAR_MARKERS as markers } from '../data/legacyCalendarMarkers';
 import { useCalendar } from '../hooks/useCalendar';
 import { MemoDialog } from './MemoDialog';
 
@@ -22,7 +22,7 @@ export function DashboardCalendar() {
           const day = position - leading + 1;
           if (day < 1 || day > count) return <div key={position} className={`mes-calendar-empty ${day < 1 ? 'leading' : ''}`} />;
           const key = keyForDay(day);
-          const marker = (markers as Record<string, string>)[key];
+          const marker = markers[key];
           const tone = marker || position % 7 === 0 ? 'sunday' : position % 7 === 6 ? 'saturday' : '';
           return <button key={position} className={`mes-calendar-day ${tone} ${key === todayKey ? 'today' : ''}`}
             aria-label={`${key}${marker ? ` ${marker}` : ''}`} aria-current={key === todayKey ? 'date' : undefined}
