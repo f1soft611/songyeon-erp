@@ -78,6 +78,7 @@ public class SecurityConfig {
             "http://127.0.0.1:*",
             "https://s-erp.vercel.app",
             "https://s-erp-chi.vercel.app",
+            "https://songyeon-erp-tau.vercel.app",
         };
 
     @Bean
