@@ -106,7 +106,7 @@ export function vendorNameMap(vendors: VendorOption[], rows: MaterialMasterRow[]
   );
 }
 
-// 납품업체 칸에 보일 글자: '000006 · (주)케이프라이드'(2026-10-28, 제품마스터 거래처 칸과 같은 모양).
+// 납품업체 상세 창 칸에 보일 글자: '000006 · (주)케이프라이드'(2026-10-28, 제품마스터 거래처 칸과 같은 모양).
 // 거래처코드가 없는 옛 업체는 이름만
 export function supplierLabelsOf(row: MaterialMasterRow, nameOf: Map<string, string>): string[] {
   if (row.supplierCodes.length === 0) return row.suppliers.map((vendor) => vendor.name).filter(Boolean);
@@ -114,6 +114,12 @@ export function supplierLabelsOf(row: MaterialMasterRow, nameOf: Map<string, str
     const name = nameOf.get(code);
     return name ? `${code} · ${name}` : code;
   });
+}
+
+// 납품업체 표 칸에 보일 글자: 업체명만(2026-10-28). 이름을 모르는 코드는 코드 그대로
+export function supplierNamesOf(row: MaterialMasterRow, nameOf: Map<string, string>): string[] {
+  if (row.supplierCodes.length === 0) return row.suppliers.map((vendor) => vendor.name).filter(Boolean);
+  return row.supplierCodes.map((code) => nameOf.get(code) ?? code);
 }
 
 type MaterialMasterColumnHandlers = {
@@ -224,7 +230,9 @@ export function createMaterialMasterColumns(
       onValueChange: () => {
         throw new Error('[선택]으로 납품업체를 골라 주세요.');
       },
+      // 상세 창은 '코드 · 이름'(getValue), 표 칸은 이름만(renderCell)
       getValue: (row) => supplierLabelsOf(row, vendorNames).join(', '),
+      renderCell: ({ row }) => supplierNamesOf(row, vendorNames).join(', '),
       form: { group: '기본정보', order: 4, span: 2 },
       // 상세 조회: 납품업체 이름 · 거래처코드 일부로 찾는다
       search: { label: '납품업체', order: 1 },
