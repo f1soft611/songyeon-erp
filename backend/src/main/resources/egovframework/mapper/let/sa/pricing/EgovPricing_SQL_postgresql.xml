@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 단가관리 (송연 SA0002, 기존 /api/pricing·/api/summary 와 같은 값) -->
+<mapper namespace="PricingDAO">
+
+    <resultMap id="pricing" type="egovframework.let.sa.pricing.domain.model.PricingVO">
+        <result property="productCode" column="product_code"/>
+        <result property="productName" column="product_name"/>
+        <result property="spec" column="spec"/>
+        <result property="productType" column="product_type"/>
+        <result property="materialCost" column="material_cost"/>
+        <result property="markupRate" column="markup_rate"/>
+        <result property="markupCost" column="markup_cost"/>
+        <result property="lossRate" column="loss_rate"/>
+        <result property="lossCost" column="loss_cost"/>
+        <result property="laborCost" column="labor_cost"/>
+        <result property="packagingCost" column="packaging_cost"/>
+        <result property="logisticsCost" column="logistics_cost"/>
+        <result property="margin" column="margin"/>
+        <result property="otherCost1" column="other_cost1"/>
+        <result property="otherCost1Note" column="other_cost1_note"/>
+        <result property="otherCost2" column="other_cost2"/>
+        <result property="otherCost2Note" column="other_cost2_note"/>
+        <result property="otherCost3" column="other_cost3"/>
+        <result property="otherCost3Note" column="other_cost3_note"/>
+        <result property="otherCost4" column="other_cost4"/>
+        <result property="otherCost4Note" column="other_cost4_note"/>
+        <result property="currentPrice" column="current_price"/>
+        <result property="totalPrice" column="total_price"/>
+        <result property="clientName" column="client_name"/>
+    </resultMap>
+
+    <!-- 송연 /api/pricing: q 가 있으면 제품명·제품코드·거래처 부분 일치(송연 SQLite LIKE 처럼 대소문자 무시 → ILIKE), 제품코드 순 -->
+    <select id="selectPricingList" parameterType="string" resultMap="pricing">
+        SELECT
+            product_code,
+            product_name,
+            spec,
+            material_cost,
+            labor_cost,
+            packaging_cost,
+            logistics_cost,
+            margin,
+            total_price,
+            current_price,
+            client_name
+        FROM pricing
+        <if test="_parameter != null and _parameter != ''">
+        WHERE product_name ILIKE '%' || #{_parameter} || '%'
+           OR product_code ILIKE '%' || #{_parameter} || '%'
+           OR client_name ILIKE '%' || #{_parameter} || '%'
+        </if>
+        ORDER BY product_code
+    </select>
+
+    <select id="selectPricing" parameterType="string" resultMap="pricing">
+        SELECT
+            product_code,
+            product_name,
+            spec,
+            product_type,
+            material_cost,
+            markup_rate,
+            markup_cost,
+            loss_rate,
+            loss_cost,
+            labor_cost,
+            packaging_cost,
+            logistics_cost,
+            margin,
+            other_cost1,
+            other_cost1_note,
+            other_cost2,
+            other_cost2_note,
+            other_cost3,
+            other_cost3_note,
+            other_cost4,
+            other_cost4_note,
+            current_price,
+            total_price,
+            client_name
+        FROM pricing
+        WHERE product_code = #{productCode}
+    </select>
+
+    <select id="selectPricingBom" parameterType="string" resultType="egovframework.let.sa.pricing.domain.model.PricingBomLineVO">
+        SELECT
+            material_name AS "materialName",
+            ratio_percent AS "ratioPercent",
+            unit_price_per_kg AS "unitPricePerKg",
+            amount_per_kg AS "amountPerKg"
+        FROM bom
+        WHERE product_code = #{productCode}
+        ORDER BY rank_in_product
+    </select>
+
+    <!-- 보낸 칸만 고친다(송연 update_pricing). 숫자 칸은 빈 값(null)도 숫자 타입으로 넘긴다 -->
+    <update id="updatePricingFields" parameterType="map">
+        UPDATE pricing
+        <set>
+            <if test="fields.contains('productType')">product_type = #{row.productType},</if>
+            <if test="fields.contains('markupRate')">markup_rate = #{row.markupRate,jdbcType=DOUBLE}, markup_cost = #{row.markupCost,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('lossRate')">loss_rate = #{row.lossRate,jdbcType=DOUBLE}, loss_cost = #{row.lossCost,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('laborCost')">labor_cost = #{row.laborCost,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('packagingCost')">packaging_cost = #{row.packagingCost,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('logisticsCost')">logistics_cost = #{row.logisticsCost,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('margin')">margin = #{row.margin,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('otherCost1')">other_cost1 = #{row.otherCost1,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('otherCost1Note')">other_cost1_note = #{row.otherCost1Note},</if>
+            <if test="fields.contains('otherCost2')">other_cost2 = #{row.otherCost2,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('otherCost2Note')">other_cost2_note = #{row.otherCost2Note},</if>
+            <if test="fields.contains('otherCost3')">other_cost3 = #{row.otherCost3,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('otherCost3Note')">other_cost3_note = #{row.otherCost3Note},</if>
+            <if test="fields.contains('otherCost4')">other_cost4 = #{row.otherCost4,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('otherCost4Note')">other_cost4_note = #{row.otherCost4Note},</if>
+            <if test="fields.contains('currentPrice')">current_price = #{row.currentPrice,jdbcType=DOUBLE},</if>
+            <if test="fields.contains('clientName')">client_name = #{row.clientName},</if>
+        </set>
+        WHERE product_code = #{row.productCode}
+    </update>
+
+    <!-- 제품단가 = 원재료비 + 로스 + 고정마진 + 인건비 + 포장비 + 물류비 + 마진 + 기타1~4 (빈 값은 0) -->
+    <update id="updatePricingTotal" parameterType="string">
+        UPDATE pricing
+        SET total_price = COALESCE(material_cost, 0)
+                        + COALESCE(loss_cost, 0)
+                        + COALESCE(markup_cost, 0)
+                        + COALESCE(labor_cost, 0)
+                        + COALESCE(packaging_cost, 0)
+                        + COALESCE(logistics_cost, 0)
+                        + COALESCE(margin, 0)
+                        + COALESCE(other_cost1, 0)
+                        + COALESCE(other_cost2, 0)
+                        + COALESCE(other_cost3, 0)
+                        + COALESCE(other_cost4, 0)
+        WHERE product_code = #{productCode}
+    </update>
+</mapper>

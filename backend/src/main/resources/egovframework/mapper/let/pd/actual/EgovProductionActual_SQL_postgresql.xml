@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 생산관리 - 생산입고 (송연 PD0002, 기존 /api/production-schedule?date= · /api/production-schedule/<id>/actual-qty) -->
+<mapper namespace="ProductionActualDAO">
+
+    <!-- 그 날짜에 확정된 생산건(적어둔 차례대로) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectSchedule" parameterType="string" resultType="egovframework.let.pd.actual.domain.model.ProductionActualVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            product_code AS "productCode",
+            order_qty AS "orderQty",
+            actual_qty AS "actualQty",
+            lot_no AS "lotNo"
+        FROM production_schedule
+        WHERE schedule_date = #{date}
+        ORDER BY sort_order, id
+    </select>
+
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectScheduleRow" parameterType="long" resultType="egovframework.let.pd.actual.domain.model.ProductionActualVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            product_code AS "productCode",
+            order_qty AS "orderQty",
+            actual_qty AS "actualQty"
+        FROM production_schedule
+        WHERE id = #{id}
+    </select>
+
+    <update id="updateActualQty" parameterType="map">
+        UPDATE production_schedule
+        SET actual_qty = #{actualQty}
+        WHERE id = #{id}
+    </update>
+
+    <!-- '떡볶이소스(2kg*6ea)' 처럼 규격이 붙은 이름으로도 제품을 찾는다 -->
+    <select id="selectProductCodeByDisplayName" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE name = #{displayName}
+           OR (spec IS NOT NULL AND spec != ''
+               AND (name || '(' || spec || ')' = #{displayName}
+                 OR name || ' (' || spec || ')' = #{displayName}))
+        ORDER BY code
+        LIMIT 1
+    </select>
+</mapper>

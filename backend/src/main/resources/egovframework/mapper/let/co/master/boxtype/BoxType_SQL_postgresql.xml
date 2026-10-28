@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 > 기초정보 > 포장유형 (화면ID BSBoxTypeView, tb_box_type)
+     사업장 · 사업부는 F001 / P001 로 고정한다(서비스가 넘긴다). 적용기간은 관리하지 않아 조건에도 쓰지 않는다.
+     비율은 % 그대로(0~100). total_cost 는 DB 생성 칸이라 넣지 않는다.
+     사용안함은 사용여부 체크박스(use_yn), 오른쪽 클릭 [행 삭제]는 물리 삭제(2026-10-22, 공통코드 관리와 같음). -->
+<mapper namespace="BoxTypeDAO">
+
+    <!-- 등록자 · 수정자는 사번(employees.id, 예: 0000)으로 저장한다. 조회할 때 사원 표와 이어 붙여 이름을 보여주고, 사원 표에 없는 값(예: 샘플의 admin)은 그대로 보여준다 -->
+    <select id="selectBoxTypeList" parameterType="map" resultType="egovframework.let.co.master.boxtype.domain.model.BoxTypeVO">
+        SELECT
+            A.box_type_id                              AS "boxTypeId"        /*일련번호*/
+          , A.box_type_cd                              AS "boxTypeCd"        /*포장유형코드*/
+          , A.box_type_nm                              AS "boxTypeNm"        /*포장유형명*/
+          , A.fixed_margin_rate                        AS "fixedMarginRate"  /*고정마진율(%)*/
+          , A.loss_rate                                AS "lossRate"         /*로스율(%)*/
+          , A.labor_cost                               AS "laborCost"        /*인건비*/
+          , A.packing_cost                             AS "packingCost"      /*포장비*/
+          , A.logistics_cost                           AS "logisticsCost"    /*물류비*/
+          , A.margin_amt                               AS "marginAmt"        /*마진*/
+          , A.total_cost                               AS "totalCost"        /*부대비용 합계*/
+          , A.sort_seq                                 AS "sortSeq"          /*정렬순서*/
+          , A.use_yn                                   AS "useYn"            /*사용여부*/
+          , A.reg_user_id                              AS "regUserId"        /*등록자 사번*/
+          , COALESCE(B.name, A.reg_user_id)            AS "regUserNm"        /*등록자 이름*/
+          , TO_CHAR(A.reg_dt, 'YYYY-MM-DD HH24:MI:SS') AS "regDt"            /*등록일시*/
+          , A.upd_user_id                              AS "updUserId"        /*수정자 사번*/
+          , COALESCE(C.name, A.upd_user_id)            AS "updUserNm"        /*수정자 이름*/
+          , TO_CHAR(A.upd_dt, 'YYYY-MM-DD HH24:MI:SS') AS "updDt"            /*수정일시*/
+        FROM tb_box_type A
+        LEFT JOIN employees B 
+               ON B.id = A.reg_user_id
+        LEFT JOIN employees C 
+               ON C.id = A.upd_user_id
+        WHERE A.factory_code = #{factoryCode}
+          AND A.plant_code   = #{plantCode}
+        <!-- 포장유형 화면은 사용안함 줄도 받는다(includeUnused). 단가관리 · 제품등록 · 견적은 사용 중인 줄만 -->
+        <if test="includeUnused != true">
+          AND A.use_yn       = 'Y'
+        </if>
+        ORDER BY A.box_type_id
+               , A.sort_seq
+               , A.box_type_nm
+    </select>
+
+
+    <!-- 사용 중인 줄 가운데 같은 코드가 몇 개인지(자기 자신은 뺀다) -->
+    <!-- 6자리 숫자 포장유형코드 가운데 가장 큰 번호. 다음 코드는 이 번호 + 1 이다(2026-10-22, 옛 PACK-… 는 세지 않는다).
+         사용안함 줄도 센다(표 유니크 uq_box_type 은 사용여부를 보지 않는다). 줄을 지우면(표에서 없애면) 그 번호를 다시 쓸 수 있다 -->
+    <select id="selectMaxAutoCodeNo" parameterType="map" resultType="java.lang.Integer">
+        SELECT MAX(CAST(box_type_cd AS INTEGER))
+        FROM tb_box_type
+        WHERE factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+          AND box_type_cd ~ '^[0-9]{6}$'
+    </select>
+
+    <!-- 사용안함 줄까지 포함해 같은 코드 수. 자동 번호는 한 번이라도 쓴 코드를 건너뛴다(유니크 uq_box_type 은 사용여부를 보지 않는다) -->
+    <select id="countAnyCode" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_box_type
+        WHERE factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+          AND box_type_cd  = #{boxTypeCd}
+    </select>
+
+    <select id="countActiveCode" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_box_type
+        WHERE factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+          AND box_type_cd  = #{boxTypeCd}
+          AND use_yn       = 'Y'
+        <if test="boxTypeId != null">
+          AND box_type_id &lt;&gt; #{boxTypeId}
+        </if>
+    </select>
+
+    <insert id="insertBoxType" parameterType="map">
+        INSERT INTO tb_box_type
+        (
+          factory_code
+        , plant_code
+        , box_type_cd
+        , box_type_nm
+        , pack_qty
+        , pack_unit
+        , fixed_margin_rate
+        , loss_rate
+        , labor_cost
+        , packing_cost
+        , logistics_cost
+        , margin_amt
+        , sort_seq
+        , use_yn
+        , reg_user_id
+        ) VALUES 
+        (
+          #{factoryCode}
+        , #{plantCode}
+        , #{boxTypeCd}
+        , #{boxTypeNm}
+        , #{packQty, jdbcType=NUMERIC}     /*포장유형명 끝의 숫자(서비스가 읽음, 없으면 NULL)*/
+        , #{packUnit, jdbcType=VARCHAR}    /*포장유형명 끝의 단위(KG · G …)*/
+        , #{fixedMarginRate}
+        , #{lossRate}
+        , #{laborCost}
+        , #{packingCost}
+        , #{logisticsCost}
+        , #{marginAmt}
+        , #{sortSeq}
+        , #{useYn}
+        , #{userId, jdbcType=VARCHAR}
+        )
+    </insert>
+
+    <!-- 수정: 그 줄을 덮어쓴다(이력 없음). 코드는 바꾸지 않는다. upd_dt 는 트리거가 채운다.
+         2026-10-22 사용여부 체크박스: use_yn 도 저장하고, 사용안함 줄도 고칠 수 있다(다시 켜기) -->
+    <update id="updateBoxType" parameterType="map">
+        UPDATE tb_box_type
+        SET box_type_nm       = #{boxTypeNm},
+            pack_qty          = #{packQty, jdbcType=NUMERIC},
+            pack_unit         = #{packUnit, jdbcType=VARCHAR},
+            fixed_margin_rate = #{fixedMarginRate},
+            loss_rate         = #{lossRate},
+            labor_cost        = #{laborCost},
+            packing_cost      = #{packingCost},
+            logistics_cost    = #{logisticsCost},
+            margin_amt        = #{marginAmt},
+            use_yn            = #{useYn},
+            upd_user_id       = #{userId, jdbcType=VARCHAR}
+        WHERE box_type_id  = #{boxTypeId}
+          AND factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+    </update>
+
+    <!-- 삭제: 논리삭제 -->
+    <delete id="deleteBoxType" parameterType="map">
+        DELETE FROM tb_box_type
+        WHERE box_type_id  = #{boxTypeId}
+          AND factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+    </delete>
+
+</mapper>

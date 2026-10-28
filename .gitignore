@@ -1,0 +1,48 @@
+backend/backend-dev
+backend/backend-prod
+
+# Local environment and server configuration
+.env
+.env.*
+!.env.example
+*.local.properties
+*.local.yml
+*.local.yaml
+backend/src/main/resources/application-dev.properties
+backend/src/main/resources/application-prod.properties
+backend/target/
+backend/.idea/
+backend/backend-dev
+backend/backend-prod
+
+# Build output and dependencies
+frontend/dist/
+frontend/node_modules/
+node_modules
+
+# Private keys, certificates, and credential exports
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub
+credentials.json
+secrets.json
+frontend/vitest-last.json
+frontend/vitest-router-login.json
+frontend/vitest-summary.txt
+backend/backend-restart.err.log
+backend/backend-restart.out.log
+mvn-test-output.txt
+backend/cp.txt
+backend/logs/2026-09/app-2026-09-17-10-1.log.gz
+backend/logs/2026-09/app-2026-09-17-15-1.log.gz
+node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json
+
+# 2026-10-28 깃 연결: 서버 로그 · 첨부 보관 폴더 · 테스트 결과 파일
+backend/logs/
+backend/data/
+frontend/.artifacts/

@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SystemModuleDAO">
+
+    <resultMap id="module" type="egovframework.let.system.modules.domain.model.SystemModuleVO">
+        <result property="moduleId" column="module_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="moduleCode" column="module_code"/>
+        <result property="moduleNm" column="module_nm"/>
+        <result property="iconNm" column="icon_nm"/>
+        <result property="moduleUrl" column="module_url"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="useAt" column="use_at"/>
+        <result property="menuCount" column="menu_count"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectModuleList" resultMap="module">
+        SELECT
+            m.module_id,
+            m.tenant_id,
+            m.module_code,
+            m.module_nm,
+            m.icon_nm,
+            m.module_url,
+            m.sort_order,
+            m.use_at,
+            m.created_at,
+            m.updated_at,
+            (
+                SELECT COUNT(*)
+                FROM tb_menu mn
+                WHERE mn.module_id = m.module_id
+            ) AS menu_count
+        FROM tb_module m
+        WHERE m.tenant_id = #{tenantId}
+        <if test="useAt != null and useAt != ''">
+            AND m.use_at = #{useAt}
+        </if>
+        ORDER BY
+            m.sort_order ASC,
+            m.module_id ASC
+    </select>
+
+    <select id="selectModuleById" parameterType="map" resultMap="module">
+        SELECT
+            m.module_id,
+            m.tenant_id,
+            m.module_code,
+            m.module_nm,
+            m.icon_nm,
+            m.module_url,
+            m.sort_order,
+            m.use_at,
+            m.created_at,
+            m.updated_at,
+            (
+                SELECT COUNT(*)
+                FROM tb_menu mn
+                WHERE mn.module_id = m.module_id
+            ) AS menu_count
+        FROM tb_module m
+        WHERE m.module_id = #{moduleId}
+          AND m.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectModuleIdByCode" parameterType="map" resultType="long">
+        SELECT module_id
+        FROM tb_module
+        WHERE tenant_id = #{tenantId}
+          AND module_code = #{moduleCode}
+    </select>
+
+    <select id="insertModule" parameterType="map" resultType="long">
+        INSERT INTO tb_module (
+            tenant_id,
+            module_code,
+            module_nm,
+            icon_nm,
+            module_url,
+            sort_order,
+            use_at
+        )
+        VALUES (
+            #{tenantId},
+            #{moduleCode},
+            #{moduleNm},
+            #{iconNm},
+            #{moduleUrl},
+            #{sortOrder},
+            #{useAt}
+        )
+        RETURNING module_id
+    </select>
+
+    <update id="updateModule" parameterType="map">
+        UPDATE tb_module
+        SET module_code = #{moduleCode},
+            module_nm = #{moduleNm},
+            icon_nm = #{iconNm},
+            module_url = #{moduleUrl},
+            sort_order = #{sortOrder},
+            use_at = #{useAt},
+            updated_at = now()
+        WHERE module_id = #{moduleId}
+          AND tenant_id = #{tenantId}
+    </update>
+
+    <delete id="deleteModule" parameterType="map">
+        DELETE FROM tb_module
+        WHERE module_id = #{moduleId}
+          AND tenant_id = #{tenantId}
+    </delete>
+
+    <select id="countMenusByModuleId" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_menu
+        WHERE module_id = #{moduleId}
+          AND tenant_id = #{tenantId}
+    </select>
+
+</mapper>

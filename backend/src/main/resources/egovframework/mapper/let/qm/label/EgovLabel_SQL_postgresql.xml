@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 제품 라벨 조회 (송연 /api/qm/label, 기존 label.py · app.py /api/products/<code>/bom, bom-allergens)
+     라벨출력·생산확정·라벨등록이 함께 쓴다. -->
+<mapper namespace="LabelDAO">
+
+    <select id="countProduct" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM products WHERE code = #{code}
+    </select>
+
+    <!-- 버전 기능 전에 products 에 적어둔 라벨 -->
+    <select id="selectProductLabel" parameterType="string" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT
+            food_type AS "foodType",
+            net_weight AS "netWeight",
+            ingredients_text AS "ingredientsText",
+            allergens AS "allergens",
+            manufacture_report_no AS "manufactureReportNo",
+            packaging_material AS "packagingMaterial",
+            shelf_life_months AS "shelfLifeMonths",
+            shelf_life_unit AS "shelfLifeUnit",
+            <!-- 2026-10-23 products.storage 는 공통코드 STORAGE_METHOD 코드다. 라벨에는 이름을 찍는다 -->
+            COALESCE((SELECT i.item_nm
+                      FROM tb_common_code_item i
+                      JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+                      JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                      WHERE i.item_code = storage
+                      LIMIT 1), storage) AS "storage",
+            label_style AS "layoutJson",
+            label_extra AS "extraJson"
+        FROM products
+        WHERE code = #{code}
+    </select>
+
+    <select id="countVersions" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM product_label_versions WHERE product_code = #{code}
+    </select>
+
+    <!-- 2026-10-26 라벨 보관방법은 공통코드 STORAGE_METHOD 코드로 저장한다(v1 은 제품의 보관방법 이름을 받아 코드로 바꾼다) -->
+    <insert id="insertVersion" parameterType="egovframework.let.qm.label.domain.model.LabelVO">
+        INSERT INTO product_label_versions (
+            product_code, version_label, note, food_type, net_weight, ingredients_text, allergens,
+            manufacture_report_no, packaging_material, shelf_life_months, shelf_life_unit, storage,
+            layout, extra, is_current, created_at, created_by
+        ) VALUES (
+            #{productCode}, #{versionLabel}, #{note}, #{foodType}, #{netWeight}, #{ingredientsText}, #{allergens},
+            #{manufactureReportNo}, #{packagingMaterial}, #{shelfLifeMonths, jdbcType=INTEGER}, #{shelfLifeUnit},
+            (SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(#{storage, jdbcType=VARCHAR}, '') IS NOT NULL AND (sm.item_code = #{storage, jdbcType=VARCHAR} OR sm.item_nm = #{storage, jdbcType=VARCHAR} OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(#{storage, jdbcType=VARCHAR}, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = #{storage, jdbcType=VARCHAR} THEN 0 WHEN sm.item_nm = #{storage, jdbcType=VARCHAR} THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1),
+            #{layoutJson}, #{extraJson}, #{isCurrent, jdbcType=INTEGER}, #{createdAt}, #{createdBy}
+        )
+    </insert>
+
+    <select id="selectCurrentVersionId" parameterType="string" resultType="long">
+        SELECT id FROM product_label_versions
+        WHERE product_code = #{code} AND is_current = 1
+        ORDER BY id
+        LIMIT 1
+    </select>
+
+    <select id="selectLatestVersionId" parameterType="string" resultType="long">
+        SELECT id FROM product_label_versions
+        WHERE product_code = #{code}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <update id="updateVersionCurrent" parameterType="long">
+        UPDATE product_label_versions SET is_current = 1 WHERE id = #{id}
+    </update>
+
+    <!-- 버전 목록(오래된 것부터) -->
+    <select id="selectVersions" parameterType="string" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT
+            id AS "id",
+            version_label AS "versionLabel",
+            note AS "note",
+            is_current AS "isCurrent",
+            created_at AS "createdAt",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = created_by LIMIT 1), created_by) AS "createdBy" <!-- 2026-10-26 사번으로 저장, 보여 줄 때 직원 이름 -->
+        FROM product_label_versions
+        WHERE product_code = #{code}
+        ORDER BY id
+    </select>
+
+    <select id="selectVersion" parameterType="long" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT
+            id AS "id",
+            product_code AS "productCode",
+            version_label AS "versionLabel",
+            note AS "note",
+            is_current AS "isCurrent",
+            created_at AS "createdAt",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = created_by LIMIT 1), created_by) AS "createdBy",
+            updated_at AS "updatedAt",
+            food_type AS "foodType",
+            net_weight AS "netWeight",
+            ingredients_text AS "ingredientsText",
+            allergens AS "allergens",
+            manufacture_report_no AS "manufactureReportNo",
+            packaging_material AS "packagingMaterial",
+            shelf_life_months AS "shelfLifeMonths",
+            shelf_life_unit AS "shelfLifeUnit",
+            storage AS "storage",
+            layout AS "layoutJson",
+            extra AS "extraJson"
+        FROM product_label_versions
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectTemplates" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT id AS "id", name AS "name", size AS "size", created_at AS "createdAt"
+        FROM label_templates
+        ORDER BY name, id
+    </select>
+
+    <select id="selectTemplate" parameterType="long" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT id AS "id", name AS "name", size AS "size", layout AS "layoutJson"
+        FROM label_templates
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectMarks" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT id AS "id", name AS "name", data_url AS "dataUrl", width_mm AS "widthMm"
+        FROM label_marks
+        ORDER BY name
+    </select>
+
+    <select id="selectCompanyInfo" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT
+            return_exchange_location AS "returnExchangeLocation",
+            customer_service_phone AS "customerServicePhone",
+            business_name AS "businessName",
+            business_address AS "businessAddress",
+            notice_text AS "noticeText"
+        FROM label_company_info
+        WHERE id = 1
+    </select>
+
+    <!-- 원재료 이름은 bom 에 적어둔 것이 아니라 원재료 표의 지금 이름을 쓴다(코드가 있으면 코드가 이긴다) -->
+    <select id="selectProductBom" parameterType="string" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT
+            b.material_code AS "materialCode",
+            COALESCE(m.name, b.material_name) AS "materialName",
+            b.ratio_percent AS "ratioPercent"
+        FROM bom b
+        LEFT JOIN materials m ON m.code = b.material_code
+        WHERE b.product_code = #{code}
+        ORDER BY b.rank_in_product
+    </select>
+
+    <!-- 원재료마다 가장 큰 함량으로 묶어 함량 많은 순(송연과 같음) -->
+    <select id="selectBomAllergens" parameterType="string" resultType="egovframework.let.qm.label.domain.model.LabelVO">
+        SELECT m.name AS "materialName", m.allergens AS "allergens"
+        FROM bom b
+        JOIN materials m ON m.code = b.material_code
+        WHERE b.product_code = #{code}
+          AND m.allergens IS NOT NULL
+          AND TRIM(m.allergens) != ''
+        GROUP BY m.name, m.allergens
+        ORDER BY MAX(b.ratio_percent) DESC
+    </select>
+</mapper>

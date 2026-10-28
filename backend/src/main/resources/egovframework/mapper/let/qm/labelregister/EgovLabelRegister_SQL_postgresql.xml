@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 품질관리 - 라벨등록 (송연 label.py 의 쓰기 · 목록 · 표시사항 요청 · 양식/마크/항목/회사 고정정보).
+     조회 전용 공용 라벨 API(LabelDAO: 버전 목록 · 버전 한 개 · 양식 · 마크 · 회사정보 · 배합표)는 그대로 쓴다.
+     양식(layout)은 JSON 글자라, '쓰고 있는가' 는 송연처럼 글자에서 찾는다(콜론 뒤 띄어쓰기가 있든 없든 찾게 정규식으로). -->
+<mapper namespace="LabelRegisterDAO">
+
+    <!-- 라벨등록 목록. 사용안함 제품은 뺀다(아직 라벨을 안 만든 제품이라는 해야 할 일 목록이 영원히 안 끝나지 않게) -->
+    <select id="selectProducts" parameterType="map" resultType="egovframework.let.qm.labelregister.domain.model.LabelProductRowVO">
+        SELECT
+            p.code AS "code",
+            p.name AS "name",
+            p.spec AS "spec",
+            p.food_type AS "foodType",
+            p.net_weight AS "netWeight",
+            p.ingredients_text AS "ingredientsText",
+            p.manufacture_report_no AS "manufactureReportNo",
+            (SELECT v.version_label FROM product_label_versions v
+              WHERE v.product_code = p.code AND v.is_current = 1 ORDER BY v.id LIMIT 1) AS "currentVersion",
+            (SELECT COUNT(*) FROM product_label_versions v WHERE v.product_code = p.code) AS "versionCount",
+            (SELECT MAX(COALESCE(v.updated_at, v.created_at)) FROM product_label_versions v
+              WHERE v.product_code = p.code) AS "lastEdited"
+        FROM products p
+        WHERE COALESCE(p.discontinued, 0) = 0
+        <if test="q != null and q != ''">
+          AND (p.code ILIKE '%' || #{q} || '%' OR p.name ILIKE '%' || #{q} || '%')
+        </if>
+        ORDER BY p.name
+    </select>
+
+    <select id="countProduct" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM products WHERE code = #{code}
+    </select>
+
+    <select id="selectVersionMeta" parameterType="long" resultType="map">
+        SELECT product_code AS "productCode", COALESCE(is_current, 0) AS "isCurrent"
+        FROM product_label_versions WHERE id = #{id}
+    </select>
+
+    <!-- 라벨 내용. 양식마다 다른 항목(extra)은 안 보내면 그대로 둔다 -->
+    <update id="updateVersionContent" parameterType="map">
+        UPDATE product_label_versions
+           SET food_type = #{foodType, jdbcType=VARCHAR}, net_weight = #{netWeight, jdbcType=VARCHAR},
+               ingredients_text = #{ingredientsText, jdbcType=VARCHAR}, allergens = #{allergens, jdbcType=VARCHAR},
+               manufacture_report_no = #{manufactureReportNo, jdbcType=VARCHAR}, packaging_material = #{packagingMaterial, jdbcType=VARCHAR},
+               shelf_life_months = #{shelfLifeMonths, jdbcType=INTEGER}, shelf_life_unit = #{shelfLifeUnit, jdbcType=VARCHAR},
+               storage = (SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(#{storage, jdbcType=VARCHAR}, '') IS NOT NULL AND (sm.item_code = #{storage, jdbcType=VARCHAR} OR sm.item_nm = #{storage, jdbcType=VARCHAR} OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(#{storage, jdbcType=VARCHAR}, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = #{storage, jdbcType=VARCHAR} THEN 0 WHEN sm.item_nm = #{storage, jdbcType=VARCHAR} THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1), <!-- 2026-10-26 STORAGE_METHOD 코드 -->
+               extra = COALESCE(#{extraJson, jdbcType=VARCHAR}, extra),
+               updated_at = #{now}, updated_by = #{who, jdbcType=VARCHAR}
+         WHERE id = #{id}
+    </update>
+
+    <!-- '사용중' 버전의 내용을 products 에 베낀다(라벨출력처럼 products 를 읽는 곳이 있어서) -->
+    <update id="copyVersionToProducts" parameterType="long">
+        UPDATE products p
+           SET food_type = v.food_type, net_weight = v.net_weight, ingredients_text = v.ingredients_text,
+               allergens = v.allergens, manufacture_report_no = v.manufacture_report_no,
+               packaging_material = v.packaging_material, shelf_life_months = v.shelf_life_months,
+               shelf_life_unit = v.shelf_life_unit,
+               <!-- 2026-10-26 라벨 버전의 보관방법도 STORAGE_METHOD 코드다. 코드(또는 예전 글자의 앞말)로 찾고, 없으면 제품 값을 그대로 둔다 -->
+               storage = COALESCE((SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(v.storage, '') IS NOT NULL AND (sm.item_code = v.storage OR sm.item_nm = v.storage OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(v.storage, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = v.storage THEN 0 WHEN sm.item_nm = v.storage THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1), p.storage),
+               label_style = v.layout, label_extra = v.extra
+          FROM product_label_versions v
+         WHERE v.id = #{id} AND p.code = v.product_code
+    </update>
+
+    <select id="selectVersionLabels" parameterType="map" resultType="string">
+        SELECT version_label FROM product_label_versions
+        WHERE product_code = #{code}
+        <if test="excludeId != null">AND id &lt;&gt; #{excludeId}</if>
+    </select>
+
+    <!-- 새 버전: 고른 버전의 내용을 그대로 베껴 시작한다. 사용중은 아니다 -->
+    <insert id="insertVersionCopy" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO product_label_versions (
+            product_code, version_label, note, food_type, net_weight, ingredients_text, allergens,
+            manufacture_report_no, packaging_material, shelf_life_months, shelf_life_unit, storage,
+            layout, extra, is_current, created_at, created_by
+        )
+        SELECT product_code, #{versionLabel}, #{note, jdbcType=VARCHAR}, food_type, net_weight, ingredients_text, allergens,
+               manufacture_report_no, packaging_material, shelf_life_months, shelf_life_unit, storage,
+               layout, extra, 0, #{now}, #{who, jdbcType=VARCHAR}
+          FROM product_label_versions
+         WHERE id = #{fromId}
+    </insert>
+
+    <update id="updateVersionInfo" parameterType="map">
+        UPDATE product_label_versions SET version_label = #{versionLabel}, note = #{note, jdbcType=VARCHAR} WHERE id = #{id}
+    </update>
+
+    <update id="clearCurrent" parameterType="string">
+        UPDATE product_label_versions SET is_current = 0 WHERE product_code = #{code}
+    </update>
+
+    <update id="setCurrent" parameterType="long">
+        UPDATE product_label_versions SET is_current = 1 WHERE id = #{id}
+    </update>
+
+    <delete id="deleteVersion" parameterType="long">
+        DELETE FROM product_label_versions WHERE id = #{id}
+    </delete>
+
+    <update id="updateVersionLayout" parameterType="map">
+        UPDATE product_label_versions SET layout = #{layoutJson} WHERE id = #{id}
+    </update>
+
+    <update id="updateProductLabelStyle" parameterType="map">
+        UPDATE products SET label_style = #{layoutJson} WHERE code = #{code}
+    </update>
+
+    <!-- 다른 제품 라벨 가져오기 후보: 라벨을 실제로 만들어둔(사용중 버전에 내용이 있는) 제품만 -->
+    <select id="selectSourceProducts" parameterType="map" resultType="egovframework.let.qm.labelregister.domain.model.LabelSourceProductVO">
+        SELECT p.code AS "code", p.name AS "name", p.spec AS "spec", v.id AS "versionId", v.version_label AS "versionLabel"
+        FROM products p
+        JOIN product_label_versions v ON v.product_code = p.code AND v.is_current = 1
+        WHERE p.code &lt;&gt; #{exclude}
+          AND COALESCE(p.discontinued, 0) = 0
+          AND COALESCE(v.food_type, '') || COALESCE(v.net_weight, '') || COALESCE(v.ingredients_text, '')
+              || COALESCE(v.manufacture_report_no, '') &lt;&gt; ''
+        <if test="q != null and q != ''">
+          AND (p.code ILIKE '%' || #{q} || '%' OR p.name ILIKE '%' || #{q} || '%')
+        </if>
+        ORDER BY p.name
+        LIMIT 300
+    </select>
+
+    <!-- ===== 양식 ===== -->
+    <select id="countTemplateName" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM label_templates WHERE name = #{name}
+        <if test="excludeId != null">AND id &lt;&gt; #{excludeId}</if>
+    </select>
+
+    <select id="countTemplate" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM label_templates WHERE id = #{id}
+    </select>
+
+    <insert id="insertTemplate" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO label_templates (name, size, layout, created_at) VALUES (#{name}, #{size}, #{layoutJson}, #{now})
+    </insert>
+
+    <update id="updateTemplate" parameterType="map">
+        UPDATE label_templates SET name = #{name}, size = #{size}, layout = #{layoutJson} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteTemplate" parameterType="long">
+        DELETE FROM label_templates WHERE id = #{id}
+    </delete>
+
+    <!-- 이 양식을 쓰는 제품(사용중 버전 기준, 50개까지) -->
+    <select id="selectTemplateUsage" parameterType="long" resultType="map">
+        SELECT DISTINCT p.code AS "code", p.name AS "name"
+        FROM product_label_versions v
+        JOIN products p ON p.code = v.product_code
+        WHERE v.is_current = 1
+          AND v.layout ~ ('"format_id":\s*' || #{id} || '([^0-9]|$)')
+        ORDER BY p.name
+        LIMIT 50
+    </select>
+
+    <!-- ===== 마크 ===== -->
+    <select id="countMarkName" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM label_marks WHERE name = #{name}
+    </select>
+
+    <insert id="insertMark" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO label_marks (name, data_url, width_mm, created_at) VALUES (#{name}, #{dataUrl}, #{widthMm}, #{now})
+    </insert>
+
+    <select id="countMark" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM label_marks WHERE id = #{id}
+    </select>
+
+    <select id="countMarkUsage" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM product_label_versions
+        WHERE layout ~ ('"mark_id":\s*' || #{id} || '([^0-9]|$)')
+    </select>
+
+    <delete id="deleteMark" parameterType="long">
+        DELETE FROM label_marks WHERE id = #{id}
+    </delete>
+
+    <!-- ===== 항목 ===== -->
+    <select id="selectFields" resultType="egovframework.let.qm.labelregister.domain.model.LabelFieldVO">
+        SELECT id AS "id", name AS "name", created_at AS "createdAt" FROM label_fields ORDER BY name
+    </select>
+
+    <select id="countFieldName" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM label_fields WHERE name = #{name}
+    </select>
+
+    <insert id="insertField" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO label_fields (name, created_at) VALUES (#{name}, #{now})
+    </insert>
+
+    <select id="selectFieldName" parameterType="long" resultType="string">
+        SELECT name FROM label_fields WHERE id = #{id}
+    </select>
+
+    <!-- 이 항목을 칸에 쓰는 양식 이름들(송연처럼 "이름" 글자로 찾는다) -->
+    <select id="selectTemplatesUsingField" parameterType="string" resultType="string">
+        SELECT name FROM label_templates WHERE strpos(layout, '"' || #{name} || '"') > 0 ORDER BY id
+    </select>
+
+    <delete id="deleteField" parameterType="long">
+        DELETE FROM label_fields WHERE id = #{id}
+    </delete>
+
+    <!-- ===== 회사 고정정보 ===== -->
+    <update id="updateCompanyInfo" parameterType="map">
+        UPDATE label_company_info
+           SET return_exchange_location = #{returnExchangeLocation, jdbcType=VARCHAR}, customer_service_phone = #{customerServicePhone, jdbcType=VARCHAR},
+               business_name = #{businessName, jdbcType=VARCHAR}, business_address = #{businessAddress, jdbcType=VARCHAR},
+               notice_text = #{noticeText, jdbcType=VARCHAR}, updated_at = #{now}
+         WHERE id = 1
+    </update>
+
+    <!-- ===== 표시사항 요청 ===== -->
+    <select id="selectRequests" parameterType="map" resultType="egovframework.let.qm.labelregister.domain.model.LabelRequestVO">
+        SELECT r.id AS "id", r.handoff_id AS "handoffId", r.status AS "status", r.moved_product_code AS "movedProductCode", r.note AS "note",
+               r.food_type AS "foodType", r.net_weight AS "netWeight", r.ingredients_text AS "ingredientsText",
+               r.manufacture_report_no AS "manufactureReportNo", r.updated_at AS "updatedAt", COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = r.updated_by LIMIT 1), r.updated_by) AS "updatedBy",
+               h.version_label AS "versionLabel", h.requested_by_name AS "requestedByName", h.created_at AS "requestedAt",
+               d.id AS "draftId", d.name AS "recipeName", d.spec AS "spec", d.client_name AS "clientName"
+        FROM label_requests r
+        JOIN recipe_handoffs h ON h.id = r.handoff_id
+        LEFT JOIN recipe_drafts d ON d.id = h.draft_id
+        <if test="status != null and status != ''">WHERE r.status = #{status}</if>
+        ORDER BY r.id DESC
+    </select>
+
+    <select id="selectRequest" parameterType="long" resultType="egovframework.let.qm.labelregister.domain.model.LabelRequestVO">
+        SELECT r.id AS "id", r.handoff_id AS "handoffId", r.status AS "status", r.moved_product_code AS "movedProductCode", r.note AS "note",
+               r.product_name AS "productName", r.layout AS "layoutJson", r.extra AS "extraJson",
+               r.food_type AS "foodType", r.net_weight AS "netWeight", r.ingredients_text AS "ingredientsText", r.allergens AS "allergens",
+               r.manufacture_report_no AS "manufactureReportNo", r.packaging_material AS "packagingMaterial",
+               r.shelf_life_months AS "shelfLifeMonths", r.shelf_life_unit AS "shelfLifeUnit", r.storage AS "storage",
+               h.version_id AS "versionId", h.version_label AS "versionLabel", h.requested_by_name AS "requestedByName", h.created_at AS "requestedAt",
+               d.name AS "recipeName", d.spec AS "spec", d.client_name AS "clientName", d.remark AS "remark"
+        FROM label_requests r
+        JOIN recipe_handoffs h ON h.id = r.handoff_id
+        LEFT JOIN recipe_drafts d ON d.id = h.draft_id
+        WHERE r.id = #{id}
+    </select>
+
+    <!-- 레시피의 배합표(함량 많은 순). 원재료명 및 함량을 이것 보고 적는다 -->
+    <select id="selectRequestBom" parameterType="long" resultType="egovframework.let.qm.labelregister.domain.model.LabelRequestBomVO">
+        SELECT material_name AS "materialName", ratio_percent AS "ratioPercent"
+        FROM recipe_version_bom
+        WHERE version_id = #{versionId}
+        ORDER BY COALESCE(ratio_percent, 0) DESC, rank_in_version
+    </select>
+
+    <select id="selectRequestMoved" parameterType="long" resultType="map">
+        SELECT id AS "id", COALESCE(moved_product_code, '') AS "moved" FROM label_requests WHERE id = #{id}
+    </select>
+
+    <!-- 미리 적어두는 표시사항. 모양(layout)·양식별 항목(extra)은 안 보내면 그대로 둔다 -->
+    <update id="updateRequest" parameterType="map">
+        UPDATE label_requests
+           SET food_type = #{foodType, jdbcType=VARCHAR}, net_weight = #{netWeight, jdbcType=VARCHAR},
+               ingredients_text = #{ingredientsText, jdbcType=VARCHAR}, allergens = #{allergens, jdbcType=VARCHAR},
+               manufacture_report_no = #{manufactureReportNo, jdbcType=VARCHAR}, packaging_material = #{packagingMaterial, jdbcType=VARCHAR},
+               shelf_life_months = #{shelfLifeMonths, jdbcType=INTEGER}, shelf_life_unit = #{shelfLifeUnit, jdbcType=VARCHAR},
+               storage = (SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(#{storage, jdbcType=VARCHAR}, '') IS NOT NULL AND (sm.item_code = #{storage, jdbcType=VARCHAR} OR sm.item_nm = #{storage, jdbcType=VARCHAR} OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(#{storage, jdbcType=VARCHAR}, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = #{storage, jdbcType=VARCHAR} THEN 0 WHEN sm.item_nm = #{storage, jdbcType=VARCHAR} THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1), <!-- 2026-10-26 STORAGE_METHOD 코드 -->
+               product_name = #{productName, jdbcType=VARCHAR},
+               layout = COALESCE(#{layoutJson, jdbcType=VARCHAR}, layout),
+               extra = COALESCE(#{extraJson, jdbcType=VARCHAR}, extra),
+               note = #{note, jdbcType=VARCHAR}, status = #{status}, updated_at = #{now}, updated_by = #{who, jdbcType=VARCHAR}
+         WHERE id = #{id}
+    </update>
+
+    <!-- 비어있는 칸은 제품에 이미 들어있는 값을 덮어쓰지 않는다(요청에 안 적은 항목 때문에 멀쩡한 라벨이 지워지면 안 된다) -->
+    <update id="updateVersionFromRequest" parameterType="map">
+        UPDATE product_label_versions
+        <set>
+            <if test="foodType != null and foodType != ''">food_type = #{foodType},</if>
+            <if test="netWeight != null and netWeight != ''">net_weight = #{netWeight},</if>
+            <if test="ingredientsText != null and ingredientsText != ''">ingredients_text = #{ingredientsText},</if>
+            <if test="allergens != null and allergens != ''">allergens = #{allergens},</if>
+            <if test="manufactureReportNo != null and manufactureReportNo != ''">manufacture_report_no = #{manufactureReportNo},</if>
+            <if test="packagingMaterial != null and packagingMaterial != ''">packaging_material = #{packagingMaterial},</if>
+            <if test="shelfLifeMonths != null">shelf_life_months = #{shelfLifeMonths},</if>
+            <if test="shelfLifeUnit != null and shelfLifeUnit != ''">shelf_life_unit = #{shelfLifeUnit},</if>
+            <if test="storage != null and storage != ''">storage = COALESCE((SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(#{storage}, '') IS NOT NULL AND (sm.item_code = #{storage} OR sm.item_nm = #{storage} OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(#{storage}, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = #{storage} THEN 0 WHEN sm.item_nm = #{storage} THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1), storage),</if>
+            <if test="layoutJson != null and layoutJson != ''">layout = #{layoutJson},</if>
+            <if test="extraJson != null and extraJson != ''">extra = #{extraJson},</if>
+            updated_at = #{now}, updated_by = #{who, jdbcType=VARCHAR}
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="markRequestMoved" parameterType="map">
+        UPDATE label_requests SET status = 'done', moved_product_code = #{code}, updated_at = #{now}, updated_by = #{who, jdbcType=VARCHAR}
+        WHERE id = #{id}
+    </update>
+</mapper>

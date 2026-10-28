@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 생산가능확인 (송연 SA0006, 기존 /api/products/with-bom · /api/production/feasibility · material_delta_after). 조회만 한다 -->
+<mapper namespace="FeasibilityDAO">
+
+    <!-- 고를 수 있는 제품: 사용 중이고 배합비가 있는 것 -->
+    <select id="selectBomProducts" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT p.code AS "code", p.name AS "name", p.spec AS "spec"
+        FROM products p
+        WHERE COALESCE(p.discontinued, 0) = 0
+          AND EXISTS (SELECT 1 FROM bom b WHERE b.product_code = p.code)
+    </select>
+
+    <!-- 품목명(규격) → 제품코드(사용안함 포함, 코드 순 첫 번째) -->
+    <select id="selectProductNameSpecs" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT code AS "code", name AS "name", spec AS "spec"
+        FROM products
+        ORDER BY code
+    </select>
+
+    <!-- 배합비. ratio_percent 는 이름과 달리 0~1 비율 -->
+    <select id="selectBomLines" parameterType="string" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT material_code AS "materialCode", material_name AS "materialName", ratio_percent AS "ratioPercent"
+        FROM bom
+        WHERE product_code = #{productCode}
+        ORDER BY rank_in_product
+    </select>
+
+    <select id="selectMaterialStocks" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT code AS "code", name AS "name", spec AS "spec", COALESCE(stock_qty, 0) AS "stockQty"
+        FROM materials
+    </select>
+
+    <!-- 그 날짜 뒤의 증감 ① 입고·반품(반품은 qty 가 음수) -->
+    <select id="selectReceivingAfter" parameterType="string" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT material_code AS "code", SUM(qty) AS "qty"
+        FROM material_receiving
+        WHERE receive_date &gt; #{date}
+        GROUP BY material_code
+    </select>
+
+    <!-- ② 생산 사용(생산일 기준). 빠진 것이라 서비스에서 음수로 더한다 -->
+    <select id="selectUsageAfter" parameterType="string" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT u.material_code AS "code", SUM(u.qty_used) AS "qty"
+        FROM production_material_usage u
+        JOIN production_schedule s ON u.schedule_id = s.id
+        WHERE s.schedule_date &gt; #{date}
+        GROUP BY u.material_code
+    </select>
+
+    <!-- ③ 손으로 고침(수동 재고조정·부자재 차감). created_at 의 날짜 부분으로 본다 -->
+    <select id="selectMovementAfter" parameterType="string" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT material_code AS "code", SUM(COALESCE(in_qty, 0)) - SUM(COALESCE(out_qty, 0)) AS "qty"
+        FROM material_stock_movement
+        WHERE SUBSTRING(created_at, 1, 10) &gt; #{date}
+        GROUP BY material_code
+    </select>
+
+    <!-- ④ 재고조정(실사재고로 덮어쓴 것)을 (새 재고 - 옛 재고) 증감으로 -->
+    <select id="selectAdjustmentAfter" parameterType="string" resultType="egovframework.let.sa.feasibility.domain.model.FeasibilityDataVO">
+        SELECT material_code AS "code", SUM(COALESCE(new_stock_qty, 0) - COALESCE(old_stock_qty, 0)) AS "qty"
+        FROM material_stock_schedule
+        WHERE applied = 1
+          AND effective_date &gt; #{date}
+        GROUP BY material_code
+    </select>
+</mapper>

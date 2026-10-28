@@ -1,0 +1,47 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local test artifacts
+.artifacts/
+playwright-report/
+coverage/
+htmlcov/
+output/
+logs/
+test-results/
+.vitest-*.json
+vitest-*.json
+vitest-*.txt
+vite-*.log
+test-output.txt
+test-docs.log
+*.log
+*.txt
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!vercel.json
+!vite.config.ts
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

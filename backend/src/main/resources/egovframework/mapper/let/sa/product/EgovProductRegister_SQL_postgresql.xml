@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 제품등록 (송연 SA0001, 기존 /api/products/register 와 같은 값). 배합비 줄은 ItemMasterDAO.insertBomLine 을 쓴다 -->
+<mapper namespace="ProductRegisterDAO">
+
+    <!-- 다음 제품코드(송연 next-code 규칙): 숫자로만 된 코드 중 최대값 + 1, 6자리보다 짧으면 앞을 0으로(000012) -->
+    <sql id="nextProductCode">
+            SELECT
+                CASE WHEN LENGTH(t.next_code) &lt; 6 THEN LPAD(t.next_code, 6, '0') ELSE t.next_code END
+            FROM (
+                SELECT
+                    CAST(COALESCE(MAX(CAST(code AS NUMERIC)), 0) + 1 AS VARCHAR) AS next_code
+                FROM products
+                WHERE REGEXP_LIKE(code, '^[0-9]+$')
+            ) t
+    </sql>
+
+    <!-- 제품코드는 넣기 직전 발번한다(위 nextProductCode).
+         같은 때 둘이 넣어 같은 번호가 나오면 기본키 중복 → 그 저장을 통째로 취소하고 다시 한다 -->
+    <insert id="insertProduct" parameterType="egovframework.let.sa.product.domain.model.ProductRegisterVO">
+        <selectKey keyProperty="productCode" resultType="string" order="BEFORE">
+            <include refid="nextProductCode"/>
+        </selectKey>
+        INSERT INTO products (
+            code,
+            name,
+            spec,
+            storage,
+            client_code, <!-- 2026-10-23 거래처코드 -->
+            product_type,
+            reg_user_id,
+            reg_dt
+        ) VALUES (
+            #{productCode},
+            #{productName},
+            #{spec},
+            #{storage},
+            #{clientCode, jdbcType=VARCHAR},
+            #{productType},
+            #{regUserId, jdbcType=VARCHAR},
+            CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <!-- 새 제품의 단가표. 보통은 로스·고정마진 0, 제품단가 = 원재료비(인건비 등은 단가관리에서 이어서 넣는다).
+         견적 확정이면 견적의 원가 항목이 함께 들어간다(서비스가 값을 채운다) -->
+    <insert id="insertPricing" parameterType="egovframework.let.sa.product.domain.model.ProductRegisterVO">
+        INSERT INTO pricing (
+            product_code, product_name, spec, product_type, client_name,
+            material_cost, loss_cost, loss_rate, markup_cost, markup_rate,
+            labor_cost, packaging_cost, logistics_cost, margin,
+            other_cost1, other_cost1_note, other_cost2, other_cost2_note,
+            other_cost3, other_cost3_note, other_cost4, other_cost4_note,
+            current_price, total_price
+        ) VALUES (
+            #{productCode}, #{productName}, #{spec}, #{productType}, #{clientName},
+            #{materialCost,jdbcType=DOUBLE}, #{lossCost,jdbcType=DOUBLE}, #{lossRate,jdbcType=DOUBLE},
+            #{markupCost,jdbcType=DOUBLE}, #{markupRate,jdbcType=DOUBLE},
+            #{laborCost,jdbcType=DOUBLE}, #{packagingCost,jdbcType=DOUBLE}, #{logisticsCost,jdbcType=DOUBLE}, #{margin,jdbcType=DOUBLE},
+            #{otherCost1,jdbcType=DOUBLE}, #{otherCost1Note}, #{otherCost2,jdbcType=DOUBLE}, #{otherCost2Note},
+            #{otherCost3,jdbcType=DOUBLE}, #{otherCost3Note}, #{otherCost4,jdbcType=DOUBLE}, #{otherCost4Note},
+            #{currentPrice,jdbcType=DOUBLE}, #{totalPrice,jdbcType=DOUBLE}
+        )
+    </insert>
+
+    <!-- 견적 확정: 그 견적에 만들어진 제품코드를 적는다. 이미 확정된 견적은 건드리지 않는다(0줄 → 등록 전체 취소) -->
+    <update id="updateQuoteConfirmed" parameterType="map">
+        UPDATE quotes
+        SET status = 'confirmed',
+            confirmed_product_code = #{productCode}
+        WHERE quote_id = #{quoteId}
+          AND COALESCE(status, '') &lt;&gt; 'confirmed'
+    </update>
+</mapper>

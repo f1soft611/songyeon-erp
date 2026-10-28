@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 - 생산스케줄·물류스케줄 (송연 CM0002·CM0003, 기존 /api/production-schedule·/api/logistics-schedule?date= 와 같은 값). 보기 전용 -->
+<mapper namespace="ScheduleDAO">
+
+    <!-- 생산스케줄: 하루치를 적어둔 차례대로(정렬번호 → 번호) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectProductionSchedule" parameterType="string" resultType="egovframework.let.co.schedule.domain.model.ProductionScheduleVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            order_qty AS "orderQty",
+            actual_qty AS "actualQty",
+            note AS "note",
+            logistics_date AS "logisticsDate"
+        FROM production_schedule
+        WHERE schedule_date = #{date}
+        ORDER BY sort_order, id
+    </select>
+
+    <!-- 물류스케줄 ① 출하등록에서 넣은 줄. 출고량은 실출하량이 있으면 그것, 없으면 예정량 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectManualLogistics" parameterType="string" resultType="egovframework.let.co.schedule.domain.model.LogisticsScheduleVO">
+        SELECT
+            id AS "id",
+            'manual' AS "source",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) AS "productName",
+            COALESCE(actual_qty, order_qty) AS "orderQty",
+            note AS "note",
+            CASE WHEN actual_qty IS NOT NULL AND actual_qty != '' THEN TRUE ELSE FALSE END AS "shipped"
+        FROM logistics_schedule
+        WHERE schedule_date = #{date}
+        ORDER BY sort_order, id
+    </select>
+
+    <!-- 물류스케줄 ② 물류출고일이 있는 생산확정 줄.
+         출하등록 줄이 그 로트를 가리키면 그 줄이 출하 기록이므로 숨긴다(출하확정된 것은 매출로 잡혀 있어 남긴다) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectProductionLogistics" parameterType="string" resultType="egovframework.let.co.schedule.domain.model.LogisticsScheduleVO">
+        SELECT
+            p.id AS "id",
+            'production' AS "source",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = p.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = p.product_code) AS "productName",
+            COALESCE(p.logistics_actual_qty, p.actual_qty, p.order_qty) AS "orderQty",
+            p.note AS "note",
+            CASE WHEN p.logistics_actual_qty IS NOT NULL AND p.logistics_actual_qty != '' THEN TRUE ELSE FALSE END AS "shipped"
+        FROM production_schedule p
+        WHERE p.logistics_date = #{date}
+          AND (COALESCE(p.ship_confirmed, 0) != 0
+               OR NOT EXISTS (SELECT 1 FROM logistics_schedule l WHERE l.lot_id = p.id))
+        ORDER BY p.id
+    </select>
+</mapper>

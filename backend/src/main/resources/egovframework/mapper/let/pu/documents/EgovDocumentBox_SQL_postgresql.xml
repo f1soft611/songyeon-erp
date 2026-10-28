@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 문서함 (송연 attachments.py 의 document_folder · document_share, 메신저 알림은 chat.py 와 같은 표).
+     파일 자체(attachment, scope='document', ref_id=폴더 번호)는 공통 첨부(AttachmentDAO)가 다룬다. -->
+<mapper namespace="DocumentBoxDAO">
+
+    <select id="selectUser" parameterType="string" resultType="egovframework.let.pu.documents.domain.model.DocUserVO">
+        SELECT
+            id AS "id",
+            name AS "name",
+            department AS "department",
+            COALESCE(is_admin, 0) = 1 AS "admin"
+        FROM employees
+        WHERE id = #{id}
+    </select>
+
+    <!-- 폴더 전부. 볼 수 있는지는 서비스가 최상위까지 거슬러 올라가 가린다(폴더 수만큼 질의가 나가지 않게 한 번에) -->
+    <select id="selectFolders" resultType="egovframework.let.pu.documents.domain.model.DocFolderVO">
+        SELECT
+            f.id AS "id",
+            f.parent_id AS "parentId",
+            f.name AS "name",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = f.created_by LIMIT 1), f.created_by) AS "createdBy", <!-- 2026-10-26 사번으로 저장, 보여 줄 때 직원 이름(없으면 저장값) -->
+            f.created_at AS "createdAt",
+            f.kind AS "kind",
+            f.department AS "department",
+            f.owner_id AS "ownerId",
+            e.name AS "ownerName",
+            f.lock_hash AS "lockHash",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = f.lock_by LIMIT 1), f.lock_by) AS "lockBy",
+            f.lock_at AS "lockAt",
+            (SELECT COUNT(*) FROM attachment a WHERE a.scope = 'document' AND a.ref_id = CAST(f.id AS TEXT)) AS "fileCount",
+            (SELECT COUNT(*) FROM document_folder c WHERE c.parent_id = f.id) AS "childCount"
+        FROM document_folder f
+        LEFT JOIN employees e ON e.id = f.owner_id
+        ORDER BY f.parent_id NULLS FIRST, f.name
+    </select>
+
+    <!-- 나에게 온 공유의 기한(폴더 · 문서). 기한이 살아있는지는 서비스가 오늘과 견준다 -->
+    <select id="selectFolderShareExpiry" parameterType="map" resultType="map">
+        SELECT folder_id AS "folderId", COALESCE(expires_at, '') AS "expiresAt"
+        FROM document_share
+        WHERE to_employee_id = #{toId} AND folder_id IS NOT NULL
+    </select>
+
+    <select id="selectFileShareExpiry" parameterType="map" resultType="string">
+        SELECT COALESCE(expires_at, '')
+        FROM document_share
+        WHERE attachment_id = #{attachmentId} AND to_employee_id = #{toId}
+    </select>
+
+    <select id="countDuplicateName" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM document_folder
+        WHERE name = #{name}
+          AND parent_id IS NOT DISTINCT FROM #{parentId, jdbcType=BIGINT}
+          <if test="excludeId != null">AND id &lt;&gt; #{excludeId}</if>
+    </select>
+
+    <insert id="insertFolder" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO document_folder (parent_id, name, kind, department, owner_id, created_by, created_at)
+        VALUES (#{parentId, jdbcType=BIGINT}, #{name}, #{kind, jdbcType=VARCHAR}, #{department, jdbcType=VARCHAR},
+                #{ownerId, jdbcType=VARCHAR}, #{createdBy}, #{createdAt})
+    </insert>
+
+    <update id="updateFolderName" parameterType="map">
+        UPDATE document_folder SET name = #{name} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteFolder" parameterType="long">
+        DELETE FROM document_folder WHERE id = #{id}
+    </delete>
+
+    <update id="updateLock" parameterType="map">
+        UPDATE document_folder
+           SET lock_hash = #{lockHash, jdbcType=VARCHAR}, lock_by = #{lockBy, jdbcType=VARCHAR}, lock_at = #{lockAt, jdbcType=VARCHAR}
+         WHERE id = #{id}
+    </update>
+
+    <!-- 이 폴더 파일마다 몇 명에게 공유됐는지 -->
+    <select id="selectShareCounts" parameterType="string" resultType="map">
+        SELECT s.attachment_id AS "attachmentId", COUNT(*) AS "cnt"
+        FROM document_share s
+        JOIN attachment a ON a.id = s.attachment_id
+        WHERE a.scope = 'document' AND a.ref_id = #{folderId}
+        GROUP BY s.attachment_id
+    </select>
+
+    <select id="selectEmployeeName" parameterType="string" resultType="string">
+        SELECT name FROM employees WHERE id = #{id}
+    </select>
+
+    <!-- 이미 보낸 사람이면 넣지 않는다(유일 색인 idx_document_share_once · folder_once). 넣은 줄 수로 가른다 -->
+    <insert id="insertShare" parameterType="egovframework.let.pu.documents.domain.model.DocShareRowVO">
+        INSERT INTO document_share (attachment_id, folder_id, to_employee_id, shared_by, shared_by_name, note, expires_at, created_at)
+        VALUES (#{attachmentId, jdbcType=BIGINT}, #{folderId, jdbcType=BIGINT}, #{toEmployeeId}, #{sharedBy}, #{sharedByName},
+                #{note, jdbcType=VARCHAR}, #{expiresAt, jdbcType=VARCHAR}, #{createdAt})
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <select id="selectPeople" parameterType="string" resultType="egovframework.let.pu.documents.domain.model.DocPersonVO">
+        SELECT id AS "id", name AS "name", department AS "department"
+        FROM employees
+        WHERE id &lt;&gt; #{me}
+        ORDER BY department NULLS LAST, name
+    </select>
+
+    <select id="selectDepartments" resultType="string">
+        SELECT DISTINCT department
+        FROM employees
+        WHERE department IS NOT NULL AND TRIM(department) &lt;&gt; ''
+        ORDER BY department
+    </select>
+
+    <select id="selectSharesToMeFiles" parameterType="string" resultType="egovframework.let.pu.documents.domain.model.DocShareVO">
+        SELECT s.id AS "id", s.attachment_id AS "attachmentId", s.shared_by_name AS "sharedByName", s.note AS "note",
+               s.expires_at AS "expiresAt", s.created_at AS "createdAt", a.orig_name AS "origName", a.size_bytes AS "sizeBytes",
+               FALSE AS "folder"
+        FROM document_share s
+        JOIN attachment a ON a.id = s.attachment_id
+        WHERE s.to_employee_id = #{me} AND s.attachment_id IS NOT NULL
+    </select>
+
+    <select id="selectSharesToMeFolders" parameterType="string" resultType="egovframework.let.pu.documents.domain.model.DocShareVO">
+        SELECT s.id AS "id", s.folder_id AS "folderId", s.shared_by_name AS "sharedByName", s.note AS "note",
+               s.expires_at AS "expiresAt", s.created_at AS "createdAt", f.name AS "origName",
+               TRUE AS "folder", (f.lock_hash IS NOT NULL) AS "locked"
+        FROM document_share s
+        JOIN document_folder f ON f.id = s.folder_id
+        WHERE s.to_employee_id = #{me} AND s.folder_id IS NOT NULL
+    </select>
+
+    <!-- 내가 보낸 공유. 이름은 문서면 파일 이름, 폴더면 폴더 이름 -->
+    <select id="selectSharesByMe" parameterType="string" resultType="egovframework.let.pu.documents.domain.model.DocShareVO">
+        SELECT s.id AS "id", s.attachment_id AS "attachmentId", s.folder_id AS "folderId", s.to_employee_id AS "toEmployeeId",
+               s.note AS "note", s.expires_at AS "expiresAt", s.created_at AS "createdAt", e.name AS "toName",
+               COALESCE(a.orig_name, f.name) AS "origName", (s.folder_id IS NOT NULL) AS "folder"
+        FROM document_share s
+        LEFT JOIN employees e ON e.id = s.to_employee_id
+        LEFT JOIN attachment a ON a.id = s.attachment_id
+        LEFT JOIN document_folder f ON f.id = s.folder_id
+        WHERE s.shared_by = #{me} AND (a.id IS NOT NULL OR f.id IS NOT NULL)
+        ORDER BY s.created_at DESC
+    </select>
+
+    <select id="selectShareOwner" parameterType="long" resultType="string">
+        SELECT shared_by FROM document_share WHERE id = #{id}
+    </select>
+
+    <delete id="deleteShare" parameterType="long">
+        DELETE FROM document_share WHERE id = #{id}
+    </delete>
+
+    <!-- ===== 메신저 알림 (송연 chat.find_or_create_dm · post_message 와 같은 표, 같은 모양) ===== -->
+    <select id="selectDmRoom" parameterType="string" resultType="long">
+        SELECT id FROM chat_rooms WHERE dm_key = #{dmKey}
+    </select>
+
+    <!-- 동시에 둘이 만들려 하면 유일 색인(idx_chat_rooms_dmkey)에 걸린다. 그때는 아무것도 넣지 않고 먼저 만들어진 방을 다시 읽는다 -->
+    <insert id="insertDmRoom" parameterType="map">
+        INSERT INTO chat_rooms (room_type, name, dm_key, created_by, created_at)
+        VALUES ('dm', NULL, #{dmKey}, #{createdBy}, #{createdAt})
+        ON CONFLICT (dm_key) WHERE dm_key IS NOT NULL DO NOTHING
+    </insert>
+
+    <insert id="insertRoomMember" parameterType="map">
+        INSERT INTO chat_room_members (room_id, employee_id, employee_name, joined_at)
+        VALUES (#{roomId}, #{employeeId}, #{employeeName}, #{joinedAt})
+        ON CONFLICT DO NOTHING
+    </insert>
+
+    <insert id="insertChatMessage" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO chat_messages (room_id, sender_id, sender_name, content, created_at)
+        VALUES (#{roomId}, #{senderId}, #{senderName}, #{content}, #{createdAt})
+    </insert>
+
+    <!-- 보낸 사람 쪽은 읽은 것으로 한다(자기가 보낸 알림이 '안 읽은 1건' 으로 뜨지 않게) -->
+    <update id="updateLastRead" parameterType="map">
+        UPDATE chat_room_members SET last_read_message_id = #{messageId}
+         WHERE room_id = #{roomId} AND employee_id = #{employeeId}
+    </update>
+</mapper>

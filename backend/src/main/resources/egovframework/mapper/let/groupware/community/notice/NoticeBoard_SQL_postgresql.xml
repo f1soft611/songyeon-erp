@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="NoticeBoardDAO">
+
+    <resultMap id="noticePostMap" type="egovframework.let.groupware.community.notice.domain.model.NoticeBoardPostVO">
+        <id property="postId" column="post_id"/>
+        <result property="boardTypeCode" column="board_type_code"/>
+        <result property="title" column="title"/>
+        <result property="noticeGubunCode" column="category_code"/>
+        <result property="contents" column="contents"/>
+        <result property="contentsHtml" column="contents_html"/>
+        <result property="contentsJson" column="contents_json"/>
+        <result property="contentsText" column="contents_text"/>
+        <result property="writerId" column="writer_id"/>
+        <result property="writerName" column="writer_name"/>
+        <result property="writerProfileImage" column="writer_profile_image"/>
+        <result property="lastModifiedBy" column="last_modified_by"/>
+        <result property="lastModifiedByName" column="last_modified_by_name"/>
+        <result property="viewCount" column="view_count"/>
+        <result property="isPinned" column="is_pinned"/>
+        <result property="loginPopupYn" column="login_popup_yn"/>
+        <result property="popupEndDate" column="popup_end_date"/>
+        <result property="isDeleted" column="is_deleted"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="attachmentCount" column="attachment_count"/>
+    </resultMap>
+
+    <resultMap id="noticeFileMap" type="egovframework.let.groupware.community.notice.domain.model.NoticeBoardFileVO">
+        <id property="boardFileId" column="board_file_id"/>
+        <result property="postId" column="post_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="filePath" column="file_path"/>
+        <result property="objectKey" column="object_key"/>
+        <result property="bucketName" column="bucket_name"/>
+        <result property="storageProvider" column="storage_provider"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="mimeType" column="mime_type"/>
+        <result property="checksumSha256" column="checksum_sha256"/>
+        <result property="contentType" column="content_type"/>
+        <result property="fileUsageType" column="file_usage_type"/>
+        <result property="deletedYn" column="deleted_yn"/>
+        <result property="uploadedBy" column="uploaded_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectNoticePostList" parameterType="map" resultMap="noticePostMap">
+        SELECT
+            p.post_id,
+            p.board_type_code,
+            p.title,
+            p.category_code,
+            COALESCE(p.contents_html, p.contents, '') AS contents,
+            p.contents_html,
+            p.contents_json,
+            p.contents_text,
+            p.writer_id,
+            p.writer_name,
+            la.profile_image AS writer_profile_image,
+            p.last_modified_by,
+            p.last_modified_by_name,
+            p.view_count,
+            p.is_pinned,
+            p.login_popup_yn,
+            p.popup_end_date,
+            p.is_deleted,
+            p.created_at,
+            p.updated_at,
+            COALESCE((
+                SELECT COUNT(*)
+                                FROM tb_common_file bf
+                                WHERE bf.tenant_id = #{tenantId}
+                                    AND bf.owner_type = 'NOTICE'
+                                    AND bf.owner_id = p.post_id
+                  AND bf.deleted_yn = 'N'
+            ), 0) AS attachment_count
+        FROM tb_board_post p
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = p.tenant_id
+         AND la.login_code = p.writer_id
+        WHERE p.tenant_id = #{tenantId}
+          AND p.board_type_code = #{boardTypeCode}
+          AND p.is_deleted = 'N'
+        <if test="keyword != null and keyword != ''">
+          AND (
+              p.title ILIKE '%' || #{keyword} || '%'
+              OR p.writer_name ILIKE '%' || #{keyword} || '%'
+              OR p.contents_text ILIKE '%' || #{keyword} || '%'
+          )
+        </if>
+                <if test="noticeGubunCode != null and noticeGubunCode != ''">
+                    AND p.category_code = #{noticeGubunCode}
+                </if>
+                <if test="isPinned != null and isPinned != ''">
+                    AND p.is_pinned = #{isPinned}
+                </if>
+        ORDER BY p.created_at DESC, p.post_id DESC
+        LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+    </select>
+
+    <select id="selectNoticePostCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_board_post p
+        WHERE p.tenant_id = #{tenantId}
+          AND p.board_type_code = #{boardTypeCode}
+          AND p.is_deleted = 'N'
+        <if test="keyword != null and keyword != ''">
+          AND (
+              p.title ILIKE '%' || #{keyword} || '%'
+              OR p.writer_name ILIKE '%' || #{keyword} || '%'
+              OR p.contents_text ILIKE '%' || #{keyword} || '%'
+          )
+        </if>
+        <if test="noticeGubunCode != null and noticeGubunCode != ''">
+            AND p.category_code = #{noticeGubunCode}
+        </if>
+        <if test="isPinned != null and isPinned != ''">
+            AND p.is_pinned = #{isPinned}
+        </if>
+    </select>
+
+    <select id="selectNoticePostById" parameterType="map" resultMap="noticePostMap">
+        SELECT
+            p.post_id,
+            p.board_type_code,
+            p.title,
+            p.category_code,
+            COALESCE(p.contents_html, p.contents, '') AS contents,
+            p.contents_html,
+            p.contents_json,
+            p.contents_text,
+            p.writer_id,
+            p.writer_name,
+            la.profile_image AS writer_profile_image,
+            p.last_modified_by,
+            p.last_modified_by_name,
+            p.view_count,
+            p.is_pinned,
+            p.login_popup_yn,
+            p.popup_end_date,
+            p.is_deleted,
+            p.created_at,
+            p.updated_at,
+            COALESCE((
+                SELECT COUNT(*)
+                                FROM tb_common_file bf
+                                WHERE bf.tenant_id = #{tenantId}
+                                    AND bf.owner_type = 'NOTICE'
+                                    AND bf.owner_id = p.post_id
+                  AND bf.deleted_yn = 'N'
+            ), 0) AS attachment_count
+        FROM tb_board_post p
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = p.tenant_id
+         AND la.login_code = p.writer_id
+        WHERE p.tenant_id = #{tenantId}
+          AND p.post_id = #{postId}
+          AND p.board_type_code = #{boardTypeCode}
+          AND p.is_deleted = 'N'
+    </select>
+
+    <sql id="activeLoginPopup">
+        p.tenant_id = #{tenantId}
+        AND p.board_type_code = 'NOTICE'
+        AND p.is_deleted = 'N'
+        AND p.login_popup_yn = 'Y'
+        AND p.popup_end_date >= CAST(#{today} AS date)
+    </sql>
+
+    <sql id="notDismissedToday">
+        NOT EXISTS (
+            SELECT 1 FROM tb_notice_popup_dismissal d
+            WHERE d.tenant_id = p.tenant_id AND d.post_id = p.post_id
+              AND d.login_id = #{loginId} AND d.dismissed_on = CAST(#{today} AS date)
+        )
+    </sql>
+
+    <select id="selectLoginPopupList" parameterType="map" resultMap="noticePostMap">
+        SELECT p.post_id, p.title, p.created_at
+        FROM tb_board_post p
+        WHERE <include refid="activeLoginPopup"/>
+          AND <include refid="notDismissedToday"/>
+        ORDER BY p.created_at DESC, p.post_id DESC
+    </select>
+
+    <select id="selectLoginPopupById" parameterType="map" resultMap="noticePostMap">
+        SELECT p.post_id FROM tb_board_post p
+        WHERE <include refid="activeLoginPopup"/>
+          AND p.post_id = #{postId}
+          AND <include refid="notDismissedToday"/>
+    </select>
+
+    <insert id="dismissLoginPopup" parameterType="map">
+        INSERT INTO tb_notice_popup_dismissal (tenant_id, post_id, login_id, dismissed_on)
+        SELECT p.tenant_id, p.post_id, #{loginId}, CAST(#{today} AS date)
+        FROM tb_board_post p
+        WHERE <include refid="activeLoginPopup"/> AND p.post_id = #{postId}
+        ON CONFLICT (tenant_id, post_id, login_id)
+        DO UPDATE SET dismissed_on = EXCLUDED.dismissed_on
+    </insert>
+
+    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="long">
+        SELECT login_id
+        FROM tb_login_account
+        WHERE tenant_id = #{tenantId}
+          AND login_code = #{loginCode}
+          AND use_at = 'Y'
+    </select>
+
+    <select id="insertNoticePostViewHistory" parameterType="map" resultType="long">
+        INSERT INTO tb_board_post_view_history (
+            tenant_id,
+            post_id,
+            login_id,
+            viewed_at
+        ) VALUES (
+            #{tenantId},
+            #{postId},
+            #{loginId},
+            CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (tenant_id, post_id, login_id) DO NOTHING
+        RETURNING view_history_id
+    </select>
+
+    <update id="incrementNoticePostViewCount" parameterType="map">
+        UPDATE tb_board_post
+        SET view_count = view_count + 1
+        WHERE tenant_id = #{tenantId}
+          AND post_id = #{postId}
+          AND board_type_code = #{boardTypeCode}
+          AND is_deleted = 'N'
+    </update>
+
+    <select id="insertNoticePost" parameterType="map" resultType="long">
+        INSERT INTO tb_board_post (
+            tenant_id,
+            board_type_code,
+            title,
+            category_code,
+            contents,
+            contents_html,
+            contents_json,
+            contents_text,
+            writer_id,
+            writer_name,
+            last_modified_by,
+            last_modified_by_name,
+            view_count,
+            is_pinned,
+            login_popup_yn,
+            popup_end_date,
+            is_deleted,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{tenantId},
+            #{boardTypeCode},
+            #{title},
+            #{noticeGubunCode},
+            #{contents},
+            #{contentsHtml},
+            CAST(#{contentsJson} AS json),
+            #{contentsText},
+            #{writerId},
+            #{writerName},
+            #{lastModifiedBy},
+            #{lastModifiedByName},
+            0,
+            #{isPinned},
+            #{loginPopupYn},
+            CAST(#{popupEndDate} AS date),
+            'N',
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+        RETURNING post_id
+    </select>
+
+    <update id="updateNoticePost" parameterType="map">
+        UPDATE tb_board_post
+        SET title = #{title},
+            category_code = #{noticeGubunCode},
+            contents = #{contents},
+            contents_html = #{contentsHtml},
+            contents_json = CAST(#{contentsJson} AS json),
+            contents_text = #{contentsText},
+            writer_name = #{writerName},
+            last_modified_by = #{lastModifiedBy},
+            last_modified_by_name = #{lastModifiedByName},
+            is_pinned = #{isPinned},
+            login_popup_yn = #{loginPopupYn},
+            popup_end_date = CAST(#{popupEndDate} AS date),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND post_id = #{postId}
+          AND board_type_code = #{boardTypeCode}
+          AND is_deleted = 'N'
+    </update>
+
+    <update id="updateNoticePostPinned" parameterType="map">
+        UPDATE tb_board_post
+        SET is_pinned = #{isPinned},
+            last_modified_by = #{lastModifiedBy},
+            last_modified_by_name = #{lastModifiedByName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND post_id = #{postId}
+          AND board_type_code = #{boardTypeCode}
+          AND is_deleted = 'N'
+    </update>
+
+    <update id="softDeleteNoticePost" parameterType="map">
+        UPDATE tb_board_post
+        SET is_deleted = 'Y',
+            last_modified_by = #{lastModifiedBy},
+            last_modified_by_name = #{lastModifiedByName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND post_id = #{postId}
+          AND board_type_code = #{boardTypeCode}
+    </update>
+
+    <select id="selectNoticeAttachmentList" parameterType="map" resultMap="noticeFileMap">
+        SELECT
+            bf.file_id AS board_file_id,
+            bf.owner_id AS post_id,
+            bf.file_name,
+            bf.file_path,
+            bf.object_key,
+            bf.bucket_name,
+            bf.storage_provider,
+            bf.file_size,
+            bf.mime_type,
+            bf.checksum_sha256,
+            bf.content_type,
+            bf.file_usage_type,
+            bf.deleted_yn,
+            bf.uploaded_by,
+            bf.created_at,
+            bf.updated_at
+                FROM tb_common_file bf
+                WHERE bf.tenant_id = #{tenantId}
+                    AND bf.owner_type = 'NOTICE'
+                    AND bf.owner_id = #{postId}
+          AND bf.deleted_yn = 'N'
+        ORDER BY bf.created_at DESC
+    </select>
+
+    <select id="selectNoticeAttachmentById" parameterType="map" resultMap="noticeFileMap">
+        SELECT
+            bf.file_id AS board_file_id,
+            bf.owner_id AS post_id,
+            bf.file_name,
+            bf.file_path,
+            bf.object_key,
+            bf.bucket_name,
+            bf.storage_provider,
+            bf.file_size,
+            bf.mime_type,
+            bf.checksum_sha256,
+            bf.content_type,
+            bf.file_usage_type,
+            bf.deleted_yn,
+            bf.uploaded_by,
+            bf.created_at,
+            bf.updated_at
+                FROM tb_common_file bf
+                WHERE bf.tenant_id = #{tenantId}
+                    AND bf.file_id = #{boardFileId}
+                    AND bf.owner_type = 'NOTICE'
+          AND bf.deleted_yn = 'N'
+    </select>
+
+    <select id="insertNoticeAttachment" parameterType="map" resultType="long">
+        INSERT INTO tb_common_file (
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            checksum_sha256,
+            content_type,
+            file_usage_type,
+            deleted_yn,
+            uploaded_by,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{tenantId},
+            'NOTICE',
+            #{postId},
+            #{fileName},
+            #{filePath},
+            #{objectKey},
+            #{bucketName},
+            #{storageProvider},
+            #{fileSize},
+            #{mimeType},
+            #{checksumSha256},
+            #{contentType},
+            #{fileUsageType},
+            #{deletedYn},
+            #{uploadedBy},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+        RETURNING file_id
+    </select>
+
+    <update id="softDeleteNoticeAttachment" parameterType="map">
+        UPDATE tb_common_file
+        SET deleted_yn = 'Y',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{boardFileId}
+    </update>
+
+    <update id="softDeleteEmbeddedNoticeAttachments" parameterType="map">
+                UPDATE tb_common_file
+        SET deleted_yn = 'Y',
+            updated_at = CURRENT_TIMESTAMP
+                WHERE tenant_id = #{tenantId}
+                    AND owner_type = 'NOTICE'
+                    AND owner_id = #{postId}
+                    AND file_usage_type = 'EMBEDDED'
+          AND deleted_yn = 'N'
+    </update>
+</mapper>

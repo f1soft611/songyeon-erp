@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 출하등록 (송연 SA0005, 기존 /api/logistics-schedule…·로트 배분·수주 가져오기와 같은 값) -->
+<mapper namespace="ShipmentDAO">
+
+    <!-- ① 출하등록에서 넣은 줄. 출하량은 실출하량이 있으면 그것, 없으면 예정량 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectManualShipments" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+        SELECT
+            ls.id AS "id",
+            'manual' AS "source",
+            ls.schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = ls.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = ls.product_code) AS "productName",
+            COALESCE(ls.actual_qty, ls.order_qty) AS "orderQty",
+            ls.order_qty AS "plannedQty",
+            ls.actual_qty AS "actualQty",
+            ls.note AS "note",
+            ls.lot_id AS "lotId",
+            ls.ship_confirmed AS "shipConfirmed",
+            ps.schedule_date AS "lotDate",
+            ps.lot_no AS "lotNo"
+        FROM logistics_schedule ls
+        LEFT JOIN production_schedule ps ON ps.id = ls.lot_id
+        WHERE ls.schedule_date = #{date}
+        ORDER BY ls.sort_order, ls.id
+    </select>
+
+    <!-- ② 물류출고일이 있는 생산확정 줄. 출하등록 줄이 그 로트를 가리키면 그 줄이 출하 기록이라 숨긴다(출하확정된 것은 남긴다) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectProductionShipments" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+        SELECT
+            p.id AS "id",
+            'production' AS "source",
+            p.logistics_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = p.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = p.product_code) AS "productName",
+            COALESCE(p.logistics_actual_qty, p.actual_qty, p.order_qty) AS "orderQty",
+            p.order_qty AS "plannedQty",
+            p.logistics_actual_qty AS "actualQty",
+            p.note AS "note",
+            p.ship_confirmed AS "shipConfirmed",
+            p.schedule_date AS "lotDate",
+            p.lot_no AS "lotNo"
+        FROM production_schedule p
+        WHERE p.logistics_date = #{date}
+          AND (COALESCE(p.ship_confirmed, 0) != 0
+               OR NOT EXISTS (SELECT 1 FROM logistics_schedule l WHERE l.lot_id = p.id))
+        ORDER BY p.id
+    </select>
+
+    <!-- 그 날짜 출하 줄들의 로트 배분(로트 생산일 순) -->
+    <select id="selectAllocationsByDate" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotAllocationVO">
+        SELECT
+            a.shipment_id AS "shipmentId",
+            a.lot_id AS "lotId",
+            a.qty AS "qty",
+            p.lot_no AS "lotNo",
+            p.schedule_date AS "lotDate"
+        FROM shipment_lot_allocation a
+        JOIN logistics_schedule ls ON ls.id = a.shipment_id
+        LEFT JOIN production_schedule p ON p.id = a.lot_id
+        WHERE a.shipment_table = 'logistics_schedule'
+          AND ls.schedule_date = #{date}
+        ORDER BY p.schedule_date, a.id
+    </select>
+
+    <select id="selectMaxSortOrder" parameterType="string" resultType="java.lang.Integer">
+        SELECT MAX(sort_order)
+        FROM logistics_schedule
+        WHERE schedule_date = #{date}
+    </select>
+
+    <!-- 같은 수주건에서 이미 생산확정된 로트 -->
+    <select id="selectLotIdBySourceOrder" parameterType="long" resultType="java.lang.Long">
+        SELECT id
+        FROM production_schedule
+        WHERE source_order_id = #{sourceOrderId}
+        ORDER BY id
+        LIMIT 1
+    </select>
+
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <insert id="insertShipment" parameterType="egovframework.let.sa.shipment.domain.model.ShipmentVO"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO logistics_schedule (
+            schedule_date,
+            client_code,
+            product_code,
+            order_qty,
+            note,
+            lot_id,
+            source_order_id,
+            sort_order,
+            created_at
+        ) VALUES (
+            #{scheduleDate},
+            #{clientCode},
+            #{productCode},
+            #{orderQty},
+            #{note},
+            #{lotId,jdbcType=INTEGER},
+            #{sourceOrderId,jdbcType=INTEGER},
+            #{sortOrder,jdbcType=INTEGER},
+            #{createdAt}
+        )
+    </insert>
+
+    <select id="selectLotLogisticsActualQty" parameterType="long" resultType="string">
+        SELECT COALESCE(logistics_actual_qty, '')
+        FROM production_schedule
+        WHERE id = #{lotId}
+    </select>
+
+    <update id="updateLotLogisticsActualQty" parameterType="map">
+        UPDATE production_schedule
+        SET logistics_actual_qty = #{qty}
+        WHERE id = #{lotId}
+    </update>
+
+    <update id="updateOrderImportedShipment" parameterType="map">
+        UPDATE sales_order
+        SET imported_shipment = #{imported}
+        WHERE id = #{orderId}
+    </update>
+
+    <select id="selectShipmentState" parameterType="long" resultType="egovframework.let.sa.shipment.domain.model.ShipmentVO">
+        SELECT
+            ls.id AS "id",
+            ls.lot_id AS "lotId",
+            ls.source_order_id AS "sourceOrderId",
+            ls.ship_confirmed AS "shipConfirmed",
+            ls.actual_qty AS "actualQty",
+            ls.order_qty AS "orderQty",
+            p.lot_no AS "lotNo",
+            p.schedule_date AS "lotDate"
+        FROM logistics_schedule ls
+        LEFT JOIN production_schedule p ON p.id = ls.lot_id
+        WHERE ls.id = #{id}
+    </select>
+
+    <select id="selectProductionShipConfirmed" parameterType="long" resultType="java.lang.Integer">
+        SELECT COALESCE(ship_confirmed, 0)
+        FROM production_schedule
+        WHERE id = #{id}
+    </select>
+
+    <update id="updateActualQty" parameterType="map">
+        UPDATE logistics_schedule
+        SET actual_qty = #{qty}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateProductionActualQty" parameterType="map">
+        UPDATE production_schedule
+        SET logistics_actual_qty = #{qty}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteShipment" parameterType="long">
+        DELETE FROM logistics_schedule
+        WHERE id = #{id}
+    </delete>
+
+    <select id="selectAllocations" parameterType="long" resultType="egovframework.let.sa.shipment.domain.model.LotAllocationVO">
+        SELECT
+            a.shipment_id AS "shipmentId",
+            a.lot_id AS "lotId",
+            a.qty AS "qty",
+            p.lot_no AS "lotNo",
+            p.schedule_date AS "lotDate"
+        FROM shipment_lot_allocation a
+        LEFT JOIN production_schedule p ON p.id = a.lot_id
+        WHERE a.shipment_table = 'logistics_schedule'
+          AND a.shipment_id = #{shipmentId}
+        ORDER BY p.schedule_date, a.id
+    </select>
+
+    <delete id="deleteAllocations" parameterType="long">
+        DELETE FROM shipment_lot_allocation
+        WHERE shipment_table = 'logistics_schedule'
+          AND shipment_id = #{shipmentId}
+    </delete>
+
+    <insert id="insertAllocation" parameterType="map">
+        INSERT INTO shipment_lot_allocation (
+            shipment_table,
+            shipment_id,
+            lot_id,
+            qty,
+            created_at
+        ) VALUES (
+            'logistics_schedule',
+            #{shipmentId},
+            #{lotId},
+            #{qty,jdbcType=DOUBLE},
+            #{createdAt}
+        )
+    </insert>
+
+    <!-- 로트가 하나면 예전 칸(lot_id)도 채우고, 여러 개면 비운다 -->
+    <update id="updateShipmentLot" parameterType="map">
+        UPDATE logistics_schedule
+        SET lot_id = #{lotId,jdbcType=INTEGER}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 그 품목의 로트(생산확정 줄) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectLotsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            actual_qty AS "actualQty",
+            order_qty AS "orderQty",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            lot_no AS "lotNo"
+        FROM production_schedule
+        WHERE (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) = #{productName}
+        ORDER BY schedule_date, id
+    </select>
+
+    <!-- 로트 출하량 세기 ① 로트 배분 합계 -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <select id="selectAllocationSumsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+        SELECT
+            a.lot_id AS "lotId",
+            SUM(a.qty) AS "qty"
+        FROM shipment_lot_allocation a
+        JOIN production_schedule p ON p.id = a.lot_id
+        WHERE a.shipment_table = 'logistics_schedule'
+          AND (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = p.product_code) = #{productName}
+        GROUP BY a.lot_id
+    </select>
+
+    <!-- ② 로트를 가리키는 출하등록 줄(배분이 있는 줄은 ①에서 셌다) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <select id="selectLinkedShipmentsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+        SELECT
+            ls.id AS "id",
+            ls.lot_id AS "lotId",
+            ls.actual_qty AS "actualQty",
+            ls.order_qty AS "orderQty",
+            EXISTS (SELECT 1
+                    FROM shipment_lot_allocation a
+                    WHERE a.shipment_table = 'logistics_schedule'
+                      AND a.shipment_id = ls.id) AS "allocated"
+        FROM logistics_schedule ls
+        JOIN production_schedule p ON p.id = ls.lot_id
+        WHERE (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = p.product_code) = #{productName}
+    </select>
+
+    <!-- ③ 물류출고일이 있는 생산확정 줄(그 줄 자신이 출하) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <select id="selectLotShipmentsByProduct" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.LotRowVO">
+        SELECT
+            id AS "id",
+            logistics_actual_qty AS "logisticsActualQty",
+            order_qty AS "orderQty",
+            ship_confirmed AS "shipConfirmed"
+        FROM production_schedule
+        WHERE (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) = #{productName}
+          AND logistics_date IS NOT NULL
+          AND logistics_date != ''
+    </select>
+
+    <!-- 로트 선택의 생산예정 수주: 그 품목의 아직 생산확정으로 안 넘어간 수주 -->
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectPlannedOrders" parameterType="string" resultType="egovframework.let.sa.shipment.domain.model.PendingOrderVO">
+        SELECT
+            id AS "id",
+            order_date AS "orderDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS "productName",
+            order_qty AS "orderQty",
+            note AS "note",
+            production_date AS "productionDate",
+            logistics_date AS "logisticsDate"
+        FROM sales_order
+        WHERE (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) = #{productName}
+          AND imported_production = 0
+        ORDER BY production_date, sort_order, id
+    </select>
+
+    <!-- 수주등록 가져오기: 물류출고일이 기간 안이고 아직 출하로 안 가져간 수주 -->
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectImportOrders" parameterType="map" resultType="egovframework.let.sa.shipment.domain.model.PendingOrderVO">
+        SELECT
+            id AS "id",
+            order_date AS "orderDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS "productName",
+            order_qty AS "orderQty",
+            note AS "note",
+            production_date AS "productionDate",
+            logistics_date AS "logisticsDate"
+        FROM sales_order
+        WHERE logistics_date BETWEEN #{start} AND #{end}
+          AND imported_shipment = 0
+        ORDER BY logistics_date, sort_order, id
+    </select>
+</mapper>

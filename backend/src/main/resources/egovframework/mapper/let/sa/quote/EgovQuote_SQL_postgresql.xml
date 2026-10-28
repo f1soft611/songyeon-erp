@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 견적(가견적) (송연 SA0003, 기존 /api/quotes… 와 같은 값). 확정 표시는 제품등록에서 한다(ProductRegisterDAO.updateQuoteConfirmed) -->
+<mapper namespace="QuoteDAO">
+
+    <sql id="quoteColumns">
+        quote_id AS "quoteId",
+        product_name AS "productName",
+        spec AS "spec",
+        product_type AS "productType",
+        storage AS "storage",
+        <!-- 2026-10-23 견적은 보관방법 · 거래처를 코드로 저장한다(사용자가 DB 를 바꿈). 이름은 공통코드 · 거래처마스터에서 -->
+        (SELECT i.item_nm
+           FROM tb_common_code_item i
+           JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+           JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+          WHERE i.item_code = quotes.storage
+          LIMIT 1) AS "storageNm",
+        client_code AS "clientCode",
+        (SELECT c.name FROM clients c WHERE c.client_code = quotes.client_code LIMIT 1) AS "clientName",
+        note AS "note",
+        bom_json AS "bomJson",
+        material_cost AS "materialCost",
+        markup_rate AS "markupRate",
+        markup_cost AS "markupCost",
+        loss_rate AS "lossRate",
+        loss_cost AS "lossCost",
+        labor_cost AS "laborCost",
+        packaging_cost AS "packagingCost",
+        logistics_cost AS "logisticsCost",
+        margin AS "margin",
+        other_cost1 AS "otherCost1",
+        other_cost1_note AS "otherCost1Note",
+        other_cost2 AS "otherCost2",
+        other_cost2_note AS "otherCost2Note",
+        other_cost3 AS "otherCost3",
+        other_cost3_note AS "otherCost3Note",
+        other_cost4 AS "otherCost4",
+        other_cost4_note AS "otherCost4Note",
+        current_price AS "currentPrice",
+        total_price AS "totalPrice",
+        status AS "status",
+        confirmed_product_code AS "confirmedProductCode",
+        created_at AS "createdAt",
+        source_kind AS "sourceKind",
+        source_recipe AS "sourceRecipe"
+    </sql>
+
+    <!-- 최근 것부터 -->
+    <select id="selectQuoteList" resultType="egovframework.let.sa.quote.domain.model.QuoteVO">
+        SELECT <include refid="quoteColumns"/>
+        FROM quotes
+        ORDER BY quote_id DESC
+    </select>
+
+    <select id="selectQuote" parameterType="long" resultType="egovframework.let.sa.quote.domain.model.QuoteVO">
+        SELECT <include refid="quoteColumns"/>
+        FROM quotes
+        WHERE quote_id = #{quoteId}
+    </select>
+
+    <select id="selectQuoteStatus" parameterType="long" resultType="string">
+        SELECT COALESCE(status, '')
+        FROM quotes
+        WHERE quote_id = #{quoteId}
+    </select>
+
+    <insert id="insertQuote" parameterType="egovframework.let.sa.quote.domain.model.QuoteVO"
+            useGeneratedKeys="true" keyProperty="quoteId" keyColumn="quote_id">
+        INSERT INTO quotes (
+            product_name, spec, product_type, storage, client_code, bom_json,
+            material_cost, loss_rate, loss_cost, markup_rate, markup_cost,
+            labor_cost, packaging_cost, logistics_cost, margin,
+            other_cost1, other_cost1_note, other_cost2, other_cost2_note,
+            other_cost3, other_cost3_note, other_cost4, other_cost4_note,
+            current_price, total_price, note, status, created_at
+        ) VALUES (
+            #{productName}, #{spec}, #{productType}, #{storage}, #{clientCode, jdbcType=VARCHAR}, #{bomJson},
+            #{materialCost,jdbcType=DOUBLE}, #{lossRate,jdbcType=DOUBLE}, #{lossCost,jdbcType=DOUBLE},
+            #{markupRate,jdbcType=DOUBLE}, #{markupCost,jdbcType=DOUBLE},
+            #{laborCost,jdbcType=DOUBLE}, #{packagingCost,jdbcType=DOUBLE}, #{logisticsCost,jdbcType=DOUBLE}, #{margin,jdbcType=DOUBLE},
+            #{otherCost1,jdbcType=DOUBLE}, #{otherCost1Note}, #{otherCost2,jdbcType=DOUBLE}, #{otherCost2Note},
+            #{otherCost3,jdbcType=DOUBLE}, #{otherCost3Note}, #{otherCost4,jdbcType=DOUBLE}, #{otherCost4Note},
+            #{currentPrice,jdbcType=DOUBLE}, #{totalPrice,jdbcType=DOUBLE}, #{note}, #{status}, #{createdAt}
+        )
+    </insert>
+
+    <!-- 상태·작성 시각은 바꾸지 않는다 -->
+    <update id="updateQuote" parameterType="egovframework.let.sa.quote.domain.model.QuoteVO">
+        UPDATE quotes
+        SET product_name = #{productName},
+            spec = #{spec},
+            product_type = #{productType},
+            storage = #{storage},
+            client_code = #{clientCode, jdbcType=VARCHAR},
+            bom_json = #{bomJson},
+            material_cost = #{materialCost,jdbcType=DOUBLE},
+            loss_rate = #{lossRate,jdbcType=DOUBLE},
+            loss_cost = #{lossCost,jdbcType=DOUBLE},
+            markup_rate = #{markupRate,jdbcType=DOUBLE},
+            markup_cost = #{markupCost,jdbcType=DOUBLE},
+            labor_cost = #{laborCost,jdbcType=DOUBLE},
+            packaging_cost = #{packagingCost,jdbcType=DOUBLE},
+            logistics_cost = #{logisticsCost,jdbcType=DOUBLE},
+            margin = #{margin,jdbcType=DOUBLE},
+            other_cost1 = #{otherCost1,jdbcType=DOUBLE},
+            other_cost1_note = #{otherCost1Note},
+            other_cost2 = #{otherCost2,jdbcType=DOUBLE},
+            other_cost2_note = #{otherCost2Note},
+            other_cost3 = #{otherCost3,jdbcType=DOUBLE},
+            other_cost3_note = #{otherCost3Note},
+            other_cost4 = #{otherCost4,jdbcType=DOUBLE},
+            other_cost4_note = #{otherCost4Note},
+            current_price = #{currentPrice,jdbcType=DOUBLE},
+            total_price = #{totalPrice,jdbcType=DOUBLE},
+            note = #{note}
+        WHERE quote_id = #{quoteId}
+    </update>
+
+    <delete id="deleteQuote" parameterType="long">
+        DELETE FROM quotes
+        WHERE quote_id = #{quoteId}
+    </delete>
+</mapper>

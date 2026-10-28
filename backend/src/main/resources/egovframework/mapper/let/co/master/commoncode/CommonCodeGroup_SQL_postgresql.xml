@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="CommonCodeGroupDAO">
+
+    <resultMap id="groupMap" type="egovframework.let.co.master.commoncode.domain.model.CommonCodeGroupVO">
+        <result property="commonCodeGroupId" column="common_code_group_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="groupCode" column="group_code"/>
+        <result property="groupNm" column="group_nm"/>
+        <result property="groupDc" column="group_dc"/>
+        <result property="parentGroupId" column="parent_group_id"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="useAt" column="use_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectGroupList" parameterType="map" resultMap="groupMap">
+        SELECT
+            g.common_code_group_id,
+            g.tenant_id,
+            g.group_code,
+            g.group_nm,
+            g.group_dc,
+            g.parent_group_id,
+            g.sort_order,
+            g.use_at,
+            g.created_at,
+            g.updated_at
+        FROM tb_common_code_group g
+                WHERE g.tenant_id = #{tenantId}
+                <if test='keyword != null and keyword != ""'>
+                    AND (
+                        LOWER(COALESCE(g.group_code, '')) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+                        OR LOWER(COALESCE(g.group_nm, '')) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+                        OR LOWER(COALESCE(g.group_dc, '')) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+                    )
+                </if>
+                <if test='groupCode != null and groupCode != ""'>
+                    AND LOWER(COALESCE(g.group_code, '')) LIKE LOWER(CONCAT('%', #{groupCode}, '%'))
+                </if>
+                <if test='groupNm != null and groupNm != ""'>
+                    AND LOWER(COALESCE(g.group_nm, '')) LIKE LOWER(CONCAT('%', #{groupNm}, '%'))
+                </if>
+                <if test='groupDc != null and groupDc != ""'>
+                    AND LOWER(COALESCE(g.group_dc, '')) LIKE LOWER(CONCAT('%', #{groupDc}, '%'))
+                </if>
+        ORDER BY g.common_code_group_id ASC 
+               , g.parent_group_id NULLS FIRST
+               , g.sort_order ASC
+    </select>
+
+    <select id="selectGroupById" parameterType="map" resultMap="groupMap">
+        SELECT
+            g.common_code_group_id,
+            g.tenant_id,
+            g.group_code,
+            g.group_nm,
+            g.group_dc,
+            g.parent_group_id,
+            g.sort_order,
+            g.use_at,
+            g.created_at,
+            g.updated_at
+        FROM tb_common_code_group g
+        WHERE g.common_code_group_id = #{groupId}
+          AND g.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectGroupIdByCode" parameterType="map" resultType="long">
+        SELECT g.common_code_group_id
+        FROM tb_common_code_group g
+        WHERE g.tenant_id = #{tenantId}
+          AND g.group_code = #{groupCode}
+        LIMIT 1
+    </select>
+
+    <select id="insertGroup" parameterType="map" resultType="long">
+        INSERT INTO tb_common_code_group (
+            tenant_id,
+            group_code,
+            group_nm,
+            group_dc,
+            parent_group_id,
+            sort_order,
+            use_at,
+            created_by,
+            updated_by
+        ) VALUES (
+            #{tenantId},
+            #{groupCode},
+            #{groupNm},
+            #{groupDc},
+            #{parentGroupId, jdbcType=BIGINT},
+            #{sortOrder},
+            #{useAt},
+            NULL,
+            NULL
+        )
+        RETURNING common_code_group_id
+    </select>
+
+    <update id="updateGroup" parameterType="map">
+        UPDATE tb_common_code_group
+        SET group_code = #{groupCode},
+            group_nm = #{groupNm},
+            group_dc = #{groupDc},
+            parent_group_id = #{parentGroupId, jdbcType=BIGINT},
+            sort_order = #{sortOrder},
+            use_at = #{useAt},
+            updated_at = now(),
+            updated_by = NULL
+        WHERE common_code_group_id = #{groupId}
+          AND tenant_id = #{tenantId}
+    </update>
+
+    <delete id="deleteGroup" parameterType="map">
+        DELETE FROM tb_common_code_group
+        WHERE common_code_group_id = #{groupId}
+          AND tenant_id = #{tenantId}
+    </delete>
+
+    <select id="countChildGroups" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_common_code_group
+        WHERE parent_group_id = #{groupId}
+          AND tenant_id = #{tenantId}
+    </select>
+
+    <select id="countItemsByGroupId" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_common_code_item
+        WHERE group_id = #{groupId}
+          AND tenant_id = #{tenantId}
+    </select>
+</mapper>

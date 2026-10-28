@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통 재고 원장 (송연 InventoryService, 기존 common.py move_product_stock · app.py move_material_stock · apply_film_pouch_usage).
+     생산입고·출하확정·재고조정이 함께 쓴다 -->
+<mapper namespace="InventoryDAO">
+
+    <select id="selectProduct" parameterType="string" resultType="egovframework.let.common.inventory.domain.model.InventoryItemVO">
+        SELECT name AS "name", spec AS "spec", COALESCE(stock_qty, 0) AS "stockQty"
+        FROM products
+        WHERE code = #{code}
+    </select>
+
+    <update id="updateProductStock" parameterType="map">
+        UPDATE products
+        SET stock_qty = #{stockQty,jdbcType=DOUBLE}
+        WHERE code = #{code}
+    </update>
+
+    <!-- 2026-10-26 거래처는 거래처코드(client_code), 누가는 사번(created_by)으로 저장한다. 부르는 쪽은 거래처명을 주므로 여기서 코드로 바꾼다 -->
+    <insert id="insertProductMovement" parameterType="egovframework.let.common.inventory.domain.model.ProductStockMovementVO">
+        INSERT INTO product_stock_movement (
+            product_code, product_name, moved_on, kind, qty, balance_after,
+            source_table, source_id, client_code, note, created_by, created_at
+        ) VALUES (
+            #{productCode}, #{productName}, #{movedOn}, #{kind}, #{qty,jdbcType=DOUBLE}, #{balanceAfter,jdbcType=DOUBLE},
+            #{sourceTable}, #{sourceId,jdbcType=INTEGER},
+            (SELECT c.client_code FROM clients c WHERE c.name = #{clientName} AND NULLIF(c.client_code, '') IS NOT NULL ORDER BY c.client_code LIMIT 1),
+            #{note}, #{createdBy}, #{createdAt}
+        )
+    </insert>
+
+    <select id="selectMaterialName" parameterType="string" resultType="string">
+        SELECT name
+        FROM materials
+        WHERE code = #{code}
+    </select>
+
+    <update id="addMaterialStock" parameterType="map">
+        UPDATE materials
+        SET stock_qty = COALESCE(stock_qty, 0) + #{delta,jdbcType=DOUBLE}
+        WHERE code = #{code}
+    </update>
+
+    <insert id="insertMaterialMovement" parameterType="egovframework.let.common.inventory.domain.model.MaterialStockMovementVO">
+        INSERT INTO material_stock_movement (material_code, material_name, in_qty, out_qty, note, created_at)
+        VALUES (#{materialCode}, #{materialName}, #{inQty,jdbcType=DOUBLE}, #{outQty,jdbcType=DOUBLE}, #{note}, #{createdAt})
+    </insert>
+
+    <!-- 제품에 연결된 부자재(필름·파우치·박스)와 한 봉 내용량 -->
+    <select id="selectSubMaterials" parameterType="string" resultType="egovframework.let.common.inventory.domain.model.InventoryItemVO">
+        SELECT
+            pouch_net_weight_kg AS "pouchNetWeightKg",
+            pouch_length_m AS "pouchLengthM",
+            pouch_per_unit AS "pouchPerUnit",
+            film_material_code AS "filmMaterialCode",
+            pouch_material_code AS "pouchMaterialCode",
+            box_material_code AS "boxMaterialCode"
+        FROM products
+        WHERE code = #{code}
+    </select>
+</mapper>

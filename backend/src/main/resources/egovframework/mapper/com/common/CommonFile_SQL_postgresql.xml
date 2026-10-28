@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="CommonFileDAO">
+
+    <resultMap id="commonFileMap" type="egovframework.com.common.domain.model.CommonFileVO">
+        <id property="fileId" column="file_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="ownerType" column="owner_type"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="filePath" column="file_path"/>
+        <result property="objectKey" column="object_key"/>
+        <result property="bucketName" column="bucket_name"/>
+        <result property="storageProvider" column="storage_provider"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="mimeType" column="mime_type"/>
+        <result property="contentType" column="content_type"/>
+        <result property="fileUsageType" column="file_usage_type"/>
+        <result property="uploadedBy" column="uploaded_by"/>
+        <result property="deletedYn" column="deleted_yn"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectCommonFileList" parameterType="map" resultMap="commonFileMap">
+        SELECT
+            file_id,
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = #{ownerType}
+          AND owner_id = #{ownerId}
+          AND deleted_yn = 'N'
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectCommonFileListByOwnerIds" parameterType="map" resultMap="commonFileMap">
+        SELECT
+            file_id,
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = #{ownerType}
+          AND owner_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+          AND deleted_yn = 'N'
+        ORDER BY owner_id, created_at DESC
+    </select>
+
+    <select id="selectCommonFileById" parameterType="map" resultMap="commonFileMap">
+        SELECT
+            file_id,
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND deleted_yn = 'N'
+    </select>
+
+    <select id="selectCommonFileByIdExcludingApproval" parameterType="map" resultMap="commonFileMap">
+        SELECT
+            file_id,
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND deleted_yn = 'N'
+          AND COALESCE(UPPER(owner_type), '') NOT IN ('APPROVAL', 'APPROVAL_COMMENT')
+    </select>
+
+    <select id="selectCommonFileByIdAndOwner" parameterType="map" resultMap="commonFileMap">
+        SELECT
+            file_id,
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND owner_type = #{ownerType}
+          AND owner_id = #{ownerId}
+          AND deleted_yn = 'N'
+    </select>
+
+    <select id="insertCommonFile" parameterType="map" resultType="long">
+        INSERT INTO tb_common_file (
+            tenant_id,
+            owner_type,
+            owner_id,
+            file_name,
+            file_path,
+            object_key,
+            bucket_name,
+            storage_provider,
+            file_size,
+            mime_type,
+            checksum_sha256,
+            content_type,
+            file_usage_type,
+            uploaded_by,
+            deleted_yn,
+            created_at,
+            updated_at
+        ) VALUES (
+            #{tenantId},
+            #{ownerType},
+            #{ownerId},
+            #{fileName},
+            #{filePath},
+            #{objectKey},
+            #{bucketName},
+            #{storageProvider},
+            #{fileSize},
+            #{mimeType},
+            #{checksumSha256},
+            #{contentType},
+            COALESCE(#{fileUsageType}, 'ATTACHMENT'),
+            #{uploadedBy},
+            #{deletedYn},
+            CURRENT_TIMESTAMP,
+            CURRENT_TIMESTAMP
+        )
+        RETURNING file_id
+    </select>
+
+    <update id="updateCommonFile" parameterType="map">
+        UPDATE tb_common_file
+        SET file_name = #{fileName},
+            file_path = #{filePath},
+            mime_type = #{mimeType},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="softDeleteCommonFileExcludingApproval" parameterType="map">
+        UPDATE tb_common_file
+        SET deleted_yn = 'Y',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND COALESCE(UPPER(owner_type), '') NOT IN ('APPROVAL', 'APPROVAL_COMMENT')
+    </update>
+
+    <update id="softDeleteCommonFileByOwner" parameterType="map">
+        UPDATE tb_common_file
+        SET deleted_yn = 'Y',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND file_id = #{fileId}
+          AND owner_type = #{ownerType}
+          AND owner_id = #{ownerId}
+    </update>
+</mapper>

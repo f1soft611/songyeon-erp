@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 발주관리 (송연 app.py /api/materials/purchase-order · /bulk · DELETE) -->
+<mapper namespace="PurchaseOrderDAO">
+
+    <!-- 발주내역(발주일 하나)·발주현황(기간)이 같은 SQL 을 쓴다 — 따로 두면 같은 기간을 두고 두 탭이 다른 건수를 말하게 된다.
+         거래처·원재료명은 일부만 적어도 찾는다(대소문자 무시). received: 0 이면 미입고만, 1 이면 입고완료만 -->
+    <select id="selectOrders" parameterType="map" resultType="egovframework.let.pu.order.domain.model.PurchaseOrderVO">
+        SELECT
+            po.id AS "id",
+            po.material_code AS "materialCode",
+            po.material_name AS "materialName",
+            po.qty AS "qty",
+            po.order_date AS "orderDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = po.client_code LIMIT 1) AS "clientName", <!-- 2026-10-26 거래처코드로 저장, 화면에는 거래처마스터 이름 -->
+            po.client_code AS "clientCode",
+            EXISTS (SELECT 1 FROM material_receiving r WHERE r.po_id = po.id) AS "received"
+        FROM material_purchase_order po
+        <where>
+            <if test="date != null">
+                po.order_date = #{date}
+            </if>
+            <if test="start != null and end != null">
+                AND po.order_date BETWEEN #{start} AND #{end}
+            </if>
+            <if test="clientQ != null">
+                AND (SELECT cln.name FROM clients cln WHERE cln.client_code = po.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'
+            </if>
+            <if test="materialQ != null">
+                AND po.material_name ILIKE '%' || #{materialQ} || '%'
+            </if>
+            <if test='received == "0"'>
+                AND NOT EXISTS (SELECT 1 FROM material_receiving r WHERE r.po_id = po.id)
+            </if>
+            <if test='received == "1"'>
+                AND EXISTS (SELECT 1 FROM material_receiving r WHERE r.po_id = po.id)
+            </if>
+        </where>
+        ORDER BY po.order_date DESC, po.id DESC
+    </select>
+
+    <!-- 2026-10-26 발주는 사용 중인 원재료만(발주 창 품목 목록과 같은 기준) -->
+    <select id="selectMaterialName" parameterType="string" resultType="string">
+        SELECT name FROM materials WHERE code = #{code} AND use_yn = 'Y'
+    </select>
+
+    <!-- 2026-10-26 발주 거래처는 거래처마스터의 사용 중인 매입 거래처만(발주 창 거래처 목록과 같은 기준). 이름 → 거래처코드 -->
+    <select id="selectVendorCodeByName" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE name = #{name}
+          AND client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매입%'
+          )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND client_code IS NOT NULL
+          AND client_code != ''
+        ORDER BY client_code
+        LIMIT 1
+    </select>
+
+    <insert id="insertOrder" parameterType="egovframework.let.pu.order.domain.model.PurchaseOrderVO">
+        INSERT INTO material_purchase_order (
+            material_code, material_name, qty, order_date, created_at, client_code, source, need_date
+        ) VALUES (
+            #{materialCode}, #{materialName}, #{qty, jdbcType=DOUBLE}, #{orderDate}, #{createdAt}, #{clientCode}, #{source}, #{needDate}
+        )
+    </insert>
+
+    <select id="countReceiving" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM material_receiving WHERE po_id = #{id}
+    </select>
+
+    <delete id="deleteOrder" parameterType="long">
+        DELETE FROM material_purchase_order WHERE id = #{id}
+    </delete>
+</mapper>

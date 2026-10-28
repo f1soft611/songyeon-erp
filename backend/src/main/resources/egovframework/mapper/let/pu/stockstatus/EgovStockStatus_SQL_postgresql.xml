@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 재고현황 (송연 app.py /api/materials/{code}/lots). 조회만 한다.
+     기준일 재고는 수불대장과 같은 계산(StockLedgerService.stockAsOf)을 쓴다. -->
+<mapper namespace="StockStatusDAO">
+
+    <!-- 그 날짜까지 들어온 이 원재료의 입고 건(=로트). 반품 줄은 빼고, 기준일까지 반품된 양을 함께 -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectLots" parameterType="map" resultType="egovframework.let.pu.stockstatus.domain.model.MaterialLotVO">
+        SELECT
+            r.id AS "id",
+            r.barcode AS "barcode",
+            r.receive_date AS "receiveDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = r.client_code LIMIT 1) AS "clientName",
+            r.qty AS "qty",
+            r.unit_price AS "unitPrice",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'TAX_CATEGORY' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = r.tax_type LIMIT 1), r.tax_type) AS "taxType",
+            COALESCE(r.is_return, 0) AS "isReturn",
+            r.return_reason AS "returnReason",
+            r.return_of_id AS "returnOfId",
+            (SELECT COALESCE(SUM(ABS(r2.qty)), 0)
+               FROM material_receiving r2
+              WHERE r2.return_of_id = r.id AND r2.receive_date &lt;= #{date}) AS "returnedQty"
+        FROM material_receiving r
+        WHERE r.material_code = #{code}
+          AND r.receive_date &lt;= #{date}
+          AND COALESCE(r.is_return, 0) = 0
+        ORDER BY r.receive_date DESC, r.id DESC
+    </select>
+</mapper>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 세금계산서 (송연 app.py /api/tax-invoice/*, accounting.py /api/accounting/sales-by-client). 조회만 한다.
+     거래처 이름은 일부만 적어도 한 곳으로 정해지면 그 이름으로 찾는다(송연 _resolve_single_client). -->
+<mapper namespace="TaxInvoiceDAO">
+
+    <select id="selectExactClient" parameterType="string" resultType="string">
+        SELECT name FROM clients WHERE name = #{name} LIMIT 1
+    </select>
+
+    <!-- 송연 SQLite LIKE 는 영문 대소문자를 가리지 않는다 -->
+    <select id="selectClientsLike" parameterType="string" resultType="string">
+        SELECT DISTINCT name COLLATE "C" AS name FROM clients WHERE name ILIKE '%' || #{name} || '%' ORDER BY 1
+    </select>
+</mapper>

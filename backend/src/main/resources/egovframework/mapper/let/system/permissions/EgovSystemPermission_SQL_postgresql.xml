@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SystemPermissionDAO">
+
+    <resultMap id="permission" type="egovframework.let.system.permissions.domain.model.SystemPermissionVO">
+        <result property="permissionId" column="permission_id"/>
+        <result property="permissionCode" column="permission_code"/>
+        <result property="permissionName" column="permission_nm"/>
+        <result property="sortOrder" column="sort_order"/>
+    </resultMap>
+
+    <select id="selectActivePermissionList" resultMap="permission">
+        SELECT
+            permission_id,
+            permission_code,
+            permission_nm,
+            sort_order
+        FROM tb_permission
+        WHERE use_at = 'Y'
+        ORDER BY
+            sort_order ASC,
+            permission_id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 상품개발 - 레시피 작성 (송연 recipe.py 의 업체 폴더 · 레시피 · 버전 · 배합표 · 공유로그).
+     넘기기(recipe_handoffs)와 공유(recipe_shares)는 레시피 검색·공유 화면 몫이라 여기서는 읽기만 한다. -->
+<mapper namespace="RecipeDAO">
+
+    <!-- 업체 폴더: 폴더 줄과 레시피에 적힌 업체명을 둘 다 모은다
+         (폴더만 만들고 레시피가 없는 업체도, 폴더 줄 없이 레시피부터 생긴 업체도 보여야 한다) -->
+    <select id="selectClients" resultType="egovframework.let.rd.recipe.domain.model.RecipeClientVO">
+        SELECT names.client_name AS "clientName", rc.sales_emp_id AS "salesEmpId", e.name AS "salesEmpName",
+               e.department AS "salesEmpDepartment",
+               (SELECT COUNT(*) FROM recipe_drafts d WHERE d.client_name = names.client_name) AS "recipeCount"
+        FROM (
+            SELECT client_name FROM recipe_clients WHERE client_name IS NOT NULL AND client_name &lt;&gt; ''
+            UNION
+            SELECT DISTINCT client_name FROM recipe_drafts WHERE client_name IS NOT NULL AND client_name &lt;&gt; ''
+        ) names
+        LEFT JOIN recipe_clients rc ON rc.client_name = names.client_name
+        LEFT JOIN employees e ON e.id = rc.sales_emp_id
+        ORDER BY names.client_name
+    </select>
+
+    <select id="countEmployee" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM employees WHERE id = #{id}
+    </select>
+
+    <select id="selectClientId" parameterType="string" resultType="long">
+        SELECT id FROM recipe_clients WHERE client_name = #{clientName}
+    </select>
+
+    <update id="updateClientRep" parameterType="map">
+        UPDATE recipe_clients SET sales_emp_id = #{salesEmpId, jdbcType=VARCHAR}, updated_at = #{now} WHERE id = #{id}
+    </update>
+
+    <insert id="insertClient" parameterType="map">
+        INSERT INTO recipe_clients (client_name, sales_emp_id, created_by, created_at, updated_at)
+        VALUES (#{clientName}, #{salesEmpId, jdbcType=VARCHAR}, #{createdBy, jdbcType=VARCHAR}, #{now}, #{updatedAt, jdbcType=VARCHAR})
+        ON CONFLICT (client_name) DO NOTHING
+    </insert>
+
+    <select id="selectSalesReps" resultType="egovframework.let.rd.recipe.domain.model.RecipeSalesRepVO">
+        SELECT id AS "id", name AS "name", department AS "department" FROM employees ORDER BY department NULLS FIRST, name
+    </select>
+
+    <!-- 레시피 목록. clientName 은 '딱 이 업체'(폴더 — '태화' 폴더에 '태화분식' 것이 섞이면 안 된다), clientQ 는 '이 글자가 들어간 업체'(검색) -->
+    <sql id="draftFilter">
+        <if test="clientName != null and clientName != ''">AND d.client_name = #{clientName}</if>
+        <if test="clientQ != null and clientQ != ''">AND d.client_name ILIKE '%' || #{clientQ} || '%'</if>
+        <if test="q != null and q != ''">AND (d.name ILIKE '%' || #{q} || '%' OR d.client_name ILIKE '%' || #{q} || '%')</if>
+        <if test="category != null and category != ''">AND d.category ILIKE '%' || #{category} || '%'</if>
+        <if test="saleType != null and saleType != ''">AND d.sale_type ILIKE '%' || #{saleType} || '%'</if>
+    </sql>
+
+    <select id="selectDrafts" parameterType="map" resultType="egovframework.let.rd.recipe.domain.model.RecipeDraftVO">
+        SELECT d.id AS "id", d.client_name AS "clientName", d.name AS "name", d.spec AS "spec", d.note AS "note",
+               d.category AS "category", d.sale_type AS "saleType", d.updated_at AS "updatedAt",
+               (SELECT COUNT(*) FROM recipe_versions v WHERE v.draft_id = d.id) AS "versionCount",
+               (SELECT v2.id FROM recipe_versions v2 WHERE v2.draft_id = d.id ORDER BY v2.id DESC LIMIT 1) AS "latestVersionId",
+               (SELECT COUNT(*) FROM recipe_version_bom b WHERE b.version_id =
+                   (SELECT v3.id FROM recipe_versions v3 WHERE v3.draft_id = d.id ORDER BY v3.id DESC LIMIT 1)) AS "materialCount",
+               (SELECT string_agg(DISTINCT v4.stage, ',') FROM recipe_versions v4 WHERE v4.draft_id = d.id AND v4.stage IS NOT NULL) AS "stages",
+               (SELECT string_agg(DISTINCT h.kind, ',') FROM recipe_handoffs h WHERE h.draft_id = d.id) AS "handoffKinds"
+        FROM recipe_drafts d
+        WHERE 1 = 1
+        <include refid="draftFilter"/>
+        ORDER BY d.updated_at DESC
+    </select>
+
+    <!-- 특정 분류(신규확정·견적공유·기타공유)로 잠긴 '버전' 단위 -->
+    <select id="selectDraftsByStage" parameterType="map" resultType="egovframework.let.rd.recipe.domain.model.RecipeDraftVO">
+        SELECT v.id AS "versionId", v.version_label AS "versionLabel", v.stage AS "stage", v.created_at AS "versionUpdatedAt",
+               d.id AS "id", d.client_name AS "clientName", d.name AS "name", d.spec AS "spec", d.note AS "note",
+               d.category AS "category", d.sale_type AS "saleType", d.updated_at AS "updatedAt",
+               (SELECT COUNT(*) FROM recipe_versions v2 WHERE v2.draft_id = d.id) AS "versionCount",
+               (SELECT COUNT(*) FROM recipe_version_bom b WHERE b.version_id = v.id) AS "materialCount",
+               v.id AS "latestVersionId"
+        FROM recipe_versions v
+        JOIN recipe_drafts d ON d.id = v.draft_id
+        WHERE v.stage = #{stage}
+        <include refid="draftFilter"/>
+        ORDER BY v.created_at DESC
+    </select>
+
+    <select id="selectDraft" parameterType="long" resultType="egovframework.let.rd.recipe.domain.model.RecipeDraftVO">
+        SELECT id AS "id", client_name AS "clientName", name AS "name", spec AS "spec", note AS "note",
+               category AS "category", sale_type AS "saleType", remark AS "remark"
+        FROM recipe_drafts WHERE id = #{id}
+    </select>
+
+    <!-- 버전마다 어디로 넘겼는지(여러 곳일 수 있다). stage 칸은 하나뿐이라 먼저 붙은 것만 남기 때문 -->
+    <select id="selectVersions" parameterType="long" resultType="egovframework.let.rd.recipe.domain.model.RecipeVersionVO">
+        SELECT v.id AS "id", v.version_label AS "versionLabel", v.note AS "note", v.stage AS "stage", v.created_at AS "createdAt",
+               (SELECT string_agg(DISTINCT h.kind, ',') FROM recipe_handoffs h WHERE h.version_id = v.id) AS "handoffKinds"
+        FROM recipe_versions v WHERE v.draft_id = #{draftId} ORDER BY v.id
+    </select>
+
+    <select id="selectVersion" parameterType="long" resultType="egovframework.let.rd.recipe.domain.model.RecipeVersionVO">
+        SELECT id AS "id", draft_id AS "draftId", version_label AS "versionLabel", note AS "note", stage AS "stage"
+        FROM recipe_versions WHERE id = #{id}
+    </select>
+
+    <!-- 코드가 적혀 있으면 원재료 표의 '지금 이름' (이름을 바꿨어도 화면이 바로 알아보게) -->
+    <select id="selectVersionBom" parameterType="long" resultType="egovframework.let.rd.recipe.domain.model.RecipeBomVO">
+        SELECT b.material_code AS "materialCode", COALESCE(m.name, b.material_name) AS "materialName", b.weight AS "weight",
+               b.ratio_percent AS "ratioPercent", b.unit_price_per_kg AS "unitPricePerKg", b.amount_per_kg AS "amountPerKg"
+        FROM recipe_version_bom b LEFT JOIN materials m ON m.code = b.material_code
+        WHERE b.version_id = #{versionId}
+        ORDER BY b.rank_in_version
+    </select>
+
+    <!-- 이 버전이 원래 물고 있던 원재료코드(이름 → 코드). 저장 한 번에 딴 물건으로 갈아타지 않게 -->
+    <select id="selectOldBomCodes" parameterType="long" resultType="map">
+        SELECT material_name AS "name", material_code AS "code"
+        FROM recipe_version_bom WHERE version_id = #{versionId} ORDER BY id
+    </select>
+
+    <!-- 원재료 찾기(송연 common.find_material): 코드와 이름이 맞으면 그것, 아니면 그 이름의 코드 작은 것 -->
+    <select id="selectMaterialByCodeAndName" parameterType="map" resultType="map">
+        SELECT code AS "code", unit_price AS "unitPrice" FROM materials WHERE code = #{code} AND name = #{name} LIMIT 1
+    </select>
+
+    <select id="selectMaterialByName" parameterType="string" resultType="map">
+        SELECT code AS "code", unit_price AS "unitPrice" FROM materials WHERE name = #{name} ORDER BY code LIMIT 1
+    </select>
+
+    <delete id="deleteVersionBom" parameterType="long">
+        DELETE FROM recipe_version_bom WHERE version_id = #{versionId}
+    </delete>
+
+    <insert id="insertBom" parameterType="map">
+        INSERT INTO recipe_version_bom (version_id, material_code, material_name, weight, ratio_percent, unit_price_per_kg, amount_per_kg, rank_in_version)
+        VALUES (#{versionId}, #{materialCode, jdbcType=VARCHAR}, #{materialName}, #{weight, jdbcType=DOUBLE}, #{ratio, jdbcType=DOUBLE},
+                #{unitPrice, jdbcType=DOUBLE}, #{amount, jdbcType=DOUBLE}, #{rank})
+    </insert>
+
+    <!-- 새 버전: 최신 버전의 배합표를 그대로 베낀다 -->
+    <insert id="copyBom" parameterType="map">
+        INSERT INTO recipe_version_bom (version_id, material_code, material_name, weight, ratio_percent, unit_price_per_kg, amount_per_kg, rank_in_version)
+        SELECT #{toId}, material_code, material_name, weight, ratio_percent, unit_price_per_kg, amount_per_kg, rank_in_version
+        FROM recipe_version_bom WHERE version_id = #{fromId} ORDER BY rank_in_version
+    </insert>
+
+    <insert id="insertDraft" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO recipe_drafts (client_name, name, spec, note, category, sale_type, remark, created_by, created_at, updated_at)
+        VALUES (#{clientName}, #{name}, #{spec, jdbcType=VARCHAR}, #{note, jdbcType=VARCHAR}, #{category, jdbcType=VARCHAR},
+                #{saleType, jdbcType=VARCHAR}, #{remark, jdbcType=VARCHAR}, #{createdBy, jdbcType=VARCHAR}, #{now}, #{now})
+    </insert>
+
+    <insert id="insertVersion" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO recipe_versions (draft_id, version_label, note, stage, created_at)
+        VALUES (#{draftId}, #{versionLabel}, #{note, jdbcType=VARCHAR}, NULL, #{now})
+    </insert>
+
+    <update id="updateDraft" parameterType="map">
+        UPDATE recipe_drafts
+           SET name = #{name}, spec = #{spec, jdbcType=VARCHAR}, note = #{note, jdbcType=VARCHAR}, category = #{category, jdbcType=VARCHAR},
+               sale_type = #{saleType, jdbcType=VARCHAR}, remark = #{remark, jdbcType=VARCHAR}, updated_at = #{now}
+         WHERE id = #{id}
+    </update>
+
+    <update id="touchDraft" parameterType="map">
+        UPDATE recipe_drafts SET updated_at = #{now} WHERE id = #{id}
+    </update>
+
+    <update id="updateVersionNote" parameterType="map">
+        UPDATE recipe_versions SET note = #{note, jdbcType=VARCHAR} WHERE id = #{id}
+    </update>
+
+    <select id="selectVersionLabels" parameterType="long" resultType="map">
+        SELECT id AS "id", version_label AS "versionLabel" FROM recipe_versions WHERE draft_id = #{draftId} ORDER BY id
+    </select>
+
+    <!-- 레시피 지우기: 버전 · 배합표 · 공유 · 공유로그까지 -->
+    <delete id="deleteDraftBoms" parameterType="long">
+        DELETE FROM recipe_version_bom WHERE version_id IN (SELECT id FROM recipe_versions WHERE draft_id = #{draftId})
+    </delete>
+    <delete id="deleteDraftVersions" parameterType="long">
+        DELETE FROM recipe_versions WHERE draft_id = #{draftId}
+    </delete>
+    <delete id="deleteDraftShares" parameterType="long">
+        DELETE FROM recipe_shares WHERE draft_id = #{draftId}
+    </delete>
+    <delete id="deleteDraftStageLogs" parameterType="long">
+        DELETE FROM recipe_stage_logs WHERE draft_id = #{draftId}
+    </delete>
+    <delete id="deleteDraft" parameterType="long">
+        DELETE FROM recipe_drafts WHERE id = #{draftId}
+    </delete>
+
+    <select id="selectStageLogs" parameterType="long" resultType="egovframework.let.rd.recipe.domain.model.RecipeStageLogVO">
+        SELECT version_label AS "versionLabel", stage AS "stage", employee_name AS "employeeName", created_at AS "createdAt"
+        FROM recipe_stage_logs WHERE draft_id = #{draftId} ORDER BY created_at DESC
+    </select>
+</mapper>

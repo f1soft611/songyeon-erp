@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="CmmUseDAO">
+
+    <resultMap id="CmmCodeDetail" type="egovframework.com.cmm.service.CmmnDetailCode">
+        <result property="codeId" column="code_id"/>
+        <result property="code" column="code"/>
+        <result property="codeNm" column="code_nm"/>
+        <result property="codeDc" column="code_dc"/>
+    </resultMap>
+
+    <select id="selectCmmCodeDetail" parameterType="ComDefaultCodeVO" resultMap="CmmCodeDetail">
+        SELECT
+            code_id, code, code_nm, code_dc
+        FROM
+            TB_CommonCode
+        WHERE
+            use_at = 'Y'
+          AND code_id = #{codeId}
+    </select>
+
+    <select id="selectOgrnztIdDetail" parameterType="ComDefaultCodeVO" resultMap="CmmCodeDetail">
+        SELECT
+            #{tableNm} AS code_id,
+            orgnzt_id AS code,
+            orgnzt_nm AS code_nm,
+            orgnzt_dc AS code_dc
+        FROM
+            TB_OrganizationInfo
+        WHERE 1=1
+        <if test="haveDetailCondition == 'Y'">
+            AND orgnzt_id ILIKE '%' || #{detailConditionValue} || '%'
+        </if>
+    </select>
+
+    <select id="selectGroupIdDetail" parameterType="ComDefaultCodeVO" resultMap="CmmCodeDetail">
+        SELECT
+            #{tableNm} AS code_id,
+            department_code AS code,
+            department_nm || '(' || COALESCE(department_dc, '') || ')' AS code_nm,
+            department_dc AS code_dc
+        FROM
+            tb_department
+        WHERE 1=1
+    </select>
+</mapper>

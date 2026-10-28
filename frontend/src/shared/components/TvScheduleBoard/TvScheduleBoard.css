@@ -1,0 +1,60 @@
+/* 현장 TV 화면(기존 templates/tv_production.html). 작업장 TV 에 띄워두는 화면이라
+   밝게/어둡게 설정과 상관없이 늘 어두운 바탕이다 — 색을 변수로 빼지 않고 그대로 둔다. */
+.tv-screen { position: fixed; inset: 0; overflow: hidden; background: #0F1A16; color: #fff;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; }
+.tv-accent-bar { position: fixed; top: 0; right: 0; left: 0; z-index: 99; height: 6px; background: #2A9D6F; }
+
+.tv-cols { display: flex; height: 100%; }
+.tv-col { display: flex; flex: 1; flex-direction: column; min-width: 0; border-right: 2px solid #16241F; }
+.tv-col:last-child { border-right: none; }
+.tv-col.today { background: #122019; }
+
+.tv-col-header { padding: 16px 20px 10px; }
+.tv-col-date { font-size: 26px; font-weight: 800; vertical-align: middle; }
+.tv-col.today .tv-col-date { color: #F4C464; }
+.tv-col-stats { margin-top: 6px; color: #7FD8B8; font-family: 'Consolas', monospace; font-size: 22px; font-weight: 800; }
+
+/* 날짜 바꾸기·새로고침 단추(오늘 칸에만) */
+.tv-icon-btn { position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; margin-left: 8px; border: none; border-radius: 50%;
+  background: #16241F; color: #9FCFC0; font-size: 13px; vertical-align: middle; cursor: pointer; }
+.tv-icon-btn.spinning { animation: tv-spin .6s linear; }
+@keyframes tv-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.tv-icon-btn input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0;
+  border: none; opacity: 0; cursor: pointer; }
+
+.tv-col-table-wrap { flex: 1; padding: 0 20px 16px; overflow-x: hidden; overflow-y: auto; }
+.tv-col-table-wrap::-webkit-scrollbar { width: 6px; }
+.tv-col-table-wrap::-webkit-scrollbar-thumb { border-radius: 3px; background: #2A6F5C; }
+.tv-col-table-wrap::-webkit-scrollbar-track { background: transparent; }
+.tv-screen table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tv-screen td { padding: var(--row-pad-v, 8px) 10px; border-bottom: 1px solid #24352E; overflow: hidden;
+  font-size: var(--row-font, 16px); white-space: nowrap; text-overflow: ellipsis; vertical-align: top; }
+.tv-screen tr.alt td { background: #141F1A; }
+/* 줄 사이 굵은 선. 비고가 붙는 줄은 아래 선을 없애 한 덩어리로 보이게 한다 */
+.tv-entry-row td { border-top: var(--sep-width, 3px) solid #2A6F5C; }
+.tv-entry-row:first-child td { border-top: none; }
+.tv-entry-row.has-note td { padding-bottom: 0; border-bottom: none; }
+.tv-note-row td { padding-top: calc(var(--row-pad-v, 8px) * 0.4); border-top: none; }
+.tv-product { width: 64%; overflow: visible; font-weight: 600; line-height: 1.25; white-space: normal; text-overflow: clip; }
+.tv-product .tv-client { display: block; margin-bottom: 1px; color: #F4C464; font-size: 0.72em; font-weight: 800; }
+.tv-note-cell { background: transparent; }
+/* 비고는 멀리서도 보이게 흰 바탕에 빨간 글씨 */
+.tv-note-line { display: block; box-sizing: border-box; width: 100%; padding: calc(var(--row-pad-v, 8px) * 0.5) 10px;
+  border-radius: 4px; background: #fff; color: #C0392B; font-size: calc(var(--row-font, 16px) - 2px);
+  font-weight: 800; white-space: normal; word-break: break-word; }
+.tv-qty { width: 36%; font-family: 'Consolas', monospace; font-weight: 700; text-align: center; }
+.tv-empty { padding: 40px 10px; color: #5C7268; font-size: 14px; text-align: center; }
+
+/* 물류스케줄 TV 는 같은 모양에 색만 다르다(초록 → 파랑) */
+.tv-screen.logistics { background: #0E1826; }
+.tv-screen.logistics .tv-accent-bar { background: #3B7FC4; }
+.tv-screen.logistics .tv-col { border-right-color: #16222E; }
+.tv-screen.logistics .tv-col.today { background: #101E30; }
+.tv-screen.logistics .tv-col-stats { color: #6FA8E0; }
+.tv-screen.logistics .tv-icon-btn { background: #16222E; color: #9FC3E8; }
+.tv-screen.logistics .tv-col-table-wrap::-webkit-scrollbar-thumb { background: #2A5C8F; }
+.tv-screen.logistics td { border-bottom-color: #243040; }
+.tv-screen.logistics tr.alt td { background: #141B26; }
+.tv-screen.logistics .tv-entry-row td { border-top-color: #2A5C8F; }
+.tv-screen.logistics .tv-empty { color: #5C6E82; }

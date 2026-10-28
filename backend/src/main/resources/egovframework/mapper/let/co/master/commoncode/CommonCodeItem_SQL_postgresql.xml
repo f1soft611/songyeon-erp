@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="CommonCodeItemDAO">
+
+    <resultMap id="itemMap" type="egovframework.let.co.master.commoncode.domain.model.CommonCodeItemVO">
+        <result property="commonCodeItemId" column="common_code_item_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemNm" column="item_nm"/>
+        <result property="itemDc" column="item_dc"/>
+        <result property="parentItemId" column="parent_item_id"/>
+        <result property="parentItemNm" column="parent_item_nm"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="useAt" column="use_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectItemList" parameterType="map" resultMap="itemMap">
+        SELECT
+            i.common_code_item_id,
+            i.tenant_id,
+            i.group_id,
+            i.item_code,
+            i.item_nm,
+            i.item_dc,
+            i.parent_item_id,
+            p.item_nm AS parent_item_nm,
+            i.sort_order,
+            i.use_at,
+            i.created_at,
+            i.updated_at
+        FROM tb_common_code_item i
+        LEFT JOIN tb_common_code_item p
+          ON p.common_code_item_id = i.parent_item_id
+        WHERE i.tenant_id = #{tenantId}
+          AND i.group_id = #{groupId}
+        ORDER BY i.parent_item_id NULLS FIRST, i.sort_order ASC, i.common_code_item_id ASC
+    </select>
+
+    <select id="selectParentItemList" parameterType="map" resultMap="itemMap">
+        SELECT
+            i.common_code_item_id,
+            i.tenant_id,
+            i.group_id,
+            i.item_code,
+            i.item_nm,
+            i.item_dc,
+            i.parent_item_id,
+            NULL AS parent_item_nm,
+            i.sort_order,
+            i.use_at,
+            i.created_at,
+            i.updated_at
+        FROM tb_common_code_item i
+        WHERE i.tenant_id = #{tenantId}
+          AND i.group_id = #{parentGroupId}
+        ORDER BY i.sort_order ASC, i.common_code_item_id ASC
+    </select>
+
+    <select id="selectItemById" parameterType="map" resultMap="itemMap">
+        SELECT
+            i.common_code_item_id,
+            i.tenant_id,
+            i.group_id,
+            i.item_code,
+            i.item_nm,
+            i.item_dc,
+            i.parent_item_id,
+            p.item_nm AS parent_item_nm,
+            i.sort_order,
+            i.use_at,
+            i.created_at,
+            i.updated_at
+        FROM tb_common_code_item i
+        LEFT JOIN tb_common_code_item p
+          ON p.common_code_item_id = i.parent_item_id
+        WHERE i.common_code_item_id = #{itemId}
+          AND i.tenant_id = #{tenantId}
+          AND i.group_id = #{groupId}
+    </select>
+
+    <select id="selectItemIdByCode" parameterType="map" resultType="long">
+        SELECT i.common_code_item_id
+        FROM tb_common_code_item i
+        WHERE i.tenant_id = #{tenantId}
+          AND i.group_id = #{groupId}
+          AND i.item_code = #{itemCode}
+        LIMIT 1
+    </select>
+
+    <select id="insertItem" parameterType="map" resultType="long">
+        INSERT INTO tb_common_code_item (
+            tenant_id,
+            group_id,
+            item_code,
+            item_nm,
+            item_dc,
+            parent_item_id,
+            sort_order,
+            use_at,
+            created_by,
+            updated_by
+        ) VALUES (
+            #{tenantId},
+            #{groupId},
+            #{itemCode},
+            #{itemNm},
+            #{itemDc},
+            #{parentItemId, jdbcType=BIGINT},
+            #{sortOrder},
+            #{useAt},
+            NULL,
+            NULL
+        )
+        RETURNING common_code_item_id
+    </select>
+
+    <update id="updateItem" parameterType="map">
+        UPDATE tb_common_code_item
+        SET item_code = #{itemCode},
+            item_nm = #{itemNm},
+            item_dc = #{itemDc},
+            parent_item_id = #{parentItemId, jdbcType=BIGINT},
+            sort_order = #{sortOrder},
+            use_at = #{useAt},
+            updated_at = now(),
+            updated_by = NULL
+        WHERE common_code_item_id = #{itemId}
+          AND tenant_id = #{tenantId}
+          AND group_id = #{groupId}
+    </update>
+
+    <delete id="deleteItem" parameterType="map">
+        DELETE FROM tb_common_code_item
+        WHERE common_code_item_id = #{itemId}
+          AND tenant_id = #{tenantId}
+          AND group_id = #{groupId}
+    </delete>
+
+    <select id="countChildItems" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_common_code_item
+        WHERE parent_item_id = #{itemId}
+          AND tenant_id = #{tenantId}
+          AND group_id = #{groupId}
+    </select>
+</mapper>

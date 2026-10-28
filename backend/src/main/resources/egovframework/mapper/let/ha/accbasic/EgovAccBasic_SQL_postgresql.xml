@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 기초회계정보 (송연 accounting.py 의 계정과목 · 계좌 · 카드).
+     입금·출금을 적으려면 '어느 계정으로, 어느 계좌·카드에서' 가 먼저 있어야 해서 이 셋이 회계의 바닥이다.
+     정렬은 송연(SQLite)과 같이 sort_order 가 비면 앞(NULLS FIRST). -->
+<mapper namespace="AccBasicDAO">
+
+    <!-- ===== 계정과목 ===== -->
+    <select id="selectSubjects" resultType="egovframework.let.ha.accbasic.domain.model.AccSubjectVO">
+        SELECT id AS "id", code AS "code", name AS "name", category AS "category", direction AS "direction", note AS "note",
+               COALESCE(active, 1) AS "active", sort_order AS "sortOrder"
+        FROM acc_subject
+        ORDER BY sort_order NULLS FIRST, code NULLS FIRST, id
+    </select>
+
+    <!-- 같은 계정코드를 쓰는 다른 줄(고칠 때는 자기 자신 빼고) -->
+    <select id="countSubjectCode" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM acc_subject WHERE code = #{code} <if test="id != null">AND id &lt;&gt; #{id}</if>
+    </select>
+
+    <insert id="insertSubject" parameterType="map">
+        INSERT INTO acc_subject (code, name, category, direction, note, active, sort_order, created_at)
+        VALUES (#{code}, #{name}, #{category}, #{direction}, #{note, jdbcType=VARCHAR}, #{active},
+                (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM acc_subject), #{now})
+    </insert>
+
+    <update id="updateSubject" parameterType="map">
+        UPDATE acc_subject SET code = #{code}, name = #{name}, category = #{category}, direction = #{direction},
+               note = #{note, jdbcType=VARCHAR}, active = #{active}
+         WHERE id = #{id}
+    </update>
+
+    <delete id="deleteSubject" parameterType="long">
+        DELETE FROM acc_subject WHERE id = #{id}
+    </delete>
+
+    <!-- ===== 계좌 ===== -->
+    <select id="selectBankAccounts" resultType="egovframework.let.ha.accbasic.domain.model.AccBankAccountVO">
+        SELECT id AS "id", bank_name AS "bankName", account_no AS "accountNo", holder AS "holder", purpose AS "purpose", note AS "note",
+               COALESCE(active, 1) AS "active", sort_order AS "sortOrder"
+        FROM acc_bank_account
+        ORDER BY sort_order NULLS FIRST, id
+    </select>
+
+    <insert id="insertBankAccount" parameterType="map">
+        INSERT INTO acc_bank_account (bank_name, account_no, holder, purpose, note, active, sort_order, created_at)
+        VALUES (#{bankName}, #{accountNo}, #{holder, jdbcType=VARCHAR}, #{purpose, jdbcType=VARCHAR}, #{note, jdbcType=VARCHAR}, #{active},
+                (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM acc_bank_account), #{now})
+    </insert>
+
+    <update id="updateBankAccount" parameterType="map">
+        UPDATE acc_bank_account SET bank_name = #{bankName}, account_no = #{accountNo}, holder = #{holder, jdbcType=VARCHAR},
+               purpose = #{purpose, jdbcType=VARCHAR}, note = #{note, jdbcType=VARCHAR}, active = #{active}
+         WHERE id = #{id}
+    </update>
+
+    <!-- 이 계좌를 결제계좌로 쓰는 카드 수(지우기 전에 본다) -->
+    <select id="countCardsOfBank" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM acc_card WHERE bank_account_id = #{id}
+    </select>
+
+    <delete id="deleteBankAccount" parameterType="long">
+        DELETE FROM acc_bank_account WHERE id = #{id}
+    </delete>
+
+    <!-- ===== 카드 ===== -->
+    <select id="selectCards" resultType="egovframework.let.ha.accbasic.domain.model.AccCardVO">
+        SELECT c.id AS "id", c.issuer AS "issuer", c.last4 AS "last4", c.nickname AS "nickname", c.holder AS "holder",
+               c.bank_account_id AS "bankAccountId", c.note AS "note", COALESCE(c.active, 1) AS "active", c.sort_order AS "sortOrder",
+               b.bank_name AS "payBank", b.account_no AS "payAccountNo"
+        FROM acc_card c LEFT JOIN acc_bank_account b ON b.id = c.bank_account_id
+        ORDER BY c.sort_order NULLS FIRST, c.id
+    </select>
+
+    <insert id="insertCard" parameterType="map">
+        INSERT INTO acc_card (issuer, last4, nickname, holder, bank_account_id, note, active, sort_order, created_at)
+        VALUES (#{issuer}, #{last4}, #{nickname, jdbcType=VARCHAR}, #{holder, jdbcType=VARCHAR}, #{bankAccountId, jdbcType=BIGINT},
+                #{note, jdbcType=VARCHAR}, #{active}, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM acc_card), #{now})
+    </insert>
+
+    <update id="updateCard" parameterType="map">
+        UPDATE acc_card SET issuer = #{issuer}, last4 = #{last4}, nickname = #{nickname, jdbcType=VARCHAR}, holder = #{holder, jdbcType=VARCHAR},
+               bank_account_id = #{bankAccountId, jdbcType=BIGINT}, note = #{note, jdbcType=VARCHAR}, active = #{active}
+         WHERE id = #{id}
+    </update>
+
+    <delete id="deleteCard" parameterType="long">
+        DELETE FROM acc_card WHERE id = #{id}
+    </delete>
+</mapper>

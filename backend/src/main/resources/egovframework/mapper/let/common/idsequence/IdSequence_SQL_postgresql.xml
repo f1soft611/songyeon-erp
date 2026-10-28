@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="IdSequenceDAO">
+
+    <select id="nextValue" parameterType="map" resultType="long">
+        INSERT INTO tb_id_sequence (
+            generator_key,
+            scope_key_1,
+            scope_key_2,
+            last_issued_value
+        ) VALUES (
+            #{generatorKey},
+            #{scopeKey1},
+            #{scopeKey2},
+            1
+        )
+        ON CONFLICT (generator_key, scope_key_1, scope_key_2) DO UPDATE
+        SET last_issued_value = tb_id_sequence.last_issued_value + 1,
+            updated_at = CURRENT_TIMESTAMP
+        RETURNING last_issued_value
+    </select>
+
+    <update id="advanceToAtLeast" parameterType="map">
+        INSERT INTO tb_id_sequence (
+            generator_key,
+            scope_key_1,
+            scope_key_2,
+            last_issued_value
+        ) VALUES (
+            #{generatorKey},
+            #{scopeKey1},
+            #{scopeKey2},
+            #{minimumValue}
+        )
+        ON CONFLICT (generator_key, scope_key_1, scope_key_2) DO UPDATE
+        SET last_issued_value = GREATEST(
+                tb_id_sequence.last_issued_value,
+                EXCLUDED.last_issued_value
+            ),
+            updated_at = CURRENT_TIMESTAMP
+    </update>
+
+</mapper>

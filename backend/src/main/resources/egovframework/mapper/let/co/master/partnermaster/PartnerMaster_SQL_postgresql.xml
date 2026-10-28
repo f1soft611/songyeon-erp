@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 기초정보 - 거래처마스터 (송연 clients, 기존 /api/client-master 와 같은 값) -->
+<mapper namespace="PartnerMasterDAO">
+
+    <resultMap id="partnerMaster" type="egovframework.let.co.master.partnermaster.domain.model.PartnerMasterVO">
+        <result property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="clientCode" column="client_code"/>
+        <result property="useYn" column="use_yn"/>
+        <result property="clientType" column="client_type"/>
+        <result property="clientTypeNm" column="client_type_nm"/>
+        <result property="businessNo" column="business_no"/>
+        <result property="ceoName" column="ceo_name"/>
+        <result property="businessType" column="business_type"/>
+        <result property="businessItem" column="business_item"/>
+        <result property="phone" column="phone"/>
+        <result property="fax" column="fax"/>
+        <result property="mobile" column="mobile"/>
+        <result property="email" column="email"/>
+        <result property="zipcode" column="zipcode"/>
+        <result property="address" column="address"/>
+        <result property="addressDetail" column="address_detail"/>
+        <result property="memo" column="memo"/>
+        <result property="regUserNm" column="reg_user_nm"/>
+        <result property="regDt" column="reg_dt"/>
+        <result property="updUserNm" column="upd_user_nm"/>
+        <result property="updDt" column="upd_dt"/>
+    </resultMap>
+
+    <sql id="clientColumns">
+            id,
+            name,
+            client_code,
+            use_yn,
+            client_type,
+            business_no,
+            ceo_name,
+            business_type,
+            business_item,
+            phone,
+            fax,
+            mobile,
+            email,
+            zipcode,
+            address,
+            address_detail,
+            memo,
+            <include refid="clientTypeNm"/>,
+            <!-- 2026-10-23 등록자 · 등록일시(기존 created_at, YYYY-MM-DDTHH:MM:SS → 공백) · 수정자 · 수정일시. 사번은 사원 이름으로 -->
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = clients.reg_user_id), clients.reg_user_id) AS reg_user_nm,
+            REPLACE(clients.created_at, 'T', ' ') AS reg_dt,
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = clients.upd_user_id), clients.upd_user_id) AS upd_user_nm,
+            TO_CHAR(clients.upd_dt, 'YYYY-MM-DD HH24:MI:SS') AS upd_dt
+    </sql>
+
+    <!-- 분류 이름(2026-10-23): client_type 은 공통코드 CUSTOMER_CATEGORY(SONGYEON) 코드다. 없는 코드면 비운다 -->
+    <sql id="clientTypeNm">
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = clients.client_type
+             LIMIT 1) AS client_type_nm
+    </sql>
+
+    <!-- 분류 고르기(창 · 조회 조건) · 저장 검사: 공통코드 CUSTOMER_CATEGORY 의 사용 중 항목(2026-10-23) -->
+    <select id="selectClientTypes" resultType="egovframework.let.co.master.partnermaster.domain.model.ClientTypeVO">
+        SELECT i.item_code AS "code", i.item_nm AS "name"
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE COALESCE(i.use_at, 'Y') = 'Y'
+          AND COALESCE(g.use_at, 'Y') = 'Y'
+        ORDER BY i.sort_order, i.item_code
+    </select>
+
+    <select id="selectClientList" resultMap="partnerMaster">
+        SELECT
+        <include refid="clientColumns"/>
+        FROM clients
+        ORDER BY client_code
+    </select>
+
+    <select id="selectClient" parameterType="long" resultMap="partnerMaster">
+        SELECT
+        <include refid="clientColumns"/>
+        FROM clients
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectClientByName" parameterType="string" resultMap="partnerMaster">
+        SELECT
+        <include refid="clientColumns"/>
+        FROM clients
+        WHERE name = #{name}
+    </select>
+
+    <!-- 거래처코드(2026-10-23): 6자리 숫자 코드 가운데 가장 큰 번호. 다음 코드는 이 번호 + 1(서비스), 없으면 000001.
+         거래처를 지우면(표에서 없애면) 그 번호를 다시 쓸 수 있다(포장유형과 같음) -->
+    <select id="selectMaxClientCodeNo" resultType="java.lang.Integer">
+        SELECT MAX(CAST(client_code AS INTEGER))
+        FROM clients
+        WHERE client_code ~ '^[0-9]{6}$'
+    </select>
+
+    <select id="countClientCode" parameterType="string" resultType="int">
+        SELECT COUNT(*)
+        FROM clients
+        WHERE client_code = #{value}
+    </select>
+
+    <insert id="insertClient" parameterType="egovframework.let.co.master.partnermaster.domain.model.PartnerMasterVO">
+        INSERT INTO clients (
+            name,
+            client_code,
+            client_type,
+            business_no,
+            ceo_name,
+            business_type,
+            business_item,
+            phone,
+            fax,
+            mobile,
+            email,
+            zipcode,
+            address,
+            address_detail,
+            memo,
+            use_yn,
+            created_at,
+            reg_user_id
+        ) VALUES (
+            #{name},
+            #{clientCode},
+            #{clientType},
+            #{businessNo},
+            #{ceoName},
+            #{businessType},
+            #{businessItem},
+            #{phone},
+            #{fax},
+            #{mobile},
+            #{email},
+            #{zipcode},
+            #{address},
+            #{addressDetail},
+            #{memo},
+            <!-- 2026-10-27 등록 창에서 고른 사용여부. 엑셀 올리기처럼 값이 없으면 사용(Y) -->
+            COALESCE(#{useYn, jdbcType=VARCHAR}, 'Y'),
+            #{createdAt},
+            #{regUserId, jdbcType=VARCHAR}
+        )
+    </insert>
+
+    <update id="updateClient" parameterType="egovframework.let.co.master.partnermaster.domain.model.PartnerMasterVO">
+        UPDATE clients
+        SET
+            name = #{name},
+            client_type = #{clientType},
+            business_no = #{businessNo},
+            ceo_name = #{ceoName},
+            business_type = #{businessType},
+            business_item = #{businessItem},
+            phone = #{phone},
+            fax = #{fax},
+            mobile = #{mobile},
+            email = #{email},
+            zipcode = #{zipcode},
+            address = #{address},
+            address_detail = #{addressDetail},
+            memo = #{memo},
+            use_yn = #{useYn},
+            upd_user_id = #{updUserId, jdbcType=VARCHAR},
+            upd_dt = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+</mapper>

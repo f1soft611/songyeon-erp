@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 기초정보 - 창고등록 (tb_warehouse, 2026-10-19 옛 warehouses 표에서 바꿈)
+     사업장 · 사업부는 F001 / P001 로 고정한다. 목록 · 이름 중복은 사용 중(use_yn='Y')인 줄만 본다.
+     원재료 · 재고 · 입고는 창고를 이름(warehouse_nm)으로 들고 있다.
+     기본창고(default_yn='Y')는 전체에서 한 곳이고 그곳이 입고창고다(2026-10-19 사용자 결정. 표의 ux_wh_default 는 유형마다 한 곳까지 허용) -->
+<mapper namespace="WarehouseDAO">
+
+    <!-- 등록자 · 수정자는 사번(employees.id, 예: 0000)으로 저장한다. 조회할 때 사원 표와 이어 붙여 이름을 보여주고, 사원 표에 없는 값은 그대로 보여준다 -->
+    <select id="selectWarehouseList" parameterType="map" resultType="egovframework.let.co.master.warehouse.domain.model.WarehouseVO">
+        SELECT
+            A.warehouse_id                               AS "warehouseId"      /*창고 ID*/
+          , A.warehouse_cd                               AS "warehouseCd"      /*창고코드*/
+          , A.warehouse_nm                               AS "warehouseNm"      /*창고명*/
+          , A.warehouse_type                             AS "warehouseType"    /*창고유형*/
+          , A.default_yn                                 AS "defaultYn"        /*기본창고 여부*/
+          , A.remark                                     AS "remark"           /*설명*/
+          , A.sort_seq                                   AS "sortSeq"          /*정렬순서*/
+          , (SELECT COUNT(*) FROM materials M WHERE M.warehouse_cd = A.warehouse_cd) <!-- 2026-10-26 창고코드로 잇는다 -->
+                                                         AS "materialCount"    /*두고 있는 원재료 수*/
+          , A.use_yn                                     AS "useYn"            /*사용여부(상태)*/
+          , A.reg_user_id                                AS "regUserId"        /*등록자 사번*/
+          , COALESCE(B.name, A.reg_user_id)              AS "regUserNm"        /*등록자 이름*/
+          , TO_CHAR(A.reg_dt, 'YYYY-MM-DD HH24:MI:SS')   AS "regDt"            /*등록일시*/
+          , A.upd_user_id                                AS "updUserId"        /*수정자 사번*/
+          , COALESCE(C.name, A.upd_user_id)              AS "updUserNm"        /*수정자 이름*/
+          , TO_CHAR(A.upd_dt, 'YYYY-MM-DD HH24:MI:SS')   AS "updDt"            /*수정일시*/
+        FROM tb_warehouse A
+        LEFT JOIN employees B
+               ON B.id = A.reg_user_id
+        LEFT JOIN employees C
+               ON C.id = A.upd_user_id
+        WHERE A.factory_code = #{factoryCode}
+          AND A.plant_code   = #{plantCode}
+        <!-- 창고등록 화면은 사용안함 줄도 받는다(includeUnused). 재고조정 등은 사용 중인 줄만 -->
+        <if test="includeUnused != true">
+          AND A.use_yn       = 'Y'
+        </if>
+        ORDER BY
+            A.sort_seq
+          , A.warehouse_nm
+          , A.warehouse_id
+    </select>
+
+    <!-- 한 줄 (수정 · 삭제 전 확인). 2026-10-22 상태 체크박스로 사용안함 줄도 고치고 지우므로 사용여부와 상관없이 찾는다 -->
+    <select id="selectWarehouse" parameterType="map" resultType="egovframework.let.co.master.warehouse.domain.model.WarehouseVO">
+        SELECT
+            warehouse_id   AS "warehouseId"
+          , warehouse_cd   AS "warehouseCd"
+          , warehouse_nm   AS "warehouseNm"
+          , warehouse_type AS "warehouseType"
+          , default_yn     AS "defaultYn"
+          , remark         AS "remark"
+          , use_yn         AS "useYn"
+        FROM tb_warehouse
+        WHERE warehouse_id = #{warehouseId}
+          AND factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+    </select>
+
+
+    <!-- 사용 중인 줄 가운데 같은 이름 (자기 자신은 뺀다) -->
+    <select id="countActiveName" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_warehouse
+        WHERE factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+          AND use_yn       = 'Y'
+          AND warehouse_nm = #{warehouseNm}
+        <if test="warehouseId != null">
+          AND warehouse_id != #{warehouseId}
+        </if>
+    </select>
+
+    <!-- 창고코드는 표 전체에서 하나뿐이다(uq_warehouse). 쓰지 않는 줄도 센다 -->
+    <select id="countCode" parameterType="string" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_warehouse
+        WHERE warehouse_cd = #{warehouseCd}
+    </select>
+
+    <!-- 자동 창고코드(WH-숫자) 가운데 가장 큰 번호. 다음 자동 코드는 이 번호 + 1 이다(2026-10-20 번호표 대신).
+         창고코드는 표 전체에서 하나뿐이라 사용안함 줄도 센다. 줄을 지우면(표에서 없애면) 그 번호를 다시 쓸 수 있다 -->
+    <select id="selectMaxAutoCodeNo" resultType="java.lang.Integer">
+        SELECT MAX(CAST(warehouse_cd AS INTEGER))
+        FROM tb_warehouse
+        WHERE warehouse_cd ~ '^[0-9]{6}$'
+    </select>
+
+    <select id="selectMaxSortSeq" parameterType="map" resultType="java.lang.Integer">
+        SELECT MAX(sort_seq)
+        FROM tb_warehouse
+        WHERE factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+    </select>
+
+    <!-- 등록: 화면에서 받지 않는 칸(구분 · 온도대 · 여러 Y/N 표시 등)은 표 기본값을 쓴다 -->
+    <insert id="insertWarehouse" parameterType="map">
+        INSERT INTO tb_warehouse (
+            factory_code
+          , plant_code
+          , warehouse_cd
+          , warehouse_nm
+          , warehouse_type
+          , default_yn
+          , remark
+          , sort_seq
+          , use_yn
+          , reg_dt
+          , reg_user_id
+        )
+        VALUES (
+            #{factoryCode}
+          , #{plantCode}
+          , #{warehouseCd}
+          , #{warehouseNm}
+          , #{warehouseType}
+          , #{defaultYn}
+          , #{remark, jdbcType=VARCHAR}
+          , #{sortSeq}
+          , #{useYn}
+          , NOW()
+          , #{userId, jdbcType=VARCHAR}
+        )
+    </insert>
+
+    <!-- 수정: 그 줄을 덮어쓴다. 코드는 바꾸지 않는다 -->
+    <update id="updateWarehouse" parameterType="map">
+        UPDATE tb_warehouse
+        SET warehouse_nm   = #{warehouseNm}
+          , warehouse_type = #{warehouseType}
+          , default_yn     = #{defaultYn}
+          , remark         = #{remark, jdbcType=VARCHAR}
+          , use_yn         = #{useYn}
+          , upd_dt         = NOW()
+          , upd_user_id    = #{userId, jdbcType=VARCHAR}
+        WHERE warehouse_id = #{warehouseId}
+          AND factory_code = #{factoryCode}
+          AND plant_code   = #{plantCode}
+    </update>
+
+    <!-- 다른 기본창고를 끈다(기본창고는 전체에서 한 곳) -->
+    <update id="clearDefaultWarehouse" parameterType="map">
+        UPDATE tb_warehouse
+        SET default_yn  = 'N'
+          , upd_dt      = NOW()
+          , upd_user_id = #{userId, jdbcType=VARCHAR}
+        WHERE factory_code   = #{factoryCode}
+          AND plant_code     = #{plantCode}
+          AND default_yn     = 'Y'
+        <if test="warehouseId != null">
+          AND warehouse_id  != #{warehouseId}
+        </if>
+    </update>
+
+    <!-- 사용 중인 기본창고 수 -->
+    <select id="countActiveDefault" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_warehouse
+        WHERE factory_code   = #{factoryCode}
+          AND plant_code     = #{plantCode}
+          AND default_yn     = 'Y'
+          AND use_yn         = 'Y'
+    </select>
+
+</mapper>

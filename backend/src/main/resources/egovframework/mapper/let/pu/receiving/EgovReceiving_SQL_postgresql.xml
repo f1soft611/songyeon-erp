@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 입고관리 (송연 app.py /api/materials/receiving · /bulk · DELETE · last-price · receiving-status) -->
+<mapper namespace="ReceivingDAO">
+
+    <!-- 입고내역·반품내역·입고현황·서류등록이 같은 SQL 을 쓴다(따로 두면 같은 기간을 두고 탭마다 다른 금액을 말하게 된다).
+         이미 반품된 수량은 따로 적어두지 않고 반품 줄을 세어 쓴다 — 반품을 지우면 저절로 줄어든다. -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectReceivings" parameterType="map" resultType="egovframework.let.pu.receiving.domain.model.ReceivingVO">
+        SELECT
+            r.id AS "id",
+            r.material_code AS "materialCode",
+            r.material_name AS "materialName",
+            r.qty AS "qty",
+            r.receive_date AS "receiveDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = r.client_code LIMIT 1) AS "clientName",
+            r.unit_price AS "unitPrice",
+            r.supply_amount AS "supplyAmount",
+            r.vat_amount AS "vatAmount",
+            r.total_amount AS "totalAmount",
+            COALESCE(COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'TAX_CATEGORY' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = r.tax_type LIMIT 1), r.tax_type), '과세') AS "taxType",
+            r.barcode AS "barcode",
+            COALESCE(r.is_return, 0) AS "isReturn",
+            r.return_reason AS "returnReason",
+            r.return_of_id AS "returnOfId",
+            (SELECT COALESCE(SUM(ABS(r2.qty)), 0) FROM material_receiving r2 WHERE r2.return_of_id = r.id) AS "returnedQty"
+        FROM material_receiving r
+        <where>
+            <if test="date != null">r.receive_date = #{date}</if>
+            <if test="start != null and end != null">AND r.receive_date BETWEEN #{start} AND #{end}</if>
+            <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = r.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+            <if test="materialQ != null">AND r.material_name ILIKE '%' || #{materialQ} || '%'</if>
+            <if test='kind == "return"'>AND COALESCE(r.is_return, 0) = 1</if>
+            <if test='kind == "receiving"'>AND COALESCE(r.is_return, 0) = 0</if>
+        </where>
+        ORDER BY r.receive_date DESC, r.id DESC
+    </select>
+
+    <select id="selectMaterialName" parameterType="string" resultType="string">
+        SELECT name FROM materials WHERE code = #{code}
+    </select>
+
+    <!-- 들여온 것이 들어가는 창고(자재창고). 정해둔 곳이 없으면 null -->
+    <!-- 창고: tb_warehouse(사업장 F001/P001, 사용 중인 줄). 입고창고 = 기본창고(전체에서 한 곳) (2026-10-19 옛 warehouses 에서 바꿈) -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectReceivingWarehouse" resultType="string">
+        SELECT warehouse_cd
+        FROM tb_warehouse
+        WHERE factory_code = 'F001' AND plant_code = 'P001' AND use_yn = 'Y'
+          AND default_yn = 'Y'
+        ORDER BY sort_seq, warehouse_id
+        LIMIT 1
+    </select>
+
+    <!-- 2026-10-26 입고 거래처는 거래처코드로 저장한다(이름 → 코드, 같은 이름이 여럿이면 코드가 작은 것) -->
+    <select id="selectClientCodeByName" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE name = #{name}
+          AND client_code IS NOT NULL
+          AND client_code != ''
+        ORDER BY client_code
+        LIMIT 1
+    </select>
+
+    <!-- 2026-10-26 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다(이름 → 코드) -->
+    <select id="selectTaxCode" parameterType="string" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'TAX_CATEGORY'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE i.item_nm = #{name}
+        ORDER BY CASE WHEN i.use_at = 'Y' THEN 0 ELSE 1 END, i.sort_order, i.item_code
+        LIMIT 1
+    </select>
+
+    <!-- 반품할 원래 입고(반품 줄이 아닌 것) -->
+    <select id="selectReturnSource" parameterType="long" resultType="egovframework.let.pu.receiving.domain.model.ReceivingVO">
+        SELECT qty AS "qty", material_name AS "materialName"
+        FROM material_receiving
+        WHERE id = #{id} AND is_return = 0
+    </select>
+
+    <select id="selectReturnedQty" parameterType="long" resultType="double">
+        SELECT COALESCE(SUM(ABS(qty)), 0) FROM material_receiving WHERE return_of_id = #{id}
+    </select>
+
+    <!-- 바코드 순번: 같은 품목을 같은 날 몇 번째로 들여왔는지(반품 줄도 센다 — 송연과 같음) -->
+    <select id="countSameDay" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM material_receiving WHERE material_code = #{code} AND receive_date = #{date}
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <insert id="insertReceiving" parameterType="egovframework.let.pu.receiving.domain.model.ReceivingVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO material_receiving (
+            material_code, material_name, qty, receive_date, po_id, created_at,
+            client_code, unit_price, supply_amount, vat_amount, total_amount, tax_type, barcode, is_return,
+            return_reason, return_of_id, warehouse_cd
+        ) VALUES (
+            #{materialCode}, #{materialName}, #{qty, jdbcType=DOUBLE}, #{receiveDate}, #{poId, jdbcType=INTEGER}, #{createdAt},
+            #{clientCode}, #{unitPrice, jdbcType=DOUBLE}, #{supplyAmount, jdbcType=DOUBLE}, #{vatAmount, jdbcType=DOUBLE}, #{totalAmount, jdbcType=DOUBLE},
+            #{taxCode}, #{barcode}, #{isReturn, jdbcType=INTEGER},
+            #{returnReason}, #{returnOfId, jdbcType=INTEGER}, #{warehouseCd}
+        )
+    </insert>
+
+    <update id="addMaterialStock" parameterType="map">
+        UPDATE materials SET stock_qty = COALESCE(stock_qty, 0) + #{qty} WHERE code = #{code}
+    </update>
+
+    <select id="selectForCancel" parameterType="long" resultType="egovframework.let.pu.receiving.domain.model.ReceivingVO">
+        SELECT material_code AS "materialCode", qty AS "qty" FROM material_receiving WHERE id = #{id}
+    </select>
+
+    <delete id="deleteReceiving" parameterType="long">
+        DELETE FROM material_receiving WHERE id = #{id}
+    </delete>
+
+    <!-- 마지막 입고 단가: 같은 거래처 기록 우선, 없으면 거래처 상관없이 가장 최근 -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectLastPrice" parameterType="map" resultType="double">
+        SELECT unit_price FROM material_receiving
+        WHERE material_code = #{code}
+        <if test="clientName != null">AND client_code = (SELECT c.client_code FROM clients c WHERE c.name = #{clientName} AND NULLIF(c.client_code, '') IS NOT NULL ORDER BY c.client_code LIMIT 1)</if>
+          AND unit_price IS NOT NULL
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <!-- 서류등록 탭: 기간 안 원재료별 입고량(반품 포함)을 품목당 한 줄로 -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectSummary" parameterType="map" resultType="egovframework.let.pu.receiving.domain.model.ReceivingSummaryVO">
+        SELECT
+            material_code AS "materialCode",
+            material_name AS "materialName",
+            SUM(qty) AS "totalQty",
+            COUNT(*) AS "entryCount"
+        FROM material_receiving
+        WHERE receive_date BETWEEN #{start} AND #{end}
+        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+        <if test="materialQ != null">AND material_name ILIKE '%' || #{materialQ} || '%'</if>
+        GROUP BY material_code, material_name
+        ORDER BY material_name
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectDetailRows" parameterType="map" resultType="egovframework.let.pu.receiving.domain.model.ReceivingSummaryVO">
+        SELECT receive_date AS "date", material_name AS "materialName", qty AS "qty", (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) AS "clientName"
+        FROM material_receiving
+        WHERE material_code = #{code} AND receive_date BETWEEN #{start} AND #{end}
+        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+        ORDER BY receive_date, id
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectDetailReceived" parameterType="map" resultType="double">
+        SELECT COALESCE(SUM(qty), 0) FROM material_receiving
+        WHERE material_code = #{code} AND receive_date BETWEEN #{start} AND #{end}
+        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+    </select>
+
+    <!-- 같은 기간 생산사용량(생산 투입 기록의 날짜는 created_at 앞 10글자) -->
+    <select id="selectDetailUsed" parameterType="map" resultType="double">
+        SELECT COALESCE(SUM(qty_used), 0) FROM production_material_usage
+        WHERE material_code = #{code} AND SUBSTRING(created_at, 1, 10) BETWEEN #{start} AND #{end}
+    </select>
+</mapper>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 매출·매입관리 (송연 accounting.py /api/accounting/trade-report, common.py _sales_rows · _purchase_rows). 조회만 한다.
+     매출은 확정된 출하 × 판매단가, 매입은 입고 기록 그대로다. 이름 정렬은 송연(SQLite)과 같게 글자 코드 순(COLLATE "C"). -->
+<mapper namespace="AccSalesDAO">
+
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectLogisticsShipped" parameterType="map" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT id AS "id", schedule_date AS "date", (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) AS "clientName", (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) AS "itemName",
+               COALESCE(actual_qty, order_qty) AS "qtyText"
+        FROM logistics_schedule
+        WHERE schedule_date BETWEEN #{start} AND #{end} AND ship_confirmed = 1
+        ORDER BY id
+    </select>
+
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectProductionShipped" parameterType="map" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT id AS "id", logistics_date AS "date", (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName", (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "itemName",
+               COALESCE(logistics_actual_qty, actual_qty, order_qty) AS "qtyText"
+        FROM production_schedule
+        WHERE logistics_date BETWEEN #{start} AND #{end} AND ship_confirmed = 1
+        ORDER BY id
+    </select>
+
+    <select id="selectCarriedQty" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT schedule_type AS "scheduleType", schedule_id AS "scheduleId", COALESCE(SUM(qty), 0) AS "qty"
+        FROM delivery_carryover
+        GROUP BY schedule_type, schedule_id
+    </select>
+
+    <!-- 송연 carryover_period_where: 넘긴 날이 적혀 있으면 그 날로, 없으면 넘긴 달로 기간에 든다.
+         이월을 적은 뒤 원본의 확정이 풀렸을 수 있어 원본이 지금도 확정인 것만 남긴다. -->
+    <select id="selectCarryovers" parameterType="map" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT co.schedule_type AS "scheduleType", co.schedule_id AS "scheduleId", co.client_name AS "clientName",
+               co.product_name AS "itemName", co.qty AS "qty", co.unit_price AS "unitPrice", co.amount AS "amount",
+               co.original_date AS "date"
+        FROM delivery_carryover co
+        WHERE ((co.target_date IS NOT NULL AND co.target_date &lt;&gt; '' AND co.target_date BETWEEN #{start} AND #{end})
+               OR ((co.target_date IS NULL OR co.target_date = '') AND co.target_month BETWEEN #{startMonth} AND #{endMonth}))
+          AND CASE WHEN co.schedule_type = 'logistics'
+                   THEN EXISTS (SELECT 1 FROM logistics_schedule l WHERE l.id = co.schedule_id AND COALESCE(l.ship_confirmed, 0) &lt;&gt; 0)
+                   ELSE EXISTS (SELECT 1 FROM production_schedule p WHERE p.id = co.schedule_id AND COALESCE(p.ship_confirmed, 0) &lt;&gt; 0)
+              END
+        ORDER BY co.id
+    </select>
+
+    <!-- 송연 product_price_map: 출하에는 '품명(규격)' 이 적혀 있어 이름으로 단가를 붙인다 -->
+    <select id="selectProductPrices" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT p.name AS "name", p.spec AS "spec",
+               (SELECT COALESCE(pr.current_price, pr.total_price) FROM pricing pr WHERE pr.product_code = p.code LIMIT 1) AS "unitPrice"
+        FROM products p
+        ORDER BY p.code
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectPurchases" parameterType="map" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT id AS "id", receive_date AS "date", (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) AS "clientName", material_name AS "itemName", qty AS "qty",
+               unit_price AS "unitPrice", supply_amount AS "supplyAmount", vat_amount AS "vatAmount", total_amount AS "amount"
+        FROM material_receiving
+        WHERE receive_date BETWEEN #{start} AND #{end}
+        ORDER BY receive_date, id
+    </select>
+
+    <!-- 조회 창에서 고를 거리. 매출: 거래처BOM 전체 · 단종 아닌 제품, 매입: 매입처 · 원재료 -->
+    <select id="selectSalesClientNames" resultType="string">
+        SELECT DISTINCT name COLLATE "C" AS name FROM clients WHERE name IS NOT NULL AND name &lt;&gt; '' ORDER BY 1
+    </select>
+
+    <select id="selectSaleProducts" resultType="egovframework.let.ha.accsales.domain.model.TradeSourceVO">
+        SELECT name AS "name", spec AS "spec" FROM products WHERE COALESCE(discontinued, 0) = 0 ORDER BY name COLLATE "C", code
+    </select>
+
+    <!-- 매입 입력에서 고를 매입처: 2026-10-23 분류는 공통코드 이름으로 보고, 사용 중 거래처만 -->
+    <select id="selectVendorClientNames" resultType="string">
+        SELECT name FROM clients
+        WHERE client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매입%'
+        )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND name IS NOT NULL
+        ORDER BY name COLLATE "C"
+    </select>
+
+    <!-- 매출 입력에서 고를 거래처: 사용 중 거래처만(2026-10-23). 거래처별관리대장 조회 거름(selectSalesClientNames)은 전체 -->
+    <select id="selectActiveClientNames" resultType="string">
+        SELECT DISTINCT name COLLATE "C" AS name FROM clients
+        WHERE name IS NOT NULL AND name &lt;&gt; '' AND COALESCE(use_yn, 'Y') = 'Y'
+        ORDER BY 1
+    </select>
+
+    <select id="selectMaterialNames" resultType="string">
+        SELECT name FROM materials WHERE name IS NOT NULL AND name &lt;&gt; '' ORDER BY name COLLATE "C"
+    </select>
+</mapper>

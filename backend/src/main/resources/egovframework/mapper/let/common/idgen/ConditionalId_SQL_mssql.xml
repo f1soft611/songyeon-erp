@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="ConditionalIdDAO">
+
+    <select id="ConditionalIdDAO.nextConditionalId"
+            parameterType="egovframework.let.common.idgen.domain.model.ConditionalIdKey"
+            resultType="long">
+        MERGE IDS2 WITH (HOLDLOCK) AS TARGET
+        USING (
+            SELECT
+                #{tableName} AS TABLE_NAME,
+                #{condition1} AS CONDITION1,
+                #{condition2} AS CONDITION2
+        ) AS SOURCE
+        ON (
+            TARGET.TABLE_NAME = SOURCE.TABLE_NAME
+            AND TARGET.CONDITION1 = SOURCE.CONDITION1
+            AND TARGET.CONDITION2 = SOURCE.CONDITION2
+        )
+        WHEN MATCHED THEN
+            UPDATE SET NEXT_ID = TARGET.NEXT_ID + 1
+        WHEN NOT MATCHED THEN
+            INSERT (TABLE_NAME, CONDITION1, CONDITION2, NEXT_ID)
+            VALUES (SOURCE.TABLE_NAME, SOURCE.CONDITION1, SOURCE.CONDITION2, 1)
+        OUTPUT INSERTED.NEXT_ID;
+    </select>
+
+</mapper>

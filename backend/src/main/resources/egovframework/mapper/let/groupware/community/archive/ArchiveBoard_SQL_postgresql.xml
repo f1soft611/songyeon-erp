@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="ArchiveBoardDAO">
+    <resultMap id="archivePostMap" type="egovframework.let.groupware.community.archive.domain.model.ArchiveBoardPostVO">
+        <id property="postId" column="post_id"/>
+        <result property="boardTypeCode" column="board_type_code"/>
+        <result property="title" column="title"/>
+        <result property="contents" column="contents"/>
+        <result property="contentsText" column="contents_text"/>
+        <result property="categoryCode" column="category_code"/>
+        <result property="writerId" column="writer_id"/>
+        <result property="writerName" column="writer_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="attachmentCount" column="attachment_count"/>
+    </resultMap>
+    <resultMap id="archiveFileMap" type="egovframework.let.groupware.community.archive.domain.model.ArchiveBoardFileVO">
+        <id property="boardFileId" column="file_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="ownerType" column="owner_type"/>
+        <result property="postId" column="owner_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="mimeType" column="mime_type"/>
+        <result property="contentType" column="content_type"/>
+        <result property="fileUsageType" column="file_usage_type"/>
+        <result property="deletedYn" column="deleted_yn"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+    <resultMap id="archiveFileItemMap" type="egovframework.let.groupware.community.archive.domain.model.ArchiveBoardFileItemVO">
+        <id property="boardFileId" column="board_file_id"/>
+        <result property="postId" column="post_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="mimeType" column="mime_type"/>
+        <result property="uploadedAt" column="uploaded_at"/>
+        <result property="writerName" column="writer_name"/>
+        <result property="categoryCode" column="category_code"/>
+    </resultMap>
+
+    <sql id="archiveFileScope">
+        f.tenant_id = #{tenantId}
+        AND p.tenant_id = #{tenantId}
+        AND p.board_type_code = 'ARCHIVE'
+        AND p.is_deleted = 'N'
+        AND f.owner_type = 'ARCHIVE'
+        AND f.file_usage_type = 'ATTACHMENT'
+        AND f.deleted_yn = 'N'
+    </sql>
+    <sql id="archiveFileFilter">
+        <if test="keyword != null and keyword != ''">
+            AND (f.file_name ILIKE '%' || #{keyword} || '%'
+                OR p.writer_name ILIKE '%' || #{keyword} || '%')
+        </if>
+        <if test="folderCode != null and folderCode != ''">
+            AND p.category_code = #{folderCode}
+        </if>
+        <if test="rootOnly != null and rootOnly">
+            AND p.category_code IS NULL
+        </if>
+        <if test="uploadedFrom != null and uploadedFrom != ''">
+            AND f.created_at >= CAST(#{uploadedFrom} AS date)
+        </if>
+        <if test="uploadedTo != null and uploadedTo != ''">
+            AND f.created_at &lt; CAST(#{uploadedTo} AS date) + INTERVAL '1 day'
+        </if>
+        <choose>
+            <when test="fileType == 'DOCUMENT'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) IN (
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'application/haansofthwp',
+                        'application/vnd.hancom.hwp',
+                        'application/vnd.hancom.hwpx',
+                        'application/vnd.oasis.opendocument.text',
+                        'application/rtf',
+                        'text/plain',
+                        'text/markdown',
+                        'text/html',
+                        'application/xml',
+                        'text/xml',
+                        'application/json',
+                        'application/sql'
+                    )
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.doc' OR LOWER(f.file_name) LIKE '%.docx'
+                            OR LOWER(f.file_name) LIKE '%.hwp' OR LOWER(f.file_name) LIKE '%.hwpx'
+                            OR LOWER(f.file_name) LIKE '%.odt' OR LOWER(f.file_name) LIKE '%.rtf'
+                            OR LOWER(f.file_name) LIKE '%.txt' OR LOWER(f.file_name) LIKE '%.md'
+                            OR LOWER(f.file_name) LIKE '%.htm' OR LOWER(f.file_name) LIKE '%.html'
+                            OR LOWER(f.file_name) LIKE '%.xml' OR LOWER(f.file_name) LIKE '%.json'
+                            OR LOWER(f.file_name) LIKE '%.sql'
+                        )
+                    )
+                )
+            </when>
+            <when test="fileType == 'SPREADSHEET'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) IN (
+                        'application/vnd.ms-excel',
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'application/vnd.ms-excel.sheet.macroenabled.12',
+                        'application/vnd.oasis.opendocument.spreadsheet',
+                        'text/csv',
+                        'application/csv'
+                    )
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.xls' OR LOWER(f.file_name) LIKE '%.xlsx'
+                            OR LOWER(f.file_name) LIKE '%.xlsm' OR LOWER(f.file_name) LIKE '%.ods'
+                            OR LOWER(f.file_name) LIKE '%.csv'
+                        )
+                    )
+                )
+            </when>
+            <when test="fileType == 'PRESENTATION'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) IN (
+                        'application/vnd.ms-powerpoint',
+                        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                        'application/vnd.oasis.opendocument.presentation'
+                    )
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.ppt' OR LOWER(f.file_name) LIKE '%.pptx'
+                            OR LOWER(f.file_name) LIKE '%.odp'
+                        )
+                    )
+                )
+            </when>
+            <when test="fileType == 'PDF'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) = 'application/pdf'
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND LOWER(f.file_name) LIKE '%.pdf'
+                    )
+                )
+            </when>
+            <when test="fileType == 'IMAGE'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) LIKE 'image/%'
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.png' OR LOWER(f.file_name) LIKE '%.jpg'
+                            OR LOWER(f.file_name) LIKE '%.jpeg' OR LOWER(f.file_name) LIKE '%.gif'
+                            OR LOWER(f.file_name) LIKE '%.webp' OR LOWER(f.file_name) LIKE '%.svg'
+                            OR LOWER(f.file_name) LIKE '%.bmp' OR LOWER(f.file_name) LIKE '%.tif'
+                            OR LOWER(f.file_name) LIKE '%.tiff'
+                        )
+                    )
+                )
+            </when>
+            <when test="fileType == 'VIDEO'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) LIKE 'video/%'
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.mp4' OR LOWER(f.file_name) LIKE '%.mov'
+                            OR LOWER(f.file_name) LIKE '%.avi' OR LOWER(f.file_name) LIKE '%.mkv'
+                            OR LOWER(f.file_name) LIKE '%.webm' OR LOWER(f.file_name) LIKE '%.m4v'
+                            OR LOWER(f.file_name) LIKE '%.wmv'
+                        )
+                    )
+                )
+            </when>
+            <when test="fileType == 'ARCHIVE'">
+                AND (
+                    LOWER(COALESCE(f.mime_type, '')) IN (
+                        'application/zip',
+                        'application/x-zip-compressed',
+                        'application/vnd.rar',
+                        'application/x-rar-compressed',
+                        'application/x-7z-compressed',
+                        'application/x-tar',
+                        'application/gzip',
+                        'application/x-bzip2',
+                        'application/x-xz'
+                    )
+                    OR (
+                        (f.mime_type IS NULL OR BTRIM(f.mime_type) = ''
+                            OR LOWER(BTRIM(f.mime_type)) = 'application/octet-stream')
+                        AND (
+                            LOWER(f.file_name) LIKE '%.zip' OR LOWER(f.file_name) LIKE '%.rar'
+                            OR LOWER(f.file_name) LIKE '%.7z' OR LOWER(f.file_name) LIKE '%.tar'
+                            OR LOWER(f.file_name) LIKE '%.gz' OR LOWER(f.file_name) LIKE '%.bz2'
+                            OR LOWER(f.file_name) LIKE '%.xz'
+                        )
+                    )
+                )
+            </when>
+        </choose>
+    </sql>
+    <select id="selectArchiveFileList" parameterType="map" resultMap="archiveFileItemMap">
+        SELECT f.file_id AS board_file_id, p.post_id, f.file_name, f.file_size, f.mime_type,
+               f.created_at AS uploaded_at, p.writer_name, p.category_code
+        FROM tb_common_file f
+        JOIN tb_board_post p ON p.post_id = f.owner_id
+        WHERE <include refid="archiveFileScope"/>
+        <include refid="archiveFileFilter"/>
+        ORDER BY f.created_at DESC, f.file_id DESC
+    </select>
+    <select id="selectArchiveFileCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_common_file f
+        JOIN tb_board_post p ON p.post_id = f.owner_id
+        WHERE <include refid="archiveFileScope"/>
+        <include refid="archiveFileFilter"/>
+    </select>
+    <select id="selectArchiveFileItemById" parameterType="map" resultMap="archiveFileItemMap">
+        SELECT f.file_id AS board_file_id, p.post_id, f.file_name, f.file_size, f.mime_type,
+               f.created_at AS uploaded_at, p.writer_name, p.category_code
+        FROM tb_common_file f
+        JOIN tb_board_post p ON p.post_id = f.owner_id
+        WHERE <include refid="archiveFileScope"/>
+          AND f.file_id = #{boardFileId}
+          AND p.post_id = #{postId}
+    </select>
+
+    <sql id="postColumns">
+        p.post_id, p.board_type_code, p.title, p.contents, p.contents_text, p.category_code,
+        p.writer_id, p.writer_name, p.created_at, p.updated_at,
+        (SELECT COUNT(*) FROM tb_common_file bf
+         WHERE bf.tenant_id = #{tenantId} AND bf.owner_type = 'ARCHIVE' AND bf.owner_id = p.post_id
+           AND bf.file_usage_type = 'ATTACHMENT' AND bf.deleted_yn = 'N') AS attachment_count
+    </sql>
+    <sql id="postScope">
+        p.tenant_id = #{tenantId} AND p.board_type_code = 'ARCHIVE' AND p.is_deleted = 'N'
+    </sql>
+    <sql id="searchFilters">
+        <if test="keyword != null and keyword != ''">
+            AND (p.title ILIKE '%' || #{keyword} || '%'
+                 OR p.contents_text ILIKE '%' || #{keyword} || '%'
+                 OR p.writer_name ILIKE '%' || #{keyword} || '%')
+        </if>
+        <if test="categoryCode != null and categoryCode != ''">
+            AND p.category_code = #{categoryCode}
+        </if>
+    </sql>
+    <select id="selectArchivePostList" parameterType="map" resultMap="archivePostMap">
+        SELECT <include refid="postColumns"/>
+        FROM tb_board_post p WHERE <include refid="postScope"/>
+        <include refid="searchFilters"/>
+        ORDER BY p.created_at DESC, p.post_id DESC
+        LIMIT #{recordCountPerPage} OFFSET #{firstIndex}
+    </select>
+    <select id="selectArchivePostCount" parameterType="map" resultType="long">
+        SELECT COUNT(*) FROM tb_board_post p WHERE <include refid="postScope"/>
+        <include refid="searchFilters"/>
+    </select>
+    <select id="selectArchivePostById" parameterType="map" resultMap="archivePostMap">
+        SELECT <include refid="postColumns"/>
+        FROM tb_board_post p WHERE <include refid="postScope"/> AND p.post_id = #{postId}
+    </select>
+    <select id="selectArchivePostForUpdate" parameterType="map" resultMap="archivePostMap">
+        SELECT p.post_id
+        FROM tb_board_post p
+        WHERE p.tenant_id = #{tenantId} AND p.board_type_code = 'ARCHIVE'
+          AND p.post_id = #{postId} AND p.is_deleted = 'N'
+        FOR UPDATE OF p
+    </select>
+    <select id="insertArchivePost" parameterType="map" resultType="long">
+        INSERT INTO tb_board_post (
+            tenant_id, board_type_code, title, category_code, contents, contents_text,
+            writer_id, writer_name, last_modified_by, last_modified_by_name,
+            is_deleted, created_at, updated_at
+        ) VALUES (
+            #{tenantId}, 'ARCHIVE', #{title}, #{categoryCode}, #{contents}, #{contents},
+            #{writerId}, #{writerName}, #{lastModifiedBy}, #{lastModifiedByName},
+            'N', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ) RETURNING post_id
+    </select>
+    <update id="updateArchivePost" parameterType="map">
+        UPDATE tb_board_post SET title = #{title}, category_code = #{categoryCode},
+            contents = #{contents}, contents_text = #{contents},
+            last_modified_by = #{lastModifiedBy}, last_modified_by_name = #{lastModifiedByName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId} AND board_type_code = 'ARCHIVE'
+          AND post_id = #{postId} AND is_deleted = 'N'
+    </update>
+    <update id="updateArchiveFileNameAndCategory" parameterType="map">
+        UPDATE tb_common_file
+        SET file_name = #{fileName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = 'ARCHIVE'
+          AND owner_id = #{postId}
+          AND file_id = #{boardFileId}
+          AND file_usage_type = 'ATTACHMENT'
+          AND deleted_yn = 'N'
+    </update>
+    <update id="updateArchivePostCategoryAndTitle" parameterType="map">
+        UPDATE tb_board_post
+        SET category_code = #{categoryCode},
+            title = #{fileName},
+            last_modified_by = #{lastModifiedBy},
+            last_modified_by_name = #{lastModifiedByName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND board_type_code = 'ARCHIVE'
+          AND post_id = #{postId}
+          AND is_deleted = 'N'
+    </update>
+    <update id="softDeleteArchivePost" parameterType="map">
+        UPDATE tb_board_post SET is_deleted = 'Y', updated_at = CURRENT_TIMESTAMP,
+            last_modified_by = #{lastModifiedBy}, last_modified_by_name = #{lastModifiedByName}
+        WHERE tenant_id = #{tenantId} AND board_type_code = 'ARCHIVE'
+          AND post_id = #{postId} AND is_deleted = 'N'
+    </update>
+
+    <sql id="attachmentScope">
+        tenant_id = #{tenantId} AND owner_type = 'ARCHIVE' AND owner_id = #{postId}
+        AND file_usage_type = 'ATTACHMENT' AND deleted_yn = 'N'
+    </sql>
+    <sql id="attachmentColumns">
+        file_id, tenant_id, owner_type, owner_id, file_name, file_size, mime_type,
+        content_type, file_usage_type, deleted_yn, created_at, updated_at
+    </sql>
+    <select id="selectArchiveAttachmentList" parameterType="map" resultMap="archiveFileMap">
+        SELECT <include refid="attachmentColumns"/>
+        FROM tb_common_file WHERE <include refid="attachmentScope"/>
+        ORDER BY created_at, file_id
+    </select>
+    <select id="selectArchiveAttachmentById" parameterType="map" resultMap="archiveFileMap">
+        SELECT <include refid="attachmentColumns"/>
+        FROM tb_common_file WHERE <include refid="attachmentScope"/> AND file_id = #{boardFileId}
+    </select>
+    <select id="selectArchiveBoardConfig" resultType="map">
+        SELECT use_yn AS "useYn", write_auth_level AS "writeAuthLevel", file_upload_yn AS "fileUploadYn"
+        FROM tb_board_type WHERE board_type_code = 'ARCHIVE'
+    </select>
+</mapper>

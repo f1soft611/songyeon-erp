@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 > 기초정보 > 제품마스터(BSItemMasterView). 원재료 목록 · 거래처 이름 목록은 다른 화면도 같이 쓴다.
+     기초정보 - 제품BOM (송연 /api/cm/cm0001/products·materials·clients 와 같은 값) -->
+<mapper namespace="ItemMasterDAO">
+
+    <resultMap id="productBom" type="egovframework.let.co.master.itemmaster.domain.model.ProductBomVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="storage" column="storage"/>
+        <result property="storageNm" column="storage_nm"/>
+        <result property="clientName" column="client_name"/>
+        <result property="clientCode" column="client_code"/>
+        <result property="discontinued" column="discontinued"/>
+        <result property="discontinuedAt" column="discontinued_at"/>
+        <result property="discontinuedBy" column="discontinued_by"/>
+        <result property="discontinuedNote" column="discontinued_note"/>
+        <result property="stockQty" column="stock_qty"/>
+        <result property="materialCount" column="material_count"/>
+        <result property="lastProducedDate" column="last_produced_date"/>
+        <result property="regUserId" column="reg_user_id"/>
+        <result property="regUserNm" column="reg_user_nm"/>
+        <result property="regDt" column="reg_dt"/>
+        <result property="updUserId" column="upd_user_id"/>
+        <result property="updUserNm" column="upd_user_nm"/>
+        <result property="updDt" column="upd_dt"/>
+    </resultMap>
+
+    <resultMap id="bomLine" type="egovframework.let.co.master.itemmaster.domain.model.BomLineVO">
+        <result property="materialCode" column="material_code"/>
+        <result property="materialName" column="material_name"/>
+        <result property="ratioPercent" column="ratio_percent"/>
+        <result property="unitPricePerKg" column="unit_price_per_kg"/>
+        <result property="amountPerKg" column="amount_per_kg"/>
+        <result property="rank" column="rank_in_product"/>
+    </resultMap>
+
+    <resultMap id="materialOption" type="egovframework.let.co.master.itemmaster.domain.model.MaterialOptionVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="subCategory" column="sub_category"/>
+        <result property="subCategoryNm" column="sub_category_nm"/>
+    </resultMap>
+
+    <select id="selectProductList" parameterType="map" resultMap="productBom">
+        SELECT
+            p.code,
+            p.name,
+            p.spec,
+            p.storage,
+            <!-- 2026-10-23 보관방법: 저장은 공통코드 STORAGE_METHOD 코드, 이름은 공통코드에서 -->
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = p.storage
+             LIMIT 1) AS storage_nm,
+            <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
+            p.client_code,
+            (SELECT c.name FROM clients c WHERE c.client_code = p.client_code LIMIT 1) AS client_name,
+            COALESCE(p.discontinued, 0) AS discontinued,
+            p.discontinued_at,
+            p.discontinued_by,
+            p.discontinued_note,
+            COALESCE(p.stock_qty, 0) AS stock_qty,
+            <!-- 2026-10-23 등록자 · 등록일시 · 수정자 · 수정일시(사번은 사원 이름으로, 포장유형과 같음) -->
+            p.reg_user_id,
+            COALESCE(re.name, p.reg_user_id) AS reg_user_nm,
+            TO_CHAR(p.reg_dt, 'YYYY-MM-DD HH24:MI:SS') AS reg_dt,
+            p.upd_user_id,
+            COALESCE(ue.name, p.upd_user_id) AS upd_user_nm,
+            TO_CHAR(p.upd_dt, 'YYYY-MM-DD HH24:MI:SS') AS upd_dt,
+            (SELECT COUNT(*) FROM bom b WHERE b.product_code = p.code) AS material_count,
+            (SELECT MAX(s.schedule_date)
+               FROM production_schedule s
+              WHERE s.product_code = p.code <!-- 2026-10-26 production_schedule 은 제품코드만 둔다 -->
+                AND s.actual_qty IS NOT NULL
+                AND s.actual_qty != '') AS last_produced_date
+        FROM products p
+        LEFT JOIN employees re ON re.id = p.reg_user_id
+        LEFT JOIN employees ue ON ue.id = p.upd_user_id
+        <if test="!includeDiscontinued">
+        WHERE COALESCE(p.discontinued, 0) = 0
+        </if>
+        ORDER BY p.code
+    </select>
+
+    <select id="selectProduct" parameterType="string" resultMap="productBom">
+        SELECT
+            code,
+            name,
+            <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
+            client_code,
+            (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) AS client_name,
+            COALESCE(stock_qty, 0) AS stock_qty
+        FROM products
+        WHERE code = #{code}
+    </select>
+
+    <update id="updateProductInfo" parameterType="map">
+        UPDATE products
+        SET name = #{name},
+            storage = #{storage, jdbcType=VARCHAR},
+            client_code = #{clientCode, jdbcType=VARCHAR} <!-- 2026-10-23 거래처코드 -->
+        WHERE code = #{code}
+    </update>
+
+    <!-- 수정자 · 수정일시(2026-10-23): 제품 창(정보 · 배합비 · 부자재) · 사용여부 저장 뒤 남긴다. 재고 수량 · 라벨등록은 수정으로 치지 않는다 -->
+    <update id="updateProductAudit" parameterType="map">
+        UPDATE products
+        SET upd_user_id = #{userId, jdbcType=VARCHAR},
+            upd_dt = CURRENT_TIMESTAMP
+        WHERE code = #{code}
+    </update>
+
+    <update id="updatePricingProductName" parameterType="map">
+        UPDATE pricing
+        SET product_name = #{name}
+        WHERE product_code = #{code}
+    </update>
+
+    <update id="updateProductDiscontinued" parameterType="egovframework.let.co.master.itemmaster.domain.model.ProductBomVO">
+        UPDATE products
+        SET discontinued = #{discontinued},
+            discontinued_at = #{discontinuedAt, jdbcType=VARCHAR},
+            discontinued_by = #{discontinuedBy, jdbcType=VARCHAR},
+            discontinued_note = #{discontinuedNote, jdbcType=VARCHAR}
+        WHERE code = #{code}
+    </update>
+
+    <select id="selectBom" parameterType="string" resultMap="bomLine">
+        SELECT
+            b.material_code,
+            COALESCE(m.name, b.material_name) AS material_name,
+            b.ratio_percent,
+            b.unit_price_per_kg,
+            b.amount_per_kg,
+            b.rank_in_product
+        FROM bom b
+        LEFT JOIN materials m ON m.code = b.material_code
+        WHERE b.product_code = #{code}
+        ORDER BY b.rank_in_product
+    </select>
+
+    <delete id="deleteBom" parameterType="string">
+        DELETE FROM bom
+        WHERE product_code = #{code}
+    </delete>
+
+    <insert id="insertBomLine" parameterType="map">
+        INSERT INTO bom (
+            product_code,
+            material_code,
+            material_name,
+            ratio_percent,
+            unit_price_per_kg,
+            amount_per_kg,
+            rank_in_product
+        )
+        VALUES (
+            #{code},
+            #{line.materialCode, jdbcType=VARCHAR},
+            #{line.materialName},
+            #{line.ratioPercent, jdbcType=DOUBLE},
+            #{line.unitPricePerKg, jdbcType=DOUBLE},
+            #{line.amountPerKg, jdbcType=DOUBLE},
+            #{line.rank}
+        )
+    </insert>
+
+    <select id="selectPricingCosts" parameterType="string" resultType="egovframework.let.co.master.itemmaster.domain.model.PricingCostsVO">
+        SELECT
+            loss_cost AS "lossCost",
+            markup_cost AS "markupCost",
+            labor_cost AS "laborCost",
+            packaging_cost AS "packagingCost",
+            logistics_cost AS "logisticsCost",
+            margin AS "margin",
+            other_cost1 AS "otherCost1",
+            other_cost2 AS "otherCost2",
+            other_cost3 AS "otherCost3",
+            other_cost4 AS "otherCost4"
+        FROM pricing
+        WHERE product_code = #{code}
+    </select>
+
+    <update id="updatePricingMaterialCost" parameterType="map">
+        UPDATE pricing
+        SET material_cost = #{materialCost},
+            total_price = #{totalPrice}
+        WHERE product_code = #{code}
+    </update>
+
+    <insert id="insertBomLog" parameterType="map">
+        INSERT INTO bom_change_log (
+            product_code,
+            changed_at,
+            old_bom_json,
+            new_bom_json
+        )
+        VALUES (
+            #{code},
+            #{changedAt},
+            #{oldBomJson},
+            #{newBomJson}
+        )
+    </insert>
+
+    <select id="selectBomLog" parameterType="string" resultType="egovframework.let.co.master.itemmaster.domain.model.BomLogVO">
+        SELECT
+            id AS "logId",
+            changed_at AS "changedAt",
+            old_bom_json AS "oldBomJson",
+            new_bom_json AS "newBomJson"
+        FROM bom_change_log
+        WHERE product_code = #{code}
+        ORDER BY id DESC
+    </select>
+
+    <select id="selectSubMaterials" parameterType="string" resultType="egovframework.let.co.master.itemmaster.domain.model.ProductSubMaterialsVO">
+        SELECT
+            p.pouch_net_weight_kg AS "pouchNetWeightKg",
+            p.pouch_length_m AS "pouchLengthM",
+            p.pouch_per_unit AS "pouchPerUnit",
+            p.film_material_code AS "filmMaterialCode",
+            p.pouch_material_code AS "pouchMaterialCode",
+            p.box_material_code AS "boxMaterialCode",
+            f.name AS "filmMaterialName",
+            o.name AS "pouchMaterialName",
+            x.name AS "boxMaterialName"
+        FROM products p
+        LEFT JOIN materials f ON f.code = p.film_material_code
+        LEFT JOIN materials o ON o.code = p.pouch_material_code
+        LEFT JOIN materials x ON x.code = p.box_material_code
+        WHERE p.code = #{code}
+    </select>
+
+    <update id="updateSubMaterials" parameterType="map">
+        UPDATE products
+        SET pouch_net_weight_kg = #{sub.pouchNetWeightKg, jdbcType=DOUBLE},
+            pouch_length_m = #{sub.pouchLengthM, jdbcType=DOUBLE},
+            pouch_per_unit = #{sub.pouchPerUnit, jdbcType=DOUBLE},
+            film_material_code = #{sub.filmMaterialCode, jdbcType=VARCHAR},
+            pouch_material_code = #{sub.pouchMaterialCode, jdbcType=VARCHAR},
+            box_material_code = #{sub.boxMaterialCode, jdbcType=VARCHAR}
+        WHERE code = #{code}
+    </update>
+
+    <select id="selectMaterialOptions" resultMap="materialOption">
+        SELECT
+            code,
+            name,
+            unit_price,
+            sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm
+        FROM materials
+        WHERE name IS NOT NULL
+          AND use_yn = 'Y' <!-- 2026-10-23 고르는 목록 · 이름 맞춰보기는 사용 중 원재료 · 부자재만(제품BOM · 발주 · 입고 · 반품 · 레시피) -->
+        ORDER BY name
+    </select>
+
+    <select id="selectMaterialByName" parameterType="map" resultMap="materialOption">
+        SELECT
+            code,
+            name,
+            unit_price,
+            sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm
+        FROM materials
+        WHERE name = #{name}
+        ORDER BY
+            CASE WHEN code = #{preferCode, jdbcType=VARCHAR} THEN 0 ELSE 1 END,
+            code
+        LIMIT 1
+    </select>
+
+    <select id="selectMaterialByCodeOrName" parameterType="string" resultMap="materialOption">
+        SELECT
+            code,
+            name,
+            unit_price,
+            sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm
+        FROM materials
+        WHERE code = #{value}
+           OR name = #{value}
+        ORDER BY CASE WHEN code = #{value} THEN 0 ELSE 1 END
+    </select>
+
+    <!-- 제품 창 업체 고르기 · 생산확정 거래처 칸: 사용 중 거래처만(2026-10-23). 저장 검사(selectClientName)는 사용안함도 찾는다 -->
+    <!-- 보관방법: 공통코드 STORAGE_METHOD 의 사용 중 코드(2026-10-23). 제품마스터 창 · 제품등록 저장 검사 -->
+    <select id="selectStorageCodes" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE COALESCE(i.use_at, 'Y') = 'Y'
+          AND COALESCE(g.use_at, 'Y') = 'Y'
+        ORDER BY i.sort_order, i.item_code
+    </select>
+
+    <select id="selectClientNames" resultType="string">
+        SELECT name
+        FROM clients
+        WHERE name IS NOT NULL
+          AND COALESCE(use_yn, 'Y') = 'Y'
+        ORDER BY name
+    </select>
+
+    <!-- 거래처 고르기 목록(2026-10-23): 사용 중 거래처의 코드 · 이름. 제품등록 · 제품마스터 창 · 견적 -->
+    <select id="selectClientOptions" resultType="egovframework.let.co.master.itemmaster.domain.model.ClientOptionVO">
+        SELECT client_code AS "clientCode", name AS "name"
+        FROM clients
+        WHERE client_code IS NOT NULL
+          AND name IS NOT NULL
+          AND COALESCE(use_yn, 'Y') = 'Y'
+        ORDER BY name
+    </select>
+
+    <!-- 사용 중 거래처코드인지(2026-10-23). 맞으면 그 코드, 아니면 없음 -->
+    <!-- 2026-10-27 거래처마스터에 있는 거래처코드인지(사용여부와 상관없이). 제품마스터 수정 때 확인한다 -->
+    <select id="selectRegisteredClientCode" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE client_code = #{clientCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectActiveClientCode" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE client_code = #{clientCode}
+          AND COALESCE(use_yn, 'Y') = 'Y'
+        LIMIT 1
+    </select>
+
+    <select id="selectClientName" parameterType="string" resultType="string">
+        SELECT name
+        FROM clients
+        WHERE name = #{name}
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SystemMenuDAO">
+
+    <resultMap id="menu" type="egovframework.let.system.menus.domain.model.SystemMenuVO">
+        <result property="menuId" column="menu_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="moduleId" column="module_id"/>
+        <result property="moduleNm" column="module_nm"/>
+        <result property="parentMenuId" column="parent_menu_id"/>
+        <result property="parentMenuNm" column="parent_menu_nm"/>
+        <result property="menuCode" column="menu_code"/>
+        <result property="menuNm" column="menu_nm"/>
+        <result property="menuDc" column="menu_dc"/>
+        <result property="menuUrl" column="menu_url"/>
+        <result property="iconNm" column="icon_nm"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="useAt" column="use_at"/>
+        <result property="hasChildren" column="has_children"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectMenuList" resultMap="menu">
+        SELECT
+            mn.menu_id,
+            mn.tenant_id,
+            mn.module_id,
+            m.module_nm,
+            mn.parent_menu_id,
+            pmn.menu_nm AS parent_menu_nm,
+            mn.menu_code,
+            mn.menu_nm,
+            mn.menu_dc,
+            mn.menu_url,
+            mn.icon_nm,
+            mn.sort_order,
+            mn.use_at,
+            mn.created_at,
+            mn.updated_at,
+            (
+                EXISTS (
+                    SELECT 1
+                    FROM tb_menu c
+                    WHERE c.parent_menu_id = mn.menu_id
+                )
+            ) AS has_children
+        FROM tb_menu mn
+        JOIN tb_module m
+            ON m.module_id = mn.module_id
+        LEFT JOIN tb_menu pmn
+            ON pmn.menu_id = mn.parent_menu_id
+        WHERE mn.tenant_id = #{tenantId}
+        <if test="moduleId != null">
+            AND mn.module_id = #{moduleId}
+        </if>
+        <if test="useAt != null and useAt != ''">
+            AND mn.use_at = #{useAt}
+        </if>
+        ORDER BY
+            mn.module_id ASC,
+            mn.sort_order ASC,
+            mn.menu_id ASC
+    </select>
+
+    <select id="selectActiveMenusForTenant" parameterType="long" resultMap="menu">
+        SELECT
+            mn.menu_id,
+            mn.tenant_id,
+            mn.module_id,
+            m.module_nm,
+            mn.parent_menu_id,
+            NULL AS parent_menu_nm,
+            mn.menu_code,
+            mn.menu_nm,
+            mn.menu_dc,
+            mn.menu_url,
+            mn.icon_nm,
+            mn.sort_order,
+            mn.use_at,
+            mn.created_at,
+            mn.updated_at,
+            (
+                EXISTS (
+                    SELECT 1
+                    FROM tb_menu c
+                    WHERE c.parent_menu_id = mn.menu_id
+                      AND c.use_at = 'Y'
+                )
+            ) AS has_children
+        FROM tb_menu mn
+        JOIN tb_module m
+            ON m.module_id = mn.module_id
+        WHERE mn.tenant_id = #{value}
+          AND mn.use_at = 'Y'
+        ORDER BY
+            mn.module_id ASC,
+            mn.sort_order ASC,
+            mn.menu_id ASC
+    </select>
+
+    <select id="selectMenuById" parameterType="map" resultMap="menu">
+        SELECT
+            mn.menu_id,
+            mn.tenant_id,
+            mn.module_id,
+            m.module_nm,
+            mn.parent_menu_id,
+            pmn.menu_nm AS parent_menu_nm,
+            mn.menu_code,
+            mn.menu_nm,
+            mn.menu_dc,
+            mn.menu_url,
+            mn.icon_nm,
+            mn.sort_order,
+            mn.use_at,
+            mn.created_at,
+            mn.updated_at,
+            (
+                EXISTS (
+                    SELECT 1
+                    FROM tb_menu c
+                    WHERE c.parent_menu_id = mn.menu_id
+                )
+            ) AS has_children
+        FROM tb_menu mn
+        JOIN tb_module m
+            ON m.module_id = mn.module_id
+        LEFT JOIN tb_menu pmn
+            ON pmn.menu_id = mn.parent_menu_id
+        WHERE mn.menu_id = #{menuId}
+          AND mn.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectMenuIdByCode" parameterType="map" resultType="long">
+        SELECT menu_id
+        FROM tb_menu
+        WHERE tenant_id = #{tenantId}
+          AND menu_code = #{menuCode}
+    </select>
+
+    <select id="insertMenu" parameterType="map" resultType="long">
+        INSERT INTO tb_menu (
+            tenant_id,
+            module_id,
+            parent_menu_id,
+            menu_code,
+            menu_nm,
+            menu_dc,
+            menu_url,
+            icon_nm,
+            sort_order,
+            use_at
+        )
+        VALUES (
+            #{tenantId},
+            #{moduleId},
+            #{parentMenuId, jdbcType=BIGINT},
+            #{menuCode},
+            #{menuNm},
+            #{menuDc},
+            #{menuUrl},
+            #{iconNm},
+            #{sortOrder},
+            #{useAt}
+        )
+        RETURNING menu_id
+    </select>
+
+    <update id="updateMenu" parameterType="map">
+        UPDATE tb_menu
+        SET parent_menu_id = #{parentMenuId, jdbcType=BIGINT},
+            menu_nm = #{menuNm},
+            menu_dc = #{menuDc},
+            menu_url = #{menuUrl},
+            icon_nm = #{iconNm},
+            sort_order = #{sortOrder},
+            use_at = #{useAt},
+            updated_at = now()
+        WHERE menu_id = #{menuId}
+          AND tenant_id = #{tenantId}
+    </update>
+
+    <delete id="deleteMenu" parameterType="map">
+        DELETE FROM tb_menu
+        WHERE menu_id = #{menuId}
+          AND tenant_id = #{tenantId}
+    </delete>
+
+    <select id="countChildMenus" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_menu
+        WHERE parent_menu_id = #{menuId}
+          AND tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectMenuPermissionCodes" parameterType="long" resultType="string">
+        SELECT p.permission_code
+        FROM tb_menu_permission mp
+        JOIN tb_permission p
+            ON p.permission_id = mp.permission_id
+        WHERE mp.menu_id = #{value}
+          AND p.use_at = 'Y'
+        ORDER BY
+            p.sort_order ASC,
+            p.permission_id ASC
+    </select>
+
+    <select id="selectMenuPermissionCodeRows" parameterType="egovframework.let.system.menus.domain.model.SystemMenuSearchConditionVO" resultType="map">
+        SELECT
+            mn.menu_id AS "menuId",
+            p.permission_code AS "permissionCode"
+        FROM tb_menu mn
+        JOIN tb_menu_permission mp
+            ON mp.menu_id = mn.menu_id
+        JOIN tb_permission p
+            ON p.permission_id = mp.permission_id
+           AND p.use_at = 'Y'
+        WHERE mn.tenant_id = #{tenantId}
+        <if test="moduleId != null">
+            AND mn.module_id = #{moduleId}
+        </if>
+        <if test="useAt != null and useAt != ''">
+            AND mn.use_at = #{useAt}
+        </if>
+        ORDER BY
+            p.sort_order ASC,
+            p.permission_id ASC
+    </select>
+
+    <select id="selectRoleMenuPermissionCodeRows" parameterType="egovframework.let.system.menus.domain.model.SystemMenuSearchConditionVO" resultType="map">
+        SELECT
+            mn.menu_id AS "menuId",
+            p.permission_code AS "permissionCode"
+        FROM tb_menu mn
+        JOIN tb_role_menu_permission rmp
+            ON rmp.menu_id = mn.menu_id
+           AND rmp.role_id = #{roleId}
+        JOIN tb_permission p
+            ON p.permission_id = rmp.permission_id
+           AND p.use_at = 'Y'
+        WHERE mn.tenant_id = #{tenantId}
+        <if test="moduleId != null">
+            AND mn.module_id = #{moduleId}
+        </if>
+        <if test="useAt != null and useAt != ''">
+            AND mn.use_at = #{useAt}
+        </if>
+        ORDER BY
+            p.sort_order ASC,
+            p.permission_id ASC
+    </select>
+
+    <!-- 송연: 넘어오는 loginCode 는 LoginVO.id 다. 2026-10-22 부터 S_ERP 와 같이 계정 login_code(= 사번, employees.id) -->
+    <select id="selectRoleIdsByUserAccount" parameterType="map" resultType="long">
+        SELECT DISTINCT lar.role_id
+        FROM tb_login_account_role lar
+        JOIN tb_login_account la
+          ON la.login_id = lar.login_id
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE la.tenant_id = #{tenantId}
+          AND e.id = #{loginCode}
+        ORDER BY lar.role_id ASC
+    </select>
+
+    <select id="selectRoleCodesByUserAccount" parameterType="map" resultType="string">
+        SELECT DISTINCT r.role_code
+        FROM tb_login_account_role lar
+        JOIN tb_login_account la
+          ON la.login_id = lar.login_id
+        JOIN tb_role r
+          ON r.role_id = lar.role_id
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE la.tenant_id = #{tenantId}
+          AND e.id = #{loginCode}
+          AND COALESCE(r.use_at, 'Y') = 'Y'
+        ORDER BY r.role_code ASC
+    </select>
+
+    <delete id="deleteMenuPermissions" parameterType="long">
+        DELETE FROM tb_menu_permission
+        WHERE menu_id = #{value}
+    </delete>
+
+    <delete id="deleteRoleMenuPermissions" parameterType="map">
+        DELETE FROM tb_role_menu_permission
+        WHERE role_id = #{roleId}
+          AND menu_id = #{menuId}
+    </delete>
+
+    <insert id="insertMenuPermissions" parameterType="map">
+        INSERT INTO tb_menu_permission (menu_id, permission_id)
+        SELECT #{menuId}, p.permission_id
+        FROM tb_permission p
+        WHERE p.use_at = 'Y'
+          AND p.permission_code IN
+          <foreach collection="permissionCodes" item="permissionCode" open="(" separator="," close=")">
+              #{permissionCode}
+          </foreach>
+    </insert>
+
+    <insert id="insertRoleMenuPermissions" parameterType="map">
+        INSERT INTO tb_role_menu_permission (role_id, menu_id, permission_id)
+        SELECT #{roleId}, #{menuId}, p.permission_id
+        FROM tb_permission p
+        WHERE p.use_at = 'Y'
+          AND p.permission_code IN
+          <foreach collection="permissionCodes" item="permissionCode" open="(" separator="," close=")">
+              #{permissionCode}
+          </foreach>
+    </insert>
+
+    <select id="countActivePermissionCodes" parameterType="list" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_permission
+        WHERE use_at = 'Y'
+          AND permission_code IN
+          <foreach collection="list" item="permissionCode" open="(" separator="," close=")">
+              #{permissionCode}
+          </foreach>
+    </select>
+
+</mapper>

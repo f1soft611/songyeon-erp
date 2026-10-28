@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 상품개발 - 레시피 검색·공유 · 공유 로그 (송연 recipe.py 의 넘기기(recipe_handoffs) · 공유(recipe_shares)).
+     넘기면 확정·견적은 영업관리 > 견적(quotes)에 가견적으로, 기타는 품질관리 > 라벨등록 > 표시사항 요청(label_requests)으로 간다. -->
+<mapper namespace="RecipeShareDAO">
+
+    <!-- 넘길 버전과 그 레시피 -->
+    <select id="selectHandoffSource" parameterType="long" resultType="map">
+        SELECT v.draft_id AS "draftId", v.version_label AS "versionLabel", d.name AS "draftName", d.spec AS "draftSpec",
+               d.client_name AS "clientName", v.stage AS "stage"
+        FROM recipe_versions v JOIN recipe_drafts d ON d.id = v.draft_id
+        WHERE v.id = #{versionId}
+    </select>
+
+    <!-- 같은 버전을 같은 곳으로 두 번 넘기면 견적이 두 건 생긴다 -->
+    <select id="countHandoff" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM recipe_handoffs WHERE version_id = #{versionId} AND kind = #{kind}
+    </select>
+
+    <!-- 이 버전의 배합표: 함량이 많은 것부터 -->
+    <select id="selectHandoffBom" parameterType="long" resultType="map">
+        SELECT material_name AS "materialName", ratio_percent AS "ratio", unit_price_per_kg AS "unitPrice", material_code AS "materialCode"
+        FROM recipe_version_bom
+        WHERE version_id = #{versionId}
+        ORDER BY COALESCE(ratio_percent, 0) DESC, rank_in_version
+    </select>
+
+    <!-- 가견적: 가격은 영업이 넣는다. 원가 항목은 비우고 원재료비만 채운다(송연 compute_cost_fields(원재료비, {})) -->
+    <insert id="insertQuote" parameterType="map" useGeneratedKeys="true" keyProperty="quoteId" keyColumn="quote_id">
+        <!-- 2026-10-23 견적은 거래처코드를 저장한다. 레시피에는 거래처가 이름뿐이라 거래처마스터에서 코드를 찾는다(없으면 비움) -->
+        INSERT INTO quotes (product_name, spec, client_code, bom_json, material_cost,
+                            loss_rate, loss_cost, markup_rate, markup_cost, labor_cost, packaging_cost,
+                            logistics_cost, margin, other_cost1, other_cost2, other_cost3, other_cost4,
+                            current_price, total_price, status, source_kind, source_recipe, created_at)
+        VALUES (#{productName, jdbcType=VARCHAR}, #{spec, jdbcType=VARCHAR},
+                (SELECT c.client_code FROM clients c WHERE c.name = #{clientName, jdbcType=VARCHAR} LIMIT 1),
+                #{bomJson}, #{materialCost, jdbcType=DOUBLE},
+                NULL, 0, NULL, 0, NULL, NULL,
+                NULL, NULL, NULL, NULL, NULL, NULL,
+                NULL, #{materialCost, jdbcType=DOUBLE}, 'draft', #{kind}, #{sourceRecipe}, #{now})
+    </insert>
+
+    <select id="selectUsername" parameterType="string" resultType="string">
+        SELECT username FROM employees WHERE id = #{id}
+    </select>
+
+    <insert id="insertHandoff" parameterType="map" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO recipe_handoffs (draft_id, version_id, version_label, kind, quote_id,
+                                     requested_by, requested_by_name, requested_by_username, created_at)
+        VALUES (#{draftId}, #{versionId}, #{versionLabel, jdbcType=VARCHAR}, #{kind}, #{quoteId, jdbcType=BIGINT},
+                #{requestedBy, jdbcType=VARCHAR}, #{requestedByName, jdbcType=VARCHAR}, #{requestedByUsername, jdbcType=VARCHAR}, #{now})
+    </insert>
+
+    <insert id="insertLabelRequest" parameterType="map">
+        INSERT INTO label_requests (handoff_id, ingredients_text, status, updated_at)
+        VALUES (#{handoffId}, #{ingredientsText, jdbcType=VARCHAR}, 'requested', #{now})
+    </insert>
+
+    <!-- 넘긴 버전을 잠근다. 이미 다른 분류로 잠겨 있으면 그대로 둔다(stage 칸은 하나뿐이라 먼저 붙은 것을 남긴다) -->
+    <update id="lockVersion" parameterType="map">
+        UPDATE recipe_versions SET stage = #{stage} WHERE id = #{versionId} AND (stage IS NULL OR stage = '')
+    </update>
+
+    <insert id="insertStageLog" parameterType="map">
+        INSERT INTO recipe_stage_logs (draft_id, version_id, version_label, stage, employee_id, employee_name, created_at)
+        VALUES (#{draftId}, #{versionId}, #{versionLabel, jdbcType=VARCHAR}, #{stage}, #{employeeId, jdbcType=VARCHAR}, #{employeeName, jdbcType=VARCHAR}, #{now})
+    </insert>
+
+    <update id="touchDraft" parameterType="map">
+        UPDATE recipe_drafts SET updated_at = #{now} WHERE id = #{draftId}
+    </update>
+
+    <!-- 공유 로그. created_at 은 '2026-09-01T11:09:00' 모양이라 앞 10글자가 날짜다(날짜로 바꾸면 어긋난 값의 줄이 소리 없이 빠진다) -->
+    <select id="selectHandoffs" parameterType="map" resultType="egovframework.let.rd.recipe.domain.model.RecipeHandoffVO">
+        SELECT h.id AS "id", h.draft_id AS "draftId", h.version_id AS "versionId", h.version_label AS "versionLabel", h.kind AS "kind",
+               h.quote_id AS "quoteId", h.requested_by_name AS "requestedByName", h.requested_by_username AS "requestedByUsername",
+               h.created_at AS "createdAt", d.name AS "draftName", d.client_name AS "clientName",
+               (SELECT lr.id FROM label_requests lr WHERE lr.handoff_id = h.id LIMIT 1) AS "labelRequestId",
+               (SELECT lr.status FROM label_requests lr WHERE lr.handoff_id = h.id LIMIT 1) AS "labelStatus",
+               (SELECT q.status FROM quotes q WHERE q.quote_id = h.quote_id) AS "quoteStatus"
+        FROM recipe_handoffs h LEFT JOIN recipe_drafts d ON d.id = h.draft_id
+        WHERE 1 = 1
+        <if test="draftId != null">AND h.draft_id = #{draftId}</if>
+        <if test="kind != null and kind != ''">AND h.kind = #{kind}</if>
+        <if test="start != null and start != ''">AND substr(h.created_at, 1, 10) &gt;= #{start}</if>
+        <if test="end != null and end != ''">AND substr(h.created_at, 1, 10) &lt;= #{end}</if>
+        ORDER BY h.id DESC
+    </select>
+
+    <select id="selectShares" resultType="egovframework.let.rd.recipe.domain.model.RecipeShareVO">
+        SELECT s.id AS "id", s.draft_id AS "draftId", d.name AS "draftName", s.employee_id AS "employeeId", e.name AS "employeeName",
+               e.department AS "employeeDepartment", s.expires_at AS "expiresAt", s.revoked AS "revoked", s.created_at AS "createdAt",
+               s.version_id AS "versionId", v.version_label AS "versionLabel"
+        FROM recipe_shares s
+        LEFT JOIN recipe_drafts d ON d.id = s.draft_id
+        LEFT JOIN employees e ON e.id = s.employee_id
+        LEFT JOIN recipe_versions v ON v.id = s.version_id
+        ORDER BY s.created_at DESC
+    </select>
+
+    <select id="selectVersionDraftId" parameterType="long" resultType="long">
+        SELECT draft_id FROM recipe_versions WHERE id = #{versionId}
+    </select>
+
+    <select id="selectLatestVersionId" parameterType="long" resultType="long">
+        SELECT id FROM recipe_versions WHERE draft_id = #{draftId} ORDER BY id DESC LIMIT 1
+    </select>
+
+    <insert id="insertShare" parameterType="map">
+        INSERT INTO recipe_shares (draft_id, version_id, employee_id, expires_at, revoked, created_by, created_at)
+        VALUES (#{draftId}, #{versionId, jdbcType=BIGINT}, #{employeeId, jdbcType=VARCHAR}, #{expiresAt}, 0, #{createdBy, jdbcType=VARCHAR}, #{now})
+    </insert>
+
+    <delete id="deleteShare" parameterType="long">
+        DELETE FROM recipe_shares WHERE id = #{id}
+    </delete>
+</mapper>

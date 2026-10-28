@@ -1,0 +1,1021 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="DocumentApprovalDAO">
+
+    <resultMap id="fileItem" type="egovframework.let.groupware.approval.domain.model.DocumentApprovalFileItemVO">
+        <id property="fileId" column="file_id"/>
+        <result property="fileName" column="file_name"/>
+        <result property="fileSize" column="file_size"/>
+        <result property="mimeType" column="mime_type"/>
+        <result property="uploadedByName" column="uploaded_by_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="documentTitle" column="document_title"/>
+        <result property="commentId" column="comment_id"/>
+    </resultMap>
+
+    <sql id="relatedFiles">
+        SELECT f.file_id, f.file_name, f.file_size, f.mime_type, f.created_at,
+               f.uploaded_by, f.tenant_id,
+               m.electronic_approval_id, m.title AS document_title, c.comment_id
+        FROM public.tb_common_file f
+        LEFT JOIN public.tb_common_comment c
+          ON f.owner_type = 'APPROVAL_COMMENT'
+         AND c.comment_id = f.owner_id AND c.tenant_id = f.tenant_id
+         AND c.owner_type = 'APPROVAL' AND c.comment_type = 'USER' AND c.deleted_yn = 'N'
+        JOIN public.tb_electronic_approval_main m
+          ON m.tenant_id = f.tenant_id
+         AND ((f.owner_type = 'APPROVAL' AND m.electronic_approval_id = f.owner_id)
+           OR (f.owner_type = 'APPROVAL_COMMENT' AND m.electronic_approval_id = c.owner_id))
+        <include refid="relatedDocumentStatusFilters"/>
+          AND f.deleted_yn = 'N'
+          AND f.file_usage_type = 'ATTACHMENT'
+    </sql>
+
+    <select id="selectRelatedFileCursor" parameterType="map" resultType="long">
+        WITH related_files AS (<include refid="relatedFiles"/>)
+        SELECT file_id FROM related_files WHERE file_id = #{beforeFileId}
+    </select>
+
+    <select id="selectRelatedFilePage" parameterType="map" resultMap="fileItem">
+        WITH related_files AS (<include refid="relatedFiles"/>)
+        SELECT f.file_id, f.file_name, f.file_size, f.mime_type, f.created_at,
+               f.electronic_approval_id, f.document_title, f.comment_id,
+               COALESCE((
+                   SELECT u.user_nm FROM public.tb_login_account la
+                   JOIN public.tb_user u ON u.tenant_id = la.tenant_id AND u.login_id = la.login_id
+                   WHERE la.tenant_id = f.tenant_id AND la.login_code = f.uploaded_by
+                   ORDER BY u.user_id LIMIT 1
+               ), '알 수 없음') AS uploaded_by_name
+        FROM related_files f
+        <if test="beforeFileId != null">
+            WHERE (f.created_at, f.file_id) &lt; (
+                SELECT cursor_file.created_at, cursor_file.file_id
+                FROM related_files cursor_file WHERE cursor_file.file_id = #{beforeFileId}
+            )
+        </if>
+        ORDER BY f.created_at DESC, f.file_id DESC
+        LIMIT 21
+    </select>
+
+    <resultMap id="participant" type="egovframework.let.groupware.approval.domain.model.DocumentApprovalParticipantVO">
+        <result property="userId" column="user_id"/>
+        <result property="userName" column="user_name"/>
+        <result property="departmentName" column="department_name"/>
+    </resultMap>
+
+    <resultMap id="workflowDocument"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalWorkflowDocumentVO">
+        <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="documentType" column="document_type"/>
+        <result property="documentStatus" column="document_status"/>
+        <result property="drafterId" column="drafter_id"/>
+    </resultMap>
+
+    <resultMap id="draftResponse"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalDraftVO">
+        <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="eabusNo" column="eabus_no"/>
+        <result property="documentStatus" column="document_status"/>
+        <result property="submittedAt" column="submitted_at"/>
+    </resultMap>
+
+    <resultMap id="approvalLine"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalLineVO">
+        <id property="electronicApprovalLineId" column="electronic_approval_line_id"/>
+        <result property="stageOrder" column="stage_order"/>
+        <result property="participantOrder" column="participant_order"/>
+        <result property="participantType" column="participant_type"/>
+        <result property="participantUserId" column="participant_user_id"/>
+        <result property="participantName" column="participant_name"/>
+        <result property="participantDepartmentName" column="participant_department_name"/>
+        <result property="participantProfileImage" column="participant_profile_image"/>
+        <result property="participantStampImage" column="participant_stamp_image"/>
+        <result property="actionStatus" column="action_status"/>
+        <result property="pendingAt" column="pending_at"/>
+        <result property="actionAt" column="action_at"/>
+        <result property="actionComment" column="action_comment"/>
+    </resultMap>
+
+    <resultMap id="approvalLineBatch"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalLineBatchVO"
+            extends="approvalLine">
+        <result property="electronicApprovalId" column="electronic_approval_id"/>
+    </resultMap>
+
+    <resultMap id="listItem"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalListItemVO">
+        <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="eabusNo" column="eabus_no"/>
+        <result property="documentType" column="document_type"/>
+        <result property="documentStatus" column="document_status"/>
+        <result property="title" column="title"/>
+        <result property="drafterName" column="drafter_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="submittedAt" column="submitted_at"/>
+        <result property="summary" column="summary"/>
+        <result property="noticeType" column="notice_type"/>
+        <result property="drafter" column="is_drafter"/>
+    </resultMap>
+
+    <resultMap id="statusListItem"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalStatusListItemVO"
+            extends="listItem">
+        <result property="drafterDepartmentName" column="drafter_department_name"/>
+        <result property="participantName" column="participant_name"/>
+        <result property="myParticipantType" column="my_participant_type"/>
+        <result property="myActionStatus" column="my_action_status"/>
+        <result property="currentApprovalStep" column="current_approval_step"/>
+        <result property="approvalProgress" column="approval_progress"/>
+    </resultMap>
+
+    <resultMap id="summary"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalSummaryVO">
+        <result property="actionRequiredCount" column="action_required_count"/>
+        <result property="inProgressCount" column="in_progress_count"/>
+        <result property="draftCount" column="draft_count"/>
+        <result property="completedCount" column="completed_count"/>
+        <result property="revisionRequestedCount" column="revision_requested_count"/>
+        <result property="rejectedCount" column="rejected_count"/>
+    </resultMap>
+
+    <resultMap id="detail"
+            type="egovframework.let.groupware.approval.domain.model.DocumentApprovalDetailVO">
+        <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="draftingWorkCategoryId" column="drafting_work_category_id"/>
+        <result property="eabusNo" column="eabus_no"/>
+        <result property="documentType" column="document_type"/>
+        <result property="documentStatus" column="document_status"/>
+        <result property="drafterName" column="drafter_name"/>
+        <result property="drafterProfileImage" column="drafter_profile_image"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="submittedAt" column="submitted_at"/>
+        <result property="title" column="title"/>
+        <result property="contentsJson" column="contents_json"/>
+        <result property="contentsHtml" column="contents_html"/>
+        <result property="contentsText" column="contents_text"/>
+        <result property="viewCount" column="view_count"/>
+        <result property="drafter" column="is_drafter"/>
+    </resultMap>
+
+    <select id="selectActiveDraftingCategory" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_drafting_work_category
+            WHERE tenant_id = #{tenantId}
+              AND drafting_work_category_id = #{draftingWorkCategoryId}
+              AND use_at = 'Y'
+              AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+        )
+    </select>
+
+    <select id="selectActiveParticipants" parameterType="map" resultMap="participant">
+        SELECT
+            CAST(u.user_id AS varchar) AS user_id,
+            u.user_nm AS user_name,
+            d.department_nm AS department_name
+        FROM public.tb_user u
+        JOIN public.tb_login_account la
+          ON la.login_id = u.login_id
+         AND la.tenant_id = u.tenant_id
+         AND la.use_at = 'Y'
+        LEFT JOIN public.tb_department d
+          ON d.department_id = u.department_id
+         AND d.tenant_id = u.tenant_id
+        WHERE u.tenant_id = #{tenantId}
+          AND u.use_at = 'Y'
+          AND CAST(u.user_id AS varchar) IN
+          <foreach collection="participantUserIds" item="participantUserId" open="(" separator="," close=")">
+              #{participantUserId}
+          </foreach>
+    </select>
+
+    <select id="insertDocumentApprovalMain" parameterType="map" resultType="long">
+        INSERT INTO public.tb_electronic_approval_main (
+            tenant_id, drafting_work_category_id, document_type, eabus_no, document_status, title,
+            contents_json, contents_html, contents_text, drafter_id, drafter_name,
+            drafter_department_name, created_at, updated_at, updated_by
+        ) VALUES (
+            #{tenantId}, #{draftingWorkCategoryId, jdbcType=BIGINT}, #{documentType}, #{eabusNo}, 'DRAFT', #{title},
+            CAST(#{contentsJson} AS jsonb), #{contentsHtml}, #{contentsText}, #{drafterId},
+            #{drafterName}, #{drafterDepartmentName}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, #{drafterId}
+        )
+        RETURNING electronic_approval_id
+    </select>
+
+    <select id="selectDocumentApprovalForUpdate" parameterType="map" resultMap="workflowDocument">
+        SELECT electronic_approval_id, document_type, document_status, drafter_id
+        FROM public.tb_electronic_approval_main
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND deleted_yn = 'N'
+        FOR UPDATE
+    </select>
+
+    <update id="updateDocumentApprovalStatus" parameterType="map">
+        UPDATE public.tb_electronic_approval_main
+        SET document_status = #{nextDocumentStatus},
+            submitted_at = COALESCE(submitted_at, CURRENT_TIMESTAMP),
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{actorId}
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND document_status = #{expectedDocumentStatus}
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="resetSubmittedDocumentToDraft" parameterType="map">
+        UPDATE public.tb_electronic_approval_main
+        SET document_status = 'DRAFT',
+            submitted_at = NULL,
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{actorId}
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND drafter_id = #{drafterId}
+          AND document_status = 'PENDING'
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="resetSubmittedApprovalLines" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_info
+        SET action_status = 'WAITING',
+            pending_at = NULL,
+            action_at = NULL,
+            action_comment = NULL
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+    </update>
+
+    <select id="selectUserApprovedApprovalLineForUpdate" parameterType="map" resultMap="approvalLine">
+        SELECT electronic_approval_line_id, stage_order, participant_order, participant_type,
+               participant_user_id, participant_name, participant_department_name,
+               action_status, pending_at, action_at, action_comment
+        FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND participant_user_id = #{participantUserId}
+          AND stage_order &gt; 1
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'APPROVED'
+          AND action_at IS NOT NULL
+        FOR UPDATE
+    </select>
+
+    <select id="selectProcessedLaterApprovalStage" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_electronic_approval_line_info
+            WHERE tenant_id = #{tenantId}
+              AND electronic_approval_id = #{electronicApprovalId}
+              AND stage_order &gt; #{stageOrder}
+              AND participant_type IN ('APPROVAL', 'AGREEMENT')
+              AND action_status IN ('APPROVED', 'REJECTED', 'RETURNED')
+        )
+    </select>
+
+    <update id="resetApprovalLineToPending" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_info
+        SET action_status = 'PENDING',
+            pending_at = CURRENT_TIMESTAMP,
+            action_at = NULL,
+            action_comment = NULL
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND electronic_approval_line_id = #{electronicApprovalLineId}
+          AND participant_user_id = #{participantUserId}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'APPROVED'
+    </update>
+
+    <update id="resetUntouchedLaterApprovalStages" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_info
+        SET action_status = 'WAITING',
+            pending_at = NULL,
+            action_at = NULL,
+            action_comment = NULL
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND stage_order &gt; #{stageOrder}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'PENDING'
+          AND action_at IS NULL
+          AND action_comment IS NULL
+    </update>
+
+    <select id="countProcessedApprovalLines" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND stage_order &gt; 1
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status IN ('APPROVED', 'REJECTED', 'RETURNED')
+    </select>
+
+    <select id="selectCanDeletePendingDocumentApproval" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_electronic_approval_line_info drafter_line
+            WHERE drafter_line.tenant_id = #{tenantId}
+              AND drafter_line.electronic_approval_id = #{electronicApprovalId}
+              AND drafter_line.stage_order = 1
+              AND drafter_line.participant_type = 'APPROVAL'
+              AND drafter_line.participant_user_id = #{participantUserId}
+              AND drafter_line.action_status = 'APPROVED'
+              AND drafter_line.action_at IS NOT NULL
+        )
+        AND NOT EXISTS (
+            SELECT 1
+            FROM public.tb_electronic_approval_line_info line
+            WHERE line.tenant_id = #{tenantId}
+              AND line.electronic_approval_id = #{electronicApprovalId}
+              AND line.participant_type IN ('APPROVAL', 'AGREEMENT')
+              AND NOT (
+                  line.stage_order = 1
+                  AND line.participant_type = 'APPROVAL'
+                  AND line.participant_user_id = #{participantUserId}
+              )
+              AND (
+                  line.action_status NOT IN ('WAITING', 'PENDING')
+                  OR line.action_at IS NOT NULL
+                  OR line.action_comment IS NOT NULL
+              )
+        )
+    </select>
+
+    <update id="softDeleteDocumentApproval" parameterType="map">
+        UPDATE public.tb_electronic_approval_main
+        SET deleted_yn = 'Y',
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{actorId}
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND drafter_id = #{drafterId}
+          AND document_status IN ('DRAFT', 'PENDING')
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="updateDocumentApprovalMain" parameterType="map">
+        UPDATE public.tb_electronic_approval_main
+        SET drafting_work_category_id = #{draftingWorkCategoryId, jdbcType=BIGINT},
+            document_type = #{documentType},
+            eabus_no = #{eabusNo},
+            title = #{title},
+            contents_json = CAST(#{contentsJson} AS jsonb),
+            contents_html = #{contentsHtml},
+            contents_text = #{contentsText},
+            drafter_name = #{drafterName},
+            drafter_department_name = #{drafterDepartmentName},
+            updated_at = CURRENT_TIMESTAMP,
+            updated_by = #{drafterId}
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND drafter_id = #{drafterId}
+          AND document_status IN ('DRAFT', 'REVISION_REQUESTED')
+          AND deleted_yn = 'N'
+    </update>
+
+    <delete id="deleteDocumentApprovalLines" parameterType="map">
+        DELETE FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+    </delete>
+
+    <insert id="insertDocumentApprovalLine" parameterType="map">
+        INSERT INTO public.tb_electronic_approval_line_info (
+            tenant_id, electronic_approval_id, stage_order, participant_order,
+            participant_type, participant_user_id, participant_name,
+            participant_department_name, action_status, pending_at, action_at, action_comment, created_at
+        ) VALUES (
+            #{tenantId}, #{electronicApprovalId}, #{stageOrder}, #{participantOrder},
+            #{participantType}, #{participantUserId}, #{participantName},
+            #{participantDepartmentName}, #{actionStatus}, #{pendingAt, jdbcType=TIMESTAMP},
+            #{actionAt, jdbcType=TIMESTAMP}, #{actionComment}, CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <select id="selectCurrentPendingApprovalLine" parameterType="map" resultMap="approvalLine">
+        SELECT electronic_approval_line_id, stage_order, participant_order, participant_type,
+               participant_user_id, participant_name, participant_department_name,
+               action_status, pending_at, action_at, action_comment
+        FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND participant_user_id = #{participantUserId}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'PENDING'
+        FOR UPDATE
+    </select>
+
+    <update id="updateApprovalLineAction" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_info
+        SET action_status = #{actionStatus},
+            action_at = CURRENT_TIMESTAMP,
+            action_comment = #{actionComment}
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND electronic_approval_line_id = #{electronicApprovalLineId}
+          AND participant_user_id = #{participantUserId}
+          AND action_status = 'PENDING'
+    </update>
+
+    <select id="selectPendingApprovalCountForStage" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND stage_order = #{stageOrder}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'PENDING'
+    </select>
+
+    <select id="selectNextWaitingApprovalStage" parameterType="map" resultType="int">
+        SELECT MIN(stage_order)
+        FROM public.tb_electronic_approval_line_info
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'WAITING'
+    </select>
+
+    <update id="activateApprovalStage" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_info
+        SET action_status = 'PENDING',
+            pending_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND stage_order = #{stageOrder}
+          AND participant_type IN ('APPROVAL', 'AGREEMENT')
+          AND action_status = 'WAITING'
+    </update>
+
+    <sql id="documentReadAccess">
+        AND (
+            m.drafter_id = #{drafterId}
+            OR (
+                m.document_status != 'DRAFT'
+                AND EXISTS (
+                    SELECT 1
+                    FROM public.tb_electronic_approval_line_info l
+                    WHERE l.tenant_id = m.tenant_id
+                      AND l.electronic_approval_id = m.electronic_approval_id
+                      AND l.participant_user_id = #{participantUserId}
+                )
+            )
+        )
+    </sql>
+
+    <sql id="relatedDocumentStatusFilters">
+        WHERE m.tenant_id = #{tenantId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+        <if test="scope == 'MY_PENDING'">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info pending_line
+                WHERE pending_line.tenant_id = m.tenant_id
+                  AND pending_line.electronic_approval_id = m.electronic_approval_id
+                  AND pending_line.participant_user_id = #{participantUserId}
+                  AND pending_line.action_status = 'PENDING'
+            )
+        </if>
+        <if test="scope == 'IN_PROGRESS'">
+            AND m.document_status IN ('PENDING', 'IN_PROGRESS')
+        </if>
+        <if test="scope == 'DRAFT'">
+            AND m.drafter_id = #{drafterId}
+            AND m.document_status = 'DRAFT'
+        </if>
+        <if test="scope == 'COMPLETED' or scope == 'REVISION_REQUESTED' or scope == 'REJECTED'">
+            AND m.document_status = #{scope}
+        </if>
+        <if test="electronicApprovalIdFilter != null">
+            AND m.electronic_approval_id = #{electronicApprovalIdFilter}
+        </if>
+        <if test="documentType != null and documentType != ''">
+            AND m.document_type = #{documentType}
+        </if>
+        <if test="electronicApprovalId != null">
+            AND m.electronic_approval_id = #{electronicApprovalId}
+        </if>
+        <if test="documentStatus != null and documentStatus != ''">
+            AND m.document_status = #{documentStatus}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(m.electronic_approval_id AS varchar) ILIKE '%' || #{keyword} || '%'
+                OR m.title ILIKE '%' || #{keyword} || '%'
+                OR m.drafter_name ILIKE '%' || #{keyword} || '%'
+            )
+        </if>
+        <if test="eabusNoFilter != null and eabusNoFilter != ''">
+            AND m.eabus_no ILIKE '%' || #{eabusNoFilter} || '%'
+        </if>
+        <if test="titleFilter != null and titleFilter != ''">
+            AND m.title ILIKE '%' || #{titleFilter} || '%'
+        </if>
+        <if test="drafterNameFilter != null and drafterNameFilter != ''">
+            AND m.drafter_name ILIKE '%' || #{drafterNameFilter} || '%'
+        </if>
+        <if test="drafterDepartmentName != null and drafterDepartmentName != ''">
+            AND m.drafter_department_name ILIKE '%' || #{drafterDepartmentName} || '%'
+        </if>
+        <if test="participantName != null and participantName != ''">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info participant_line
+                WHERE participant_line.tenant_id = m.tenant_id
+                  AND participant_line.electronic_approval_id = m.electronic_approval_id
+                  AND participant_line.participant_name ILIKE '%' || #{participantName} || '%'
+            )
+        </if>
+        <if test="myParticipantType == 'DRAFTER'">
+            AND m.drafter_id = #{drafterId}
+        </if>
+        <if test="(myParticipantType != null and myParticipantType != '' and myParticipantType != 'DRAFTER')
+                  or (myActionStatus != null and myActionStatus != '')">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info my_line
+                WHERE my_line.tenant_id = m.tenant_id
+                  AND my_line.electronic_approval_id = m.electronic_approval_id
+                  AND my_line.participant_user_id = #{participantUserId}
+                <if test="myParticipantType != null and myParticipantType != '' and myParticipantType != 'DRAFTER'">
+                    AND my_line.participant_type = #{myParticipantType}
+                </if>
+                <if test="myActionStatus != null and myActionStatus != ''">
+                    AND my_line.action_status = #{myActionStatus}
+                </if>
+            )
+        </if>
+        <if test="currentApproverName != null and currentApproverName != ''">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info pending_line
+                WHERE pending_line.tenant_id = m.tenant_id
+                  AND pending_line.electronic_approval_id = m.electronic_approval_id
+                  AND pending_line.participant_type IN ('APPROVAL', 'AGREEMENT')
+                  AND pending_line.action_status = 'PENDING'
+                  AND pending_line.stage_order = (
+                      SELECT MIN(active_line.stage_order)
+                      FROM public.tb_electronic_approval_line_info active_line
+                      WHERE active_line.tenant_id = m.tenant_id
+                        AND active_line.electronic_approval_id = m.electronic_approval_id
+                        AND active_line.participant_type IN ('APPROVAL', 'AGREEMENT')
+                        AND active_line.action_status = 'PENDING'
+                  )
+                  AND pending_line.participant_name ILIKE '%' || #{currentApproverName} || '%'
+            )
+        </if>
+        <if test="submittedAtFrom != null and submittedAtFrom != ''">
+            AND (
+                (m.document_status = 'DRAFT' AND m.created_at &gt;= CAST(#{submittedAtFrom} AS date))
+                OR (m.document_status != 'DRAFT' AND m.submitted_at &gt;= CAST(#{submittedAtFrom} AS date))
+            )
+        </if>
+        <if test="submittedAtTo != null and submittedAtTo != ''">
+            AND (
+                (m.document_status = 'DRAFT'
+                    AND m.created_at &lt; CAST(#{submittedAtTo} AS date) + INTERVAL '1 day')
+                OR (m.document_status != 'DRAFT'
+                    AND m.submitted_at &lt; CAST(#{submittedAtTo} AS date) + INTERVAL '1 day')
+            )
+        </if>
+        <if test="updatedAtFrom != null and updatedAtFrom != ''">
+            AND m.updated_at &gt;= CAST(#{updatedAtFrom} AS date)
+        </if>
+        <if test="updatedAtTo != null and updatedAtTo != ''">
+            AND m.updated_at &lt; CAST(#{updatedAtTo} AS date) + INTERVAL '1 day'
+        </if>
+    </sql>
+
+    <select id="selectRelatedDocumentPage" parameterType="map" resultMap="statusListItem">
+        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+               m.title, m.drafter_name, m.drafter_department_name,
+               m.created_at, m.updated_at, m.submitted_at,
+               NULL::varchar AS notice_type,
+               COALESCE((
+                   SELECT string_agg(line.participant_name, ', ' ORDER BY line.stage_order, line.participant_order)
+                   FROM public.tb_electronic_approval_line_info line
+                   WHERE line.tenant_id = m.tenant_id
+                     AND line.electronic_approval_id = m.electronic_approval_id
+               ), '') AS participant_name,
+               CASE
+                   WHEN m.drafter_id = #{drafterId} THEN 'DRAFTER'
+                   ELSE COALESCE((
+                   SELECT string_agg(DISTINCT my_line.participant_type, ', ' ORDER BY my_line.participant_type)
+                   FROM public.tb_electronic_approval_line_info my_line
+                   WHERE my_line.tenant_id = m.tenant_id
+                     AND my_line.electronic_approval_id = m.electronic_approval_id
+                     AND my_line.participant_user_id = #{participantUserId}
+                   ), '')
+               END AS my_participant_type,
+               COALESCE((
+                   SELECT string_agg(DISTINCT my_line.action_status, ', ' ORDER BY my_line.action_status)
+                   FROM public.tb_electronic_approval_line_info my_line
+                   WHERE my_line.tenant_id = m.tenant_id
+                     AND my_line.electronic_approval_id = m.electronic_approval_id
+                     AND my_line.participant_user_id = #{participantUserId}
+                     AND my_line.action_status IS NOT NULL
+               ), '') AS my_action_status,
+               COALESCE((
+                   SELECT line.stage_order::varchar || '단계 · '
+                          || string_agg(line.participant_name, ', ' ORDER BY line.participant_order)
+                   FROM public.tb_electronic_approval_line_info line
+                   WHERE line.tenant_id = m.tenant_id
+                     AND line.electronic_approval_id = m.electronic_approval_id
+                     AND line.participant_type IN ('APPROVAL', 'AGREEMENT')
+                     AND line.action_status = 'PENDING'
+                     AND line.stage_order = (
+                         SELECT MIN(active_line.stage_order)
+                         FROM public.tb_electronic_approval_line_info active_line
+                         WHERE active_line.tenant_id = m.tenant_id
+                           AND active_line.electronic_approval_id = m.electronic_approval_id
+                           AND active_line.participant_type IN ('APPROVAL', 'AGREEMENT')
+                           AND active_line.action_status = 'PENDING'
+                     )
+                   GROUP BY line.stage_order
+               ), '') AS current_approval_step,
+               COALESCE((
+                   SELECT COUNT(*) FILTER (WHERE line.action_status = 'APPROVED')::varchar
+                          || '/' || COUNT(*)::varchar
+                   FROM public.tb_electronic_approval_line_info line
+                   WHERE line.tenant_id = m.tenant_id
+                     AND line.electronic_approval_id = m.electronic_approval_id
+                     AND line.participant_type IN ('APPROVAL', 'AGREEMENT')
+                   HAVING COUNT(*) &gt; 0
+               ), '') AS approval_progress
+        FROM public.tb_electronic_approval_main m
+        <include refid="relatedDocumentStatusFilters"/>
+        ORDER BY
+        <choose>
+            <when test="sortField == 'electronicApprovalId'">m.electronic_approval_id</when>
+            <when test="sortField == 'eabusNo'">m.eabus_no</when>
+            <when test="sortField == 'title'">m.title</when>
+            <when test="sortField == 'documentType'">m.document_type</when>
+            <when test="sortField == 'documentStatus'">m.document_status</when>
+            <when test="sortField == 'submittedAt'">m.submitted_at</when>
+            <when test="sortField == 'drafterName'">m.drafter_name</when>
+            <when test="sortField == 'drafterDepartmentName'">m.drafter_department_name</when>
+            <when test="sortField == 'myParticipantType'">my_participant_type</when>
+            <when test="sortField == 'myActionStatus'">my_action_status</when>
+            <when test="sortField == 'currentApprovalStep'">current_approval_step</when>
+            <when test="sortField == 'participantName'">participant_name</when>
+            <when test="sortField == 'approvalProgress'">approval_progress</when>
+            <otherwise>m.updated_at</otherwise>
+        </choose>
+        <choose>
+            <when test="sortDirection == 'ASC'">ASC</when>
+            <otherwise>DESC</otherwise>
+        </choose>,
+        m.electronic_approval_id DESC
+        <if test="limit != null and offset != null">
+            LIMIT #{limit} OFFSET #{offset}
+        </if>
+    </select>
+
+    <select id="countRelatedDocuments" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM public.tb_electronic_approval_main m
+        <include refid="relatedDocumentStatusFilters"/>
+    </select>
+
+    <select id="selectRelatedDocumentList" parameterType="map" resultMap="listItem">
+        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+               m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
+               LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
+               NULL::varchar AS notice_type,
+               (m.drafter_id = #{drafterId}) AS is_drafter
+        FROM public.tb_electronic_approval_main m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+        <if test="documentType != null and documentType != ''">
+            AND m.document_type = #{documentType}
+        </if>
+        <if test="electronicApprovalId != null">
+            AND m.electronic_approval_id = #{electronicApprovalId}
+        </if>
+        <if test="scope == 'MY_PENDING'">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info l
+                WHERE l.tenant_id = m.tenant_id
+                  AND l.electronic_approval_id = m.electronic_approval_id
+                  AND l.participant_user_id = #{participantUserId}
+                  AND l.action_status = 'PENDING'
+            )
+        </if>
+        <if test="scope == 'IN_PROGRESS'">
+            AND m.document_status IN ('PENDING', 'IN_PROGRESS')
+        </if>
+        <if test="scope == 'DRAFT'">
+            AND m.drafter_id = #{drafterId}
+            AND m.document_status = 'DRAFT'
+        </if>
+        <if test="scope == 'COMPLETED' or scope == 'REVISION_REQUESTED' or scope == 'REJECTED'">
+            AND m.document_status = #{scope}
+        </if>
+        ORDER BY m.updated_at DESC, m.electronic_approval_id DESC
+    </select>
+
+    <sql id="relatedWriteDocumentFilters">
+        WHERE m.tenant_id = #{tenantId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+        <if test="documentType != null and documentType != ''">
+            AND m.document_type = #{documentType}
+        </if>
+        <if test="electronicApprovalId != null">
+            AND m.electronic_approval_id = #{electronicApprovalId}
+        </if>
+        <if test="scope == 'MY_PENDING'">
+            AND EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info l
+                WHERE l.tenant_id = m.tenant_id
+                  AND l.electronic_approval_id = m.electronic_approval_id
+                  AND l.participant_user_id = #{participantUserId}
+                  AND l.action_status = 'PENDING'
+            )
+        </if>
+        <if test="scope == 'IN_PROGRESS'">
+            AND m.document_status IN ('PENDING', 'IN_PROGRESS')
+        </if>
+        <if test="scope == 'DRAFT'">
+            AND m.drafter_id = #{drafterId}
+            AND m.document_status = 'DRAFT'
+        </if>
+        <if test="scope == 'COMPLETED' or scope == 'REVISION_REQUESTED' or scope == 'REJECTED'">
+            AND m.document_status = #{scope}
+        </if>
+    </sql>
+
+    <select id="selectRelatedDocumentWritePage" parameterType="map" resultMap="listItem">
+        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+               m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
+               LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
+               NULL::varchar AS notice_type,
+               (m.drafter_id = #{drafterId}) AS is_drafter
+        FROM public.tb_electronic_approval_main m
+        <include refid="relatedWriteDocumentFilters"/>
+        ORDER BY m.updated_at DESC, m.electronic_approval_id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countRelatedWriteDocuments" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM public.tb_electronic_approval_main m
+        <include refid="relatedWriteDocumentFilters"/>
+    </select>
+
+    <insert id="insertDocumentApprovalPin" parameterType="map">
+        INSERT INTO public.tb_electronic_approval_pin (
+            tenant_id, user_id, electronic_approval_id
+        )
+        SELECT m.tenant_id, #{userId}, m.electronic_approval_id
+        FROM public.tb_electronic_approval_main m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.electronic_approval_id = #{electronicApprovalId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+        ON CONFLICT (tenant_id, user_id, electronic_approval_id) DO NOTHING
+    </insert>
+
+    <delete id="deleteDocumentApprovalPin" parameterType="map">
+        DELETE FROM public.tb_electronic_approval_pin p
+        WHERE p.tenant_id = #{tenantId}
+          AND p.user_id = #{userId}
+          AND p.electronic_approval_id = #{electronicApprovalId}
+          AND EXISTS (
+              SELECT 1
+              FROM public.tb_electronic_approval_main m
+              WHERE m.tenant_id = p.tenant_id
+                AND m.electronic_approval_id = p.electronic_approval_id
+                AND m.deleted_yn = 'N'
+            <include refid="documentReadAccess"/>
+          )
+    </delete>
+
+    <select id="selectPinnedRelatedDocumentList" parameterType="map" resultMap="listItem">
+        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+               m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
+               LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
+               NULL::varchar AS notice_type
+        FROM public.tb_electronic_approval_main m
+        JOIN public.tb_electronic_approval_pin p
+          ON p.tenant_id = m.tenant_id
+         AND p.electronic_approval_id = m.electronic_approval_id
+         AND p.tenant_id = #{tenantId}
+         AND p.user_id = #{userId}
+        <include refid="relatedDocumentStatusFilters"/>
+        ORDER BY m.updated_at DESC, m.electronic_approval_id DESC
+    </select>
+
+    <select id="selectDocumentApprovalSummary" parameterType="map" resultMap="summary">
+        SELECT
+            COUNT(DISTINCT CASE WHEN EXISTS (
+                SELECT 1
+                FROM public.tb_electronic_approval_line_info l
+                WHERE l.tenant_id = m.tenant_id
+                  AND l.electronic_approval_id = m.electronic_approval_id
+                  AND l.participant_user_id = #{participantUserId}
+                  AND l.action_status = 'PENDING'
+            ) THEN m.electronic_approval_id END) AS action_required_count,
+            COUNT(DISTINCT CASE WHEN m.document_status IN ('PENDING', 'IN_PROGRESS')
+                THEN m.electronic_approval_id END) AS in_progress_count,
+            COUNT(DISTINCT CASE WHEN m.drafter_id = #{drafterId} AND m.document_status = 'DRAFT'
+                THEN m.electronic_approval_id END) AS draft_count,
+            COUNT(DISTINCT CASE WHEN m.document_status = 'COMPLETED'
+                THEN m.electronic_approval_id END) AS completed_count,
+            COUNT(DISTINCT CASE WHEN m.document_status = 'REVISION_REQUESTED'
+                THEN m.electronic_approval_id END) AS revision_requested_count,
+            COUNT(DISTINCT CASE WHEN m.document_status = 'REJECTED'
+                THEN m.electronic_approval_id END) AS rejected_count
+        FROM public.tb_electronic_approval_main m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+    </select>
+
+    <select id="selectApprovalNotices" parameterType="map" resultMap="listItem">
+        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+               m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
+               LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
+               CASE WHEN m.document_status = 'REVISION_REQUESTED'
+                    THEN 'REVISION_REQUESTED' ELSE 'ACTION_REQUIRED' END AS notice_type
+        FROM public.tb_electronic_approval_main m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+          AND (
+              (
+                  m.drafter_id = #{drafterId}
+                  AND m.document_status = 'REVISION_REQUESTED'
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM public.tb_electronic_approval_line_info l
+                  WHERE l.tenant_id = m.tenant_id
+                    AND l.electronic_approval_id = m.electronic_approval_id
+                    AND l.participant_user_id = #{participantUserId}
+                    AND l.action_status = 'PENDING'
+              )
+          )
+        ORDER BY m.updated_at DESC, m.electronic_approval_id DESC
+        LIMIT 3
+    </select>
+
+    <select id="selectDocumentApprovalDetail" parameterType="map" resultMap="detail">
+        SELECT m.electronic_approval_id, m.drafting_work_category_id,
+               m.eabus_no, m.document_type, m.document_status,
+               m.drafter_name, la.profile_image AS drafter_profile_image,
+               m.created_at, m.submitted_at, m.title,
+               m.contents_json::text AS contents_json, m.contents_html, m.contents_text,
+               m.view_count,
+               (m.drafter_id = #{drafterId}) AS is_drafter
+        FROM public.tb_electronic_approval_main m
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = m.tenant_id
+         AND la.login_code = m.drafter_id
+        WHERE m.tenant_id = #{tenantId}
+          AND m.electronic_approval_id = #{electronicApprovalId}
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+    </select>
+
+    <select id="selectDocumentApprovalDetailsByIds" parameterType="map" resultMap="detail">
+        SELECT m.electronic_approval_id, m.drafting_work_category_id,
+               m.eabus_no, m.document_type, m.document_status,
+               m.drafter_name, la.profile_image AS drafter_profile_image,
+               m.created_at, m.submitted_at, m.title,
+               m.contents_json::text AS contents_json, m.contents_html, m.contents_text,
+               m.view_count,
+               (m.drafter_id = #{drafterId}) AS is_drafter
+        FROM public.tb_electronic_approval_main m
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = m.tenant_id
+         AND la.login_code = m.drafter_id
+        WHERE m.tenant_id = #{tenantId}
+          AND m.electronic_approval_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+          AND m.deleted_yn = 'N'
+        <include refid="documentReadAccess"/>
+    </select>
+
+    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="long">
+        SELECT login_id
+        FROM public.tb_login_account
+        WHERE tenant_id = #{tenantId}
+          AND login_code = #{loginCode}
+          AND use_at = 'Y'
+    </select>
+
+    <select id="insertElectronicApprovalViewHistory" parameterType="map" resultType="long">
+        INSERT INTO public.tb_electronic_approval_view_history (
+            tenant_id,
+            electronic_approval_id,
+            login_id,
+            viewed_at
+        ) VALUES (
+            #{tenantId},
+            #{electronicApprovalId},
+            #{loginId},
+            CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (tenant_id, electronic_approval_id, login_id) DO NOTHING
+        RETURNING view_history_id
+    </select>
+
+    <update id="incrementElectronicApprovalViewCount" parameterType="map">
+        UPDATE public.tb_electronic_approval_main
+        SET view_count = view_count + 1
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND deleted_yn = 'N'
+    </update>
+
+    <select id="selectApprovalLines" parameterType="map" resultMap="approvalLine">
+        SELECT line.electronic_approval_line_id, line.stage_order, line.participant_order,
+               line.participant_type, line.participant_user_id, line.participant_name,
+               line.participant_department_name, la.profile_image AS participant_profile_image,
+               CASE
+                   WHEN line.participant_type = 'APPROVAL'
+                    AND line.action_status IN ('APPROVED', 'REJECTED', 'RETURNED')
+                   THEN la.stamp_image
+                   ELSE NULL
+               END AS participant_stamp_image,
+               line.action_status, line.pending_at, line.action_at, line.action_comment
+        FROM public.tb_electronic_approval_line_info line
+        LEFT JOIN public.tb_user u
+          ON u.tenant_id = line.tenant_id
+         AND CAST(u.user_id AS varchar) = line.participant_user_id
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = u.tenant_id
+         AND la.login_id = u.login_id
+        WHERE line.tenant_id = #{tenantId}
+          AND line.electronic_approval_id = #{electronicApprovalId}
+        ORDER BY line.stage_order, line.participant_order
+    </select>
+
+    <select id="selectApprovalLinesByOwnerIds" parameterType="map" resultMap="approvalLineBatch">
+        SELECT line.electronic_approval_id, line.electronic_approval_line_id,
+               line.stage_order, line.participant_order,
+               line.participant_type, line.participant_user_id, line.participant_name,
+               line.participant_department_name, la.profile_image AS participant_profile_image,
+               CASE
+                   WHEN line.participant_type = 'APPROVAL'
+                    AND line.action_status IN ('APPROVED', 'REJECTED', 'RETURNED')
+                   THEN la.stamp_image
+                   ELSE NULL
+               END AS participant_stamp_image,
+               line.action_status, line.pending_at, line.action_at, line.action_comment
+        FROM public.tb_electronic_approval_line_info line
+        LEFT JOIN public.tb_user u
+          ON u.tenant_id = line.tenant_id
+         AND CAST(u.user_id AS varchar) = line.participant_user_id
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = u.tenant_id
+         AND la.login_id = u.login_id
+        WHERE line.tenant_id = #{tenantId}
+          AND line.electronic_approval_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+        ORDER BY line.electronic_approval_id, line.stage_order, line.participant_order
+    </select>
+
+    <select id="selectIsDocumentParticipant" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_electronic_approval_main m
+            WHERE m.tenant_id = #{tenantId}
+              AND m.electronic_approval_id = #{electronicApprovalId}
+              AND m.deleted_yn = 'N'
+            <include refid="documentReadAccess"/>
+        )
+    </select>
+
+    <select id="selectDraftDrafterId" parameterType="map" resultType="string">
+        SELECT drafter_id
+        FROM public.tb_electronic_approval_main
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND document_status IN ('DRAFT', 'REVISION_REQUESTED')
+          AND deleted_yn = 'N'
+    </select>
+
+    <select id="selectDraftDocumentStatus" parameterType="map" resultMap="draftResponse">
+        SELECT electronic_approval_id, eabus_no, document_status, submitted_at
+        FROM public.tb_electronic_approval_main
+        WHERE tenant_id = #{tenantId}
+          AND electronic_approval_id = #{electronicApprovalId}
+          AND drafter_id = #{drafterId}
+          AND deleted_yn = 'N'
+    </select>
+</mapper>

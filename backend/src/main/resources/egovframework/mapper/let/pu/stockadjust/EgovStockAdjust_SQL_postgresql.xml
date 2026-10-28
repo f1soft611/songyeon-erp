@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 재고조정 (송연 app.py /api/materials/stock-* · /api/materials/{code}/movement · /api/products/stock-* · /api/warehouse-moves)
+     원재료 '그 날짜 재고' 되감기는 공통 재고(MaterialStockSnapshotDAO), 제품 재고와 원장은 공통 재고 원장(InventoryService)이 한다. -->
+<mapper namespace="StockAdjustDAO">
+
+    <!-- ===== 원재료 재고조정 ===== -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectMaterialSchedule" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT
+            s.id AS "id",
+            s.material_code AS "code",
+            s.material_name AS "name",
+            s.new_stock_qty AS "newStockQty",
+            s.edited_qty AS "editedQty",
+            s.effective_date AS "effectiveDate",
+            COALESCE(m.stock_qty, 0) AS "currentStockQty",
+            (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = COALESCE(s.warehouse_cd, m.warehouse_cd) LIMIT 1) AS "warehouse",
+            m.unit_price AS "unitPrice"
+        FROM material_stock_schedule s
+        LEFT JOIN materials m ON m.code = s.material_code
+        WHERE s.applied = 0
+        ORDER BY s.material_name
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectMaterialPending" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT id AS "id", material_code AS "code", new_stock_qty AS "newStockQty", edited_qty AS "editedQty", (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = warehouse_cd LIMIT 1) AS "warehouse"
+        FROM material_stock_schedule
+        WHERE applied = 0
+        ORDER BY id
+    </select>
+
+    <select id="countMaterial" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM materials WHERE code = #{code}
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <insert id="insertMaterialSchedule" parameterType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        INSERT INTO material_stock_schedule (material_code, material_name, new_stock_qty, effective_date, applied, created_at, warehouse_cd)
+        VALUES (#{code}, #{name}, #{newStockQty,jdbcType=DOUBLE}, NULL, 0, #{createdAt}, (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{warehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1))
+    </insert>
+
+    <update id="updateMaterialScheduleEdited" parameterType="map">
+        UPDATE material_stock_schedule SET edited_qty = #{qty,jdbcType=DOUBLE} WHERE id = #{id} AND applied = 0
+    </update>
+
+    <delete id="deleteMaterialSchedule" parameterType="long">
+        DELETE FROM material_stock_schedule WHERE id = #{id} AND applied = 0
+    </delete>
+
+    <delete id="deleteMaterialPending">
+        DELETE FROM material_stock_schedule WHERE applied = 0
+    </delete>
+
+    <!-- 원재료가 없으면 null -->
+    <select id="selectMaterialStock" parameterType="string" resultType="double">
+        SELECT COALESCE(stock_qty, 0) FROM materials WHERE code = #{code}
+    </select>
+
+    <update id="updateMaterialStock" parameterType="map">
+        UPDATE materials SET stock_qty = #{qty,jdbcType=DOUBLE} WHERE code = #{code}
+    </update>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <update id="updateMaterialWarehouse" parameterType="map">
+        UPDATE materials SET warehouse_cd = (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{warehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1) WHERE code = #{code}
+    </update>
+
+    <!-- 이력에는 날것 값을 적는다(공통 되감기가 새것 - 옛것 을 증감으로 쓴다) -->
+    <update id="applyMaterialSchedule" parameterType="map">
+        UPDATE material_stock_schedule
+        SET applied = 1, effective_date = #{effectiveDate}, new_stock_qty = #{newQty,jdbcType=DOUBLE},
+            old_stock_qty = #{oldQty,jdbcType=DOUBLE}, note = #{note}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectMaterialHistory" parameterType="map" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT
+            material_code AS "code",
+            material_name AS "name",
+            new_stock_qty AS "newStockQty",
+            old_stock_qty AS "oldStockQty",
+            effective_date AS "effectiveDate",
+            note AS "note"
+        FROM material_stock_schedule
+        WHERE applied = 1
+        <if test="start != null and end != null">
+          AND effective_date BETWEEN #{start} AND #{end}
+        </if>
+        ORDER BY effective_date DESC, material_name
+    </select>
+
+    <!-- 전체 재고 조회(송연 /api/materials 와 같은 차례: 이름 순) -->
+    <select id="selectMaterials" resultType="egovframework.let.pu.stockadjust.domain.model.MaterialStockVO">
+        SELECT code AS "code", name AS "name", spec AS "spec", unit_price AS "unitPrice", stock_qty AS "stockQty",
+               unit_weight AS "unitWeight", box_qty AS "boxQty", unit AS "unit",
+               (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = unit
+             LIMIT 1) AS "unitNm"
+        FROM materials
+        ORDER BY name
+    </select>
+
+    <select id="selectMaterial" parameterType="string" resultType="egovframework.let.pu.stockadjust.domain.model.MaterialStockVO">
+        SELECT code AS "code", name AS "name", spec AS "spec", unit_price AS "unitPrice", COALESCE(stock_qty, 0) AS "stockQty",
+               unit_weight AS "unitWeight", box_qty AS "boxQty", unit AS "unit",
+               (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = unit
+             LIMIT 1) AS "unitNm"
+        FROM materials
+        WHERE code = #{code}
+    </select>
+
+    <update id="addMaterialStockInOut" parameterType="map">
+        UPDATE materials SET stock_qty = COALESCE(stock_qty, 0) + #{inQty,jdbcType=DOUBLE} - #{outQty,jdbcType=DOUBLE} WHERE code = #{code}
+    </update>
+
+    <insert id="insertMaterialMovement" parameterType="map">
+        INSERT INTO material_stock_movement (material_code, material_name, in_qty, out_qty, note, created_at)
+        VALUES (#{code}, #{name}, #{inQty,jdbcType=DOUBLE}, #{outQty,jdbcType=DOUBLE}, #{note}, #{createdAt})
+    </insert>
+
+    <!-- 창고: tb_warehouse(사업장 F001/P001, 사용 중인 줄). 입고창고 = 기본창고(전체에서 한 곳) (2026-10-19 옛 warehouses 에서 바꿈) -->
+    <select id="selectWarehouseNames" resultType="string">
+        SELECT warehouse_nm
+        FROM tb_warehouse
+        WHERE factory_code = 'F001' AND plant_code = 'P001' AND use_yn = 'Y'
+        ORDER BY sort_seq, warehouse_nm, warehouse_id
+    </select>
+
+    <!-- ===== 제품 재고조정 ===== -->
+    <select id="selectProductSchedule" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT
+            s.id AS "id",
+            s.product_code AS "code",
+            s.product_name AS "name",
+            s.new_stock_qty AS "newStockQty",
+            s.edited_qty AS "editedQty",
+            s.effective_date AS "effectiveDate",
+            COALESCE(p.stock_qty, 0) AS "currentStockQty"
+        FROM product_stock_schedule s
+        LEFT JOIN products p ON p.code = s.product_code
+        WHERE s.applied = 0
+        ORDER BY s.product_name
+    </select>
+
+    <select id="selectProductPending" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT id AS "id", product_code AS "code", new_stock_qty AS "newStockQty", edited_qty AS "editedQty"
+        FROM product_stock_schedule
+        WHERE applied = 0
+        ORDER BY id
+    </select>
+
+    <select id="countProduct" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM products WHERE code = #{code}
+    </select>
+
+    <insert id="insertProductSchedule" parameterType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        INSERT INTO product_stock_schedule (product_code, product_name, new_stock_qty, effective_date, applied, created_at)
+        VALUES (#{code}, #{name}, #{newStockQty,jdbcType=DOUBLE}, NULL, 0, #{createdAt})
+    </insert>
+
+    <update id="updateProductScheduleEdited" parameterType="map">
+        UPDATE product_stock_schedule SET edited_qty = #{qty,jdbcType=DOUBLE} WHERE id = #{id} AND applied = 0
+    </update>
+
+    <delete id="deleteProductSchedule" parameterType="long">
+        DELETE FROM product_stock_schedule WHERE id = #{id} AND applied = 0
+    </delete>
+
+    <delete id="deleteProductPending">
+        DELETE FROM product_stock_schedule WHERE applied = 0
+    </delete>
+
+    <select id="selectProductStock" parameterType="string" resultType="double">
+        SELECT COALESCE(stock_qty, 0) FROM products WHERE code = #{code}
+    </select>
+
+    <update id="applyProductSchedule" parameterType="map">
+        UPDATE product_stock_schedule
+        SET applied = 1, effective_date = #{effectiveDate}, new_stock_qty = #{newQty,jdbcType=DOUBLE}, old_stock_qty = #{oldQty,jdbcType=DOUBLE}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 그 날짜 뒤에 제품 재고가 얼마나 움직였는지(송연 product_delta_after, 원장 moved_on 기준) -->
+    <select id="selectProductDeltaAfter" parameterType="string" resultType="egovframework.let.pu.stockadjust.domain.model.StockScheduleVO">
+        SELECT product_code AS "code", COALESCE(SUM(qty), 0) AS "diff"
+        FROM product_stock_movement
+        WHERE moved_on &gt; #{date}
+        GROUP BY product_code
+    </select>
+
+    <!-- 제품 입출고 원장(같은 날이면 나중 것이 위로, 2000줄까지) -->
+    <select id="selectProductHistory" parameterType="map" resultType="egovframework.let.common.inventory.domain.model.ProductStockMovementVO">
+        SELECT
+            product_code AS "productCode",
+            product_name AS "productName",
+            moved_on AS "movedOn",
+            kind AS "kind",
+            qty AS "qty",
+            balance_after AS "balanceAfter",
+            source_table AS "sourceTable",
+            source_id AS "sourceId",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = product_stock_movement.client_code LIMIT 1) AS "clientName", <!-- 2026-10-26 거래처코드 · 사번으로 저장, 이름을 붙여 보여준다 -->
+            note AS "note",
+            created_by AS "createdBy",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = product_stock_movement.created_by LIMIT 1), created_by) AS "createdByName"
+        FROM product_stock_movement
+        WHERE 1 = 1
+        <if test="start != null"> AND moved_on &gt;= #{start}</if>
+        <if test="end != null"> AND moved_on &lt;= #{end}</if>
+        <if test="productCode != null"> AND product_code = #{productCode}</if>
+        <if test="kind != null"> AND kind = #{kind}</if>
+        ORDER BY moved_on DESC, id DESC
+        LIMIT 2000
+    </select>
+
+    <!-- ===== 창고이동 ===== -->
+    <select id="selectReceivingByBarcode" parameterType="string" resultType="egovframework.let.pu.stockadjust.domain.model.WarehouseMoveVO">
+        SELECT barcode AS "barcode", material_code AS "materialCode", material_name AS "materialName", receive_date AS "receiveDate"
+        FROM material_receiving
+        WHERE barcode = #{barcode}
+        LIMIT 1
+    </select>
+
+    <select id="selectReceivingWarehouseName" resultType="string">
+        SELECT warehouse_nm
+        FROM tb_warehouse
+        WHERE factory_code = 'F001' AND plant_code = 'P001' AND use_yn = 'Y'
+          AND default_yn = 'Y'
+        ORDER BY sort_seq, warehouse_id
+        LIMIT 1
+    </select>
+
+    <!-- 입고창고가 아닌 창고(옮겨갈 수 있는 곳) -->
+    <select id="selectOtherWarehouseNames" resultType="string">
+        SELECT warehouse_nm
+        FROM tb_warehouse
+        WHERE factory_code = 'F001' AND plant_code = 'P001' AND use_yn = 'Y'
+          AND default_yn = 'N'
+        ORDER BY sort_seq, warehouse_nm, warehouse_id
+    </select>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <insert id="insertWarehouseMove" parameterType="egovframework.let.pu.stockadjust.domain.model.WarehouseMoveVO">
+        INSERT INTO material_warehouse_move (
+            material_code, material_name, barcode, from_warehouse_cd, to_warehouse_cd, pack_count, unit_weight, qty, moved_date, moved_by, created_at
+        ) VALUES (
+            #{materialCode}, #{materialName}, #{barcode}, (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{fromWarehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1), (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{toWarehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1), #{packCount},
+            #{unitWeight,jdbcType=DOUBLE}, #{qty,jdbcType=DOUBLE}, #{movedDate}, #{movedBy}, #{createdAt}
+        )
+    </insert>
+
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectWarehouseMoves" parameterType="string" resultType="egovframework.let.pu.stockadjust.domain.model.WarehouseMoveVO">
+        SELECT id AS "id", material_code AS "materialCode", material_name AS "materialName", barcode AS "barcode",
+               (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = from_warehouse_cd LIMIT 1) AS "fromWarehouse", (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = to_warehouse_cd LIMIT 1) AS "toWarehouse", pack_count AS "packCount",
+               unit_weight AS "unitWeight", qty AS "qty", moved_date AS "movedDate", COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = moved_by LIMIT 1), moved_by) AS "movedBy", created_at AS "createdAt"
+        FROM material_warehouse_move
+        WHERE moved_date = #{date}
+        ORDER BY id DESC
+    </select>
+
+    <delete id="deleteWarehouseMove" parameterType="long">
+        DELETE FROM material_warehouse_move WHERE id = #{id}
+    </delete>
+</mapper>

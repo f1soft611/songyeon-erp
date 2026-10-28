@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 생산관리 - 생산확정 (송연 PD0001, 기존 /api/production-schedule CRUD · 원재료 차감/되돌림 · 투입지시서 · 수주 가져오기) -->
+<mapper namespace="ProductionConfirmDAO">
+
+    <!-- 그 날짜의 확정된 생산건. 줄마다 원재료 치환 건수를 같이 준다 -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectSchedule" parameterType="string" resultType="egovframework.let.pd.confirm.domain.model.ProductionScheduleVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            product_code AS "productCode",
+            order_qty AS "orderQty",
+            actual_qty AS "actualQty",
+            note AS "note",
+            logistics_date AS "logisticsDate",
+            source_order_id AS "sourceOrderId",
+            COALESCE(is_stock_production, 0) AS "isStockProduction",
+            lot_no AS "lotNo",
+            (SELECT COUNT(*) FROM production_material_substitution s WHERE s.schedule_id = production_schedule.id) AS "substitutionCount"
+        FROM production_schedule
+        WHERE schedule_date = #{date}
+        ORDER BY sort_order, id
+    </select>
+
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectScheduleRow" parameterType="long" resultType="egovframework.let.pd.confirm.domain.model.ProductionScheduleVO">
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            product_code AS "productCode",
+            order_qty AS "orderQty",
+            actual_qty AS "actualQty",
+            note AS "note",
+            logistics_date AS "logisticsDate",
+            source_order_id AS "sourceOrderId",
+            lot_no AS "lotNo",
+            COALESCE(ship_confirmed, 0) AS "shipConfirmed"
+        FROM production_schedule
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectMaxSortOrder" parameterType="string" resultType="java.lang.Integer">
+        SELECT MAX(sort_order)
+        FROM production_schedule
+        WHERE schedule_date = #{date}
+    </select>
+
+    <!-- 로트번호 회차는 '같은 품목 · 같은 날' 안에서만 센다 -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <select id="selectLotNos" parameterType="map" resultType="string">
+        SELECT lot_no
+        FROM production_schedule
+        WHERE schedule_date = #{date}
+          AND product_code = #{productCode}
+          AND lot_no IS NOT NULL
+          AND lot_no != ''
+        <if test="exceptId != null">
+          AND id != #{exceptId}
+        </if>
+    </select>
+
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <insert id="insertSchedule" parameterType="egovframework.let.pd.confirm.domain.model.ProductionScheduleVO"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO production_schedule (
+            schedule_date, client_code, product_code, order_qty, note, logistics_date,
+            source_order_id, is_stock_production, lot_no, sort_order, created_at
+        ) VALUES (
+            #{scheduleDate}, #{clientCode}, #{productCode}, #{orderQty}, #{note}, #{logisticsDate},
+            #{sourceOrderId,jdbcType=INTEGER}, #{isStockProduction,jdbcType=INTEGER}, #{lotNo}, #{sortOrder,jdbcType=INTEGER}, #{createdAt}
+        )
+    </insert>
+
+    <!-- 실생산량(actual_qty)은 여기서 건드리지 않는다(생산입고에서 적는다) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <update id="updateSchedule" parameterType="egovframework.let.pd.confirm.domain.model.ProductionScheduleVO">
+        UPDATE production_schedule
+        SET client_code = #{clientCode},
+            product_code = #{productCode},
+            order_qty = #{orderQty},
+            note = #{note},
+            logistics_date = #{logisticsDate}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLotNo" parameterType="map">
+        UPDATE production_schedule
+        SET lot_no = #{lotNo}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteSchedule" parameterType="long">
+        DELETE FROM production_schedule
+        WHERE id = #{id}
+    </delete>
+
+    <!-- 생산건이 없어지면 그 건에 붙어있던 치환 쪽지도 지운다(나중에 같은 번호가 다시 쓰이면 엉뚱한 건이 물려받는다) -->
+    <delete id="deleteSubstitutions" parameterType="long">
+        DELETE FROM production_material_substitution
+        WHERE schedule_id = #{scheduleId}
+    </delete>
+
+    <!-- 2026-10-26 화면은 거래처명을 보내고, production_schedule 에는 거래처코드를 남긴다 -->
+    <select id="selectClientCodeByName" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE name = #{clientName}
+          AND client_code IS NOT NULL
+          AND client_code != ''
+        ORDER BY client_code
+        LIMIT 1
+    </select>
+
+    <!-- '떡볶이소스(2kg*6ea)' · '떡볶이소스 (2kg*6ea)' 처럼 규격이 붙은 이름도 찾는다 -->
+    <select id="selectProductCodeByDisplayName" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE name = #{displayName}
+           OR (spec IS NOT NULL AND spec != ''
+               AND (name || '(' || spec || ')' = #{displayName}
+                 OR name || ' (' || spec || ')' = #{displayName}))
+        ORDER BY code
+        LIMIT 1
+    </select>
+
+    <!-- ===== 원재료 차감·되돌리기 ===== -->
+    <select id="selectBom" parameterType="string" resultType="egovframework.let.pd.confirm.domain.model.MaterialLineVO">
+        SELECT material_code AS "materialCode", material_name AS "materialName", ratio_percent AS "ratioPercent"
+        FROM bom
+        WHERE product_code = #{productCode}
+          AND material_code IS NOT NULL
+          AND ratio_percent IS NOT NULL
+    </select>
+
+    <select id="selectSubstitutions" parameterType="long" resultType="egovframework.let.pd.confirm.domain.model.MaterialLineVO">
+        SELECT
+            from_material_code AS "fromMaterialCode",
+            from_material_name AS "fromMaterialName",
+            to_material_code AS "toMaterialCode",
+            to_material_name AS "toMaterialName",
+            reason AS "reason"
+        FROM production_material_substitution
+        WHERE schedule_id = #{scheduleId}
+        ORDER BY id
+    </select>
+
+    <update id="addMaterialStock" parameterType="map">
+        UPDATE materials
+        SET stock_qty = COALESCE(stock_qty, 0) + #{qty,jdbcType=DOUBLE}
+        WHERE code = #{code}
+    </update>
+
+    <insert id="insertMaterialUsage" parameterType="egovframework.let.pd.confirm.domain.model.MaterialLineVO">
+        INSERT INTO production_material_usage (schedule_id, material_code, material_name, qty_used, created_at)
+        VALUES (#{scheduleId}, #{materialCode}, #{materialName}, #{qtyUsed,jdbcType=DOUBLE}, #{createdAt})
+    </insert>
+
+    <select id="selectMaterialUsage" parameterType="long" resultType="egovframework.let.pd.confirm.domain.model.MaterialLineVO">
+        SELECT material_code AS "materialCode", qty_used AS "qtyUsed"
+        FROM production_material_usage
+        WHERE schedule_id = #{scheduleId}
+    </select>
+
+    <delete id="deleteMaterialUsage" parameterType="long">
+        DELETE FROM production_material_usage
+        WHERE schedule_id = #{scheduleId}
+    </delete>
+
+    <!-- 투입지시서: 이 생산건에 들어가는 원재료 줄(배합비율 높은 순). 원재료명은 지금 이름을 쓴다 -->
+    <select id="selectBatchLines" parameterType="string" resultType="egovframework.let.pd.confirm.domain.model.MaterialLineVO">
+        SELECT
+            b.material_code AS "materialCode",
+            COALESCE(m.name, b.material_name) AS "materialName",
+            b.ratio_percent AS "ratioPercent"
+        FROM bom b
+        LEFT JOIN materials m ON m.code = b.material_code
+        WHERE b.product_code = #{productCode}
+          AND b.material_code IS NOT NULL
+          AND b.ratio_percent IS NOT NULL
+        ORDER BY b.ratio_percent DESC
+    </select>
+
+    <!-- ===== 수주 연동 ===== -->
+    <!-- 생산예정일로 찾고, 아직 생산으로 가져가지 않은 건만 -->
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectImportOrders" parameterType="map" resultType="egovframework.let.pd.confirm.domain.model.ProductionOrderVO">
+        SELECT
+            id AS "id",
+            order_date AS "orderDate",
+            production_date AS "productionDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS "productName",
+            order_qty AS "orderQty",
+            note AS "note",
+            logistics_date AS "logisticsDate",
+            COALESCE(is_stock_production, 0) AS "isStockProduction"
+        FROM sales_order
+        WHERE production_date BETWEEN #{start} AND #{end}
+          AND COALESCE(imported_production, 0) = 0
+        ORDER BY production_date, sort_order, id
+    </select>
+
+    <update id="updateOrderImportedProduction" parameterType="map">
+        UPDATE sales_order
+        SET imported_production = #{value}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 같은 수주건에서 나온, 아직 로트 연결이 안 된 출하등록 줄을 이 로트에 연결한다 -->
+    <update id="linkShipmentsToLot" parameterType="map">
+        UPDATE logistics_schedule
+        SET lot_id = #{lotId}
+        WHERE source_order_id = #{sourceOrderId}
+          AND lot_id IS NULL
+    </update>
+</mapper>

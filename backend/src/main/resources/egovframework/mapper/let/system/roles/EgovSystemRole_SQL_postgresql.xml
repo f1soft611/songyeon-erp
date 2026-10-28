@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SystemRoleDAO">
+
+    <resultMap id="role" type="egovframework.let.system.roles.domain.model.SystemRoleVO">
+        <result property="roleId" column="role_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="roleCode" column="role_code"/>
+        <result property="roleNm" column="role_nm"/>
+        <result property="roleDc" column="role_dc"/>
+        <result property="useAt" column="use_at"/>
+        <result property="isSystemRole" column="is_system_role"/>
+        <result property="userCount" column="user_count"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectRoleList" resultMap="role">
+        SELECT
+            r.role_id,
+            r.tenant_id,
+            r.role_code,
+            r.role_nm,
+            r.role_dc,
+            r.use_at,
+            r.is_system_role,
+            COALESCE(rc.user_count, 0) AS user_count,
+            r.created_at,
+            r.updated_at
+        FROM tb_role r
+        LEFT JOIN (
+            SELECT role_id, COUNT(*) AS user_count
+            FROM tb_login_account_role
+            GROUP BY role_id
+        ) rc ON rc.role_id = r.role_id
+        WHERE r.tenant_id = #{tenantId}
+        <if test="useAt != null and useAt != ''">
+            AND r.use_at = #{useAt}
+        </if>
+        ORDER BY r.role_id ASC
+    </select>
+
+    <select id="selectRoleById" parameterType="map" resultMap="role">
+        SELECT
+            r.role_id,
+            r.tenant_id,
+            r.role_code,
+            r.role_nm,
+            r.role_dc,
+            r.use_at,
+            r.is_system_role,
+            COALESCE(rc.user_count, 0) AS user_count,
+            r.created_at,
+            r.updated_at
+        FROM tb_role r
+        LEFT JOIN (
+            SELECT role_id, COUNT(*) AS user_count
+            FROM tb_login_account_role
+            GROUP BY role_id
+        ) rc ON rc.role_id = r.role_id
+        WHERE r.role_id = #{roleId}
+          AND r.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectRoleIdByCode" parameterType="map" resultType="long">
+        SELECT role_id
+        FROM tb_role
+        WHERE tenant_id = #{tenantId}
+          AND role_code = #{roleCode}
+    </select>
+
+    <select id="insertRole" parameterType="map" resultType="long">
+        INSERT INTO tb_role (
+            tenant_id,
+            role_code,
+            role_nm,
+            role_dc,
+            is_system_role,
+            use_at
+        )
+        VALUES (
+            #{tenantId},
+            #{roleCode},
+            #{roleNm},
+            #{roleDc},
+            'N',
+            #{useAt}
+        )
+        RETURNING role_id
+    </select>
+
+    <update id="updateRole" parameterType="map">
+        UPDATE tb_role
+        SET role_nm = #{roleNm},
+            role_dc = #{roleDc},
+            use_at = #{useAt},
+            updated_at = now()
+        WHERE role_id = #{roleId}
+          AND tenant_id = #{tenantId}
+    </update>
+
+    <!-- 송연: 사람은 tb_user 대신 employees(계정 표 login_code = 사번 = employees.id)에서 읽는다(2026-10-21).
+         userId · loginId 는 둘 다 계정 번호(tb_login_account.login_id), loginCode 는 사번. 퇴사자(퇴사일이 오늘 또는 그 전)는 뺀다 -->
+    <select id="selectAssignedRoleUsers" parameterType="map" resultType="egovframework.let.system.roles.domain.model.SystemRoleUserVO">
+        SELECT
+            la.login_id AS userId,
+            la.login_id AS loginId,
+            la.login_code AS loginCode,
+            e.name AS userNm,
+            COALESCE(NULLIF(TRIM(e.department), ''), '-') AS departmentNm,
+            e.email AS emailAddr,
+            NULL AS lastLoginAt
+        FROM tb_login_account_role lar
+        JOIN tb_role r
+          ON r.role_id = lar.role_id
+        JOIN tb_login_account la
+          ON la.login_id = lar.login_id
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE lar.role_id = #{roleId}
+          AND r.tenant_id = #{tenantId}
+          AND la.tenant_id = #{tenantId}
+          AND COALESCE(la.use_at, 'Y') = 'Y'
+          AND (COALESCE(TRIM(e.resign_date), '') = '' OR e.resign_date &gt; to_char(current_date, 'YYYY-MM-DD'))
+        ORDER BY e.name ASC
+    </select>
+
+    <select id="selectUnassignedRoleUsers" parameterType="map" resultType="egovframework.let.system.roles.domain.model.SystemRoleUserVO">
+        SELECT
+            la.login_id AS userId,
+            la.login_id AS loginId,
+            la.login_code AS loginCode,
+            e.name AS userNm,
+            COALESCE(NULLIF(TRIM(e.department), ''), '-') AS departmentNm,
+            e.email AS emailAddr,
+            NULL AS lastLoginAt
+        FROM tb_login_account la
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE la.tenant_id = #{tenantId}
+          AND COALESCE(la.use_at, 'Y') = 'Y'
+          AND (COALESCE(TRIM(e.resign_date), '') = '' OR e.resign_date &gt; to_char(current_date, 'YYYY-MM-DD'))
+          AND NOT EXISTS (
+              SELECT 1
+              FROM tb_login_account_role lar
+              WHERE lar.login_id = la.login_id
+                AND lar.role_id = #{roleId}
+          )
+        ORDER BY e.name ASC
+    </select>
+
+    <select id="selectRoleUserMappingId" parameterType="map" resultType="long">
+        SELECT lar.login_account_role_id
+        FROM tb_login_account_role lar
+        JOIN tb_role r
+          ON r.role_id = lar.role_id
+        WHERE lar.role_id = #{roleId}
+          AND r.tenant_id = #{tenantId}
+          AND (
+              (#{loginId} IS NOT NULL AND lar.login_id = CAST(#{loginId} AS BIGINT))
+              OR (#{userId} IS NOT NULL AND lar.login_id = CAST(#{userId} AS BIGINT))
+          )
+        LIMIT 1
+    </select>
+
+    <!-- 송연: userId 도 계정 번호다. 같은 테넌트 계정인지 확인해서 돌려준다 -->
+    <select id="selectLoginIdByUserId" parameterType="map" resultType="long">
+        SELECT la.login_id
+        FROM tb_login_account la
+        WHERE la.login_id = #{userId}
+          AND la.tenant_id = #{tenantId}
+        LIMIT 1
+    </select>
+
+    <insert id="insertRoleUserMapping" parameterType="map">
+        INSERT INTO tb_login_account_role (login_id, role_id)
+        VALUES (#{loginId}, #{roleId})
+        ON CONFLICT (login_id, role_id) DO NOTHING
+    </insert>
+
+    <delete id="deleteRoleUserMapping" parameterType="map">
+        DELETE FROM tb_login_account_role
+        WHERE role_id = #{roleId}
+          AND login_id = CAST(#{loginId} AS BIGINT)
+          AND login_id IN (
+              SELECT la.login_id
+              FROM tb_login_account la
+              WHERE la.tenant_id = #{tenantId}
+          )
+    </delete>
+
+    <select id="selectAssignedUserByLoginId" parameterType="map" resultType="egovframework.let.system.roles.domain.model.SystemRoleUserVO">
+        SELECT
+            la.login_id AS userId,
+            la.login_id AS loginId,
+            la.login_code AS loginCode,
+            e.name AS userNm,
+            COALESCE(NULLIF(TRIM(e.department), ''), '-') AS departmentNm,
+            e.email AS emailAddr,
+            NULL AS lastLoginAt
+        FROM tb_login_account la
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE la.login_id = #{loginId}
+          AND la.tenant_id = #{tenantId}
+        LIMIT 1
+    </select>
+
+</mapper>

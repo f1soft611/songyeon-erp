@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 인사관리 (송연 app.py 의 /api/employees · /api/hr/leave).
+     사원 한 사람이 employees 의 한 줄이다. 인사정보와 로그인정보(아이디·비밀번호)가 같은 줄에 있지만 고치는 주소를 갈라 둔다.
+     권한(permissions · recipe_permission · is_admin)은 이 프로그램에서 쓰지 않으므로 고치지 않는다(같은 DB 를 쓰는 송연 원본 몫).
+     로그인계정 목록에 송연처럼 '관리자' · 'N개 화면' 으로 보여주기만 한다.
+     사원 id 는 사번(글자, 예: 0000)이다(2026-10-19 숫자 자동번호에서 바꿈). 새 사원은 서비스가 8자리 번호(00000001 …)를 매긴다. -->
+<mapper namespace="HrDAO">
+
+    <!-- 송연 ORDER BY department, name (SQLite 는 NULL 이 앞) -->
+    <select id="selectEmployees" resultType="map">
+        SELECT id AS "id", name AS "name", department AS "department", position AS "position", phone AS "phone",
+               birth_date AS "birthDate", address AS "address", hire_date AS "hireDate", resign_date AS "resignDate",
+               memo AS "memo", username AS "username", created_at AS "createdAt", resident_no_enc AS "residentNoEnc",
+               permissions AS "permissions", COALESCE(is_admin, 0) AS "isAdmin"
+        FROM employees
+        ORDER BY department NULLS FIRST, name NULLS FIRST
+    </select>
+
+    <select id="selectEmployee" parameterType="string" resultType="map">
+        SELECT id AS "id", name AS "name", hire_date AS "hireDate", department AS "department", position AS "position",
+               resign_date AS "resignDate", username AS "username", COALESCE(is_admin, 0) AS "isAdmin",
+               resident_no_enc AS "residentNoEnc"
+        FROM employees WHERE id = #{id}
+    </select>
+
+    <!-- 사번이 이미 있는지(새 사번을 매길 때 겹치면 다음 번호로) -->
+    <select id="countEmployeeId" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM employees WHERE id = #{id}
+    </select>
+
+    <!-- 2026-10-21: 등록하면 로그인 계정도 함께 만든다 — username = 이름, password_hash = 첫 비밀번호(changeme) 해시.
+         계정 표(tb_login_account) 줄은 서비스가 upsertLoginAccount 로 이어서 만든다 -->
+    <insert id="insertEmployee" parameterType="map">
+        INSERT INTO employees (id, name, created_at, department, position, phone, birth_date, address, hire_date, resign_date, memo, resident_no_enc,
+                               username, password_hash)
+        VALUES (#{id}, #{name}, #{now}, #{department, jdbcType=VARCHAR}, #{position, jdbcType=VARCHAR}, #{phone, jdbcType=VARCHAR},
+                #{birthDate, jdbcType=VARCHAR}, #{address, jdbcType=VARCHAR}, #{hireDate, jdbcType=VARCHAR}, #{resignDate, jdbcType=VARCHAR},
+                #{memo, jdbcType=VARCHAR}, #{residentNoEnc, jdbcType=VARCHAR},
+                #{username, jdbcType=VARCHAR}, #{passwordHash, jdbcType=VARCHAR})
+    </insert>
+
+    <!-- 보낸 칸만 고친다(송연과 같이 body 에 있는 칸만). 주민번호는 setResidentNo 일 때만 -->
+    <update id="updateEmployee" parameterType="map">
+        UPDATE employees
+           SET name = #{name}
+               <if test="has_department">, department = #{department, jdbcType=VARCHAR}</if>
+               <if test="has_position">, position = #{position, jdbcType=VARCHAR}</if>
+               <if test="has_phone">, phone = #{phone, jdbcType=VARCHAR}</if>
+               <if test="has_birthDate">, birth_date = #{birthDate, jdbcType=VARCHAR}</if>
+               <if test="has_address">, address = #{address, jdbcType=VARCHAR}</if>
+               <if test="has_hireDate">, hire_date = #{hireDate, jdbcType=VARCHAR}</if>
+               <if test="has_resignDate">, resign_date = #{resignDate, jdbcType=VARCHAR}</if>
+               <if test="has_memo">, memo = #{memo, jdbcType=VARCHAR}</if>
+               <if test="setResidentNo">, resident_no_enc = #{residentNoEnc, jdbcType=VARCHAR}</if>
+         WHERE id = #{id}
+    </update>
+
+    <select id="countOtherUsername" parameterType="map" resultType="int">
+        SELECT COUNT(*) FROM employees WHERE username = #{username} AND id &lt;&gt; #{id}
+    </select>
+
+    <!-- 아이디 · 비밀번호만. 권한 칸은 건드리지 않는다 -->
+    <update id="updateAccount" parameterType="map">
+        UPDATE employees
+           SET username = #{username}
+               <if test="passwordHash != null">, password_hash = #{passwordHash}</if>
+         WHERE id = #{id}
+    </update>
+
+    <select id="countOtherAdmins" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM employees WHERE COALESCE(is_admin, 0) = 1 AND username IS NOT NULL AND id &lt;&gt; #{id}
+    </select>
+
+    <update id="revokeAccount" parameterType="string">
+        UPDATE employees SET username = NULL, password_hash = NULL WHERE id = #{id}
+    </update>
+
+    <!-- ===== 계정 표(S_ERP tb_login_account, login_code = 사번) — 2026-10-21 =====
+         로그인은 이 표의 비밀번호로 확인하고, 권한관리 역할 연결(tb_login_account_role)도 이 줄에 붙는다.
+         비밀번호는 updateAccount 로 employees 에 넣은 값을 그대로 옮긴다(두 곳이 같은 값) -->
+    <select id="countLoginAccount" parameterType="map" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_login_account la
+        JOIN tb_tenant t ON t.tenant_id = la.tenant_id AND t.tenant_code = #{tenantCode}
+        WHERE la.login_code = #{id}
+    </select>
+
+    <insert id="upsertLoginAccount" parameterType="map">
+        INSERT INTO tb_login_account (tenant_id, login_code, password_hash, use_at)
+        SELECT t.tenant_id, e.id, e.password_hash, 'Y'
+        FROM employees e
+        JOIN tb_tenant t ON t.tenant_code = #{tenantCode}
+        WHERE e.id = #{id}
+        ON CONFLICT (tenant_id, login_code) DO UPDATE
+           SET password_hash = EXCLUDED.password_hash,
+               use_at = 'Y',
+               updated_at = now()
+    </insert>
+
+    <!-- 처음 만든 계정에 붙이는 역할: 일반 사용자(DEFAULT_USER). 메뉴 권한은 권한관리 · 메뉴관리에서 준다 -->
+    <insert id="insertDefaultRole" parameterType="map">
+        INSERT INTO tb_login_account_role (login_id, role_id)
+        SELECT la.login_id, r.role_id
+        FROM tb_login_account la
+        JOIN tb_tenant t ON t.tenant_id = la.tenant_id AND t.tenant_code = #{tenantCode}
+        JOIN tb_role r ON r.tenant_id = la.tenant_id AND r.role_code = 'DEFAULT_USER'
+        WHERE la.login_code = #{id}
+        ON CONFLICT (login_id, role_id) DO NOTHING
+    </insert>
+
+    <!-- 계정을 거두면 계정 줄을 지운다(역할 연결은 FK CASCADE 로 함께 지워진다) -->
+    <delete id="deleteLoginAccount" parameterType="map">
+        DELETE FROM tb_login_account la
+        USING tb_tenant t
+        WHERE t.tenant_id = la.tenant_id
+          AND t.tenant_code = #{tenantCode}
+          AND la.login_code = #{id}
+    </delete>
+
+    <!-- ===== 사용자 표(S_ERP tb_user) — 2026-10-22 그룹웨어 전자결재 =====
+         로그인 uniqId = tb_user.user_id 라 계정마다 한 줄이 있어야 결재가 사람을 찾는다(DB 20261022_006 과 같은 규칙).
+         이름 = 사원 이름, 이메일 = 사원 이메일(비었거나 다른 사용자와 겹치면 NULL), 퇴사일이 있으면 사용안함 -->
+    <insert id="insertUserIfMissing" parameterType="map">
+        INSERT INTO tb_user (tenant_id, login_id, user_nm, email_addr, use_at)
+        SELECT la.tenant_id,
+               la.login_id,
+               e.name,
+               CASE
+                   WHEN NULLIF(BTRIM(e.email), '') IS NULL THEN NULL
+                   WHEN EXISTS (SELECT 1 FROM tb_user u2 WHERE u2.tenant_id = la.tenant_id AND u2.email_addr = BTRIM(e.email)) THEN NULL
+                   ELSE BTRIM(e.email)
+               END,
+               CASE WHEN NULLIF(BTRIM(e.resign_date), '') IS NULL THEN 'Y' ELSE 'N' END
+        FROM tb_login_account la
+        JOIN tb_tenant t ON t.tenant_id = la.tenant_id AND t.tenant_code = #{tenantCode}
+        JOIN employees e ON e.id = la.login_code
+        WHERE la.login_code = #{id}
+          AND NOT EXISTS (SELECT 1 FROM tb_user u WHERE u.tenant_id = la.tenant_id AND u.login_id = la.login_id)
+    </insert>
+
+    <!-- 사원을 고치면 이름 · 사용 여부(퇴사일)를 맞춘다 -->
+    <update id="syncUserFromEmployee" parameterType="map">
+        UPDATE tb_user u
+           SET user_nm = e.name,
+               use_at = CASE WHEN NULLIF(BTRIM(e.resign_date), '') IS NULL THEN 'Y' ELSE 'N' END,
+               updated_at = CURRENT_TIMESTAMP
+        FROM tb_login_account la
+        JOIN tb_tenant t ON t.tenant_id = la.tenant_id AND t.tenant_code = #{tenantCode}
+        JOIN employees e ON e.id = la.login_code
+        WHERE la.login_code = #{id}
+          AND u.tenant_id = la.tenant_id
+          AND u.login_id = la.login_id
+    </update>
+
+    <!-- ===== 연차 ===== -->
+    <select id="selectLeavePeople" resultType="map">
+        SELECT id AS "id", name AS "name", department AS "department", position AS "position",
+               hire_date AS "hireDate", resign_date AS "resignDate"
+        FROM employees
+        ORDER BY department NULLS FIRST, name NULLS FIRST
+    </select>
+
+    <select id="selectAllLeaveDays" resultType="egovframework.let.ha.hr.domain.model.HrLeaveRecordVO">
+        SELECT employee_id AS "employeeId", leave_date AS "leaveDate", COALESCE(days, 0) AS "days" FROM leave_records
+    </select>
+
+    <!-- 이번 연차연도(start ~ end) 또는 그 전(before 보다 앞) -->
+    <select id="selectLeaveRecords" parameterType="map" resultType="egovframework.let.ha.hr.domain.model.HrLeaveRecordVO">
+        SELECT id AS "id", employee_id AS "employeeId", leave_date AS "leaveDate", days AS "days", note AS "note",
+               created_at AS "createdAt", created_by AS "createdBy"
+        FROM leave_records
+        WHERE employee_id = #{employeeId}
+        <if test="before != null">AND leave_date &lt; #{before}</if>
+        <if test="before == null">AND leave_date BETWEEN #{start} AND #{end}</if>
+        ORDER BY leave_date DESC, id DESC
+    </select>
+
+    <select id="sumLeaveOnDay" parameterType="map" resultType="double">
+        SELECT COALESCE(SUM(days), 0) FROM leave_records WHERE employee_id = #{employeeId} AND leave_date = #{leaveDate}
+    </select>
+
+    <insert id="insertLeave" parameterType="map">
+        INSERT INTO leave_records (employee_id, leave_date, days, note, created_at, created_by)
+        VALUES (#{employeeId}, #{leaveDate}, #{days}, #{note, jdbcType=VARCHAR}, #{now}, #{createdBy, jdbcType=VARCHAR})
+    </insert>
+
+    <delete id="deleteLeave" parameterType="long">
+        DELETE FROM leave_records WHERE id = #{id}
+    </delete>
+</mapper>

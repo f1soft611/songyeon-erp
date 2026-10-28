@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="SystemWarehouseDAO">
+
+    <resultMap id="warehouse" type="egovframework.let.system.warehouses.domain.model.SystemWarehouseVO">
+        <result property="warehouseId" column="warehouse_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="warehouseNm" column="warehouse_nm"/>
+        <result property="useAt" column="use_at"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedBy" column="updated_by"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectWarehouseList" resultMap="warehouse">
+        SELECT
+            w.warehouse_id,
+            w.tenant_id,
+            w.warehouse_nm,
+            w.use_at,
+            w.created_by,
+            w.created_at,
+            w.updated_by,
+            w.updated_at
+        FROM tb_warehouse w
+        WHERE w.tenant_id = #{tenantId}
+        <if test="useAt != null and useAt != ''">
+            AND w.use_at = #{useAt}
+        </if>
+        ORDER BY
+            w.warehouse_nm ASC,
+            w.warehouse_id ASC
+    </select>
+
+    <select id="selectWarehouseById" parameterType="map" resultMap="warehouse">
+        SELECT
+            w.warehouse_id,
+            w.tenant_id,
+            w.warehouse_nm,
+            w.use_at,
+            w.created_by,
+            w.created_at,
+            w.updated_by,
+            w.updated_at
+        FROM tb_warehouse w
+        WHERE w.warehouse_id = #{warehouseId}
+          AND w.tenant_id = #{tenantId}
+    </select>
+
+    <select id="selectWarehouseIdByName" parameterType="map" resultType="long">
+        SELECT warehouse_id
+        FROM tb_warehouse
+        WHERE tenant_id = #{tenantId}
+          AND warehouse_nm = #{warehouseNm}
+    </select>
+
+    <select id="insertWarehouse" parameterType="map" resultType="long">
+        INSERT INTO tb_warehouse (
+            tenant_id,
+            warehouse_nm,
+            use_at,
+            created_by
+        )
+        VALUES (
+            #{tenantId},
+            #{warehouseNm},
+            #{useAt},
+            #{createdBy, jdbcType=BIGINT}
+        )
+        RETURNING warehouse_id
+    </select>
+
+    <update id="updateWarehouse" parameterType="map">
+        UPDATE tb_warehouse
+        SET warehouse_nm = #{warehouseNm},
+            use_at = #{useAt},
+            updated_by = #{updatedBy, jdbcType=BIGINT},
+            updated_at = now()
+        WHERE warehouse_id = #{warehouseId}
+          AND tenant_id = #{tenantId}
+    </update>
+
+    <delete id="deleteWarehouse" parameterType="map">
+        DELETE FROM tb_warehouse
+        WHERE warehouse_id = #{warehouseId}
+          AND tenant_id = #{tenantId}
+    </delete>
+
+</mapper>

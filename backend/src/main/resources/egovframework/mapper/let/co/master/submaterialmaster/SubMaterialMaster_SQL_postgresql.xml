@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 > 기초정보 > 부자재마스터(BSSubMaterialMasterView). 부자재는 원재료와 같은 표(materials)에 분류(sub_category)로 갈린다.
+     목록만 여기 있고, 등록 · 수정 · 단가는 원재료마스터 매퍼(MaterialMaster_SQL)를 같이 쓴다(2026-10-20 원재료마스터 매퍼에서 나눔) -->
+<mapper namespace="SubMaterialMasterDAO">
+
+    <resultMap id="materialMaster" type="egovframework.let.co.master.materialmaster.domain.model.MaterialMasterVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="stockQty" column="stock_qty"/>
+        <result property="supplier" column="supplier"/>
+        <result property="warehouse" column="warehouse"/>
+        <result property="safetyStock" column="safety_stock"/>
+        <result property="baseOrderQty" column="base_order_qty"/>
+        <result property="allergens" column="allergens"/>
+        <result property="subCategory" column="sub_category"/>
+        <result property="subCategoryNm" column="sub_category_nm"/>
+        <result property="unit" column="unit"/>
+        <result property="unitNm" column="unit_nm"/>
+        <result property="regUserNm" column="reg_user_nm"/>
+        <result property="regDt" column="reg_dt"/>
+        <result property="updUserNm" column="upd_user_nm"/>
+        <result property="updDt" column="upd_dt"/>
+        <result property="useYn" column="use_yn"/>
+        <result property="unitWeight" column="unit_weight"/>
+        <result property="boxQty" column="box_qty"/>
+        <result property="lastUsedDate" column="last_used_date"/>
+        <result property="usedByCount" column="used_by_count"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="supplierCodes" column="supplier_codes" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+        <result property="supplierNames" column="supplier_names" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+    </resultMap>
+
+    <select id="selectSubMaterialList" parameterType="string" resultMap="materialMaster">
+        SELECT
+            m.code,
+            m.name,
+            m.spec,
+            m.sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm,
+            m.unit,
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = unit
+             LIMIT 1) AS unit_nm,
+            <!-- 2026-10-23 등록자 · 등록일시 · 수정자 · 수정일시(사번은 사원 이름으로, 포장유형과 같음) -->
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = m.reg_user_id), m.reg_user_id) AS reg_user_nm,
+            TO_CHAR(m.reg_dt, 'YYYY-MM-DD HH24:MI:SS') AS reg_dt,
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = m.upd_user_id), m.upd_user_id) AS upd_user_nm,
+            TO_CHAR(m.upd_dt, 'YYYY-MM-DD HH24:MI:SS') AS upd_dt,
+            m.use_yn, <!-- 사용여부 Y/N(2026-10-23) -->
+            m.unit_price,
+            m.stock_qty,
+            m.safety_stock,
+            m.base_order_qty,
+            m.client_code AS supplier, <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            (SELECT COUNT(*) FROM products p
+             WHERE p.film_material_code = m.code
+                OR p.pouch_material_code = m.code
+                OR p.box_material_code = m.code) AS used_by_count,
+            sp.supplier_name,
+            sp.supplier_codes,
+            sp.supplier_names
+        FROM materials m
+        <!-- 납품업체(2026-10-23): materials.client_code 의 거래처코드 배열('["000001","000002"]', 예전 supplier = 거래처 id 배열)을
+             풀어 거래처와 조인하고 원재료 한 줄로 모은다(배열 순서).
+             supplier_name 은 '다온, 대영산업' 처럼 이어서, supplier_codes·supplier_names 는 화면 칩용 배열.
+             배열이 아닌 옛 값(업체명)·빈 값은 셋 다 NULL. 지워진 거래처는 '삭제된 업체(코드)' -->
+        LEFT JOIN LATERAL (
+            SELECT
+                string_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')'), ', ' ORDER BY e.ord) AS supplier_name,
+                array_agg(e.code ORDER BY e.ord) AS supplier_codes,
+                array_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')') ORDER BY e.ord) AS supplier_names
+            FROM jsonb_array_elements_text(
+                CASE
+                    WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]("[0-9]+"(,"[0-9]+")*)?[]]$' THEN m.client_code::jsonb
+                    ELSE '[]'::jsonb
+                END
+            ) WITH ORDINALITY AS e(code, ord)
+            LEFT JOIN clients c ON c.client_code = e.code
+        ) sp ON TRUE
+        WHERE m.sub_category IS NOT NULL
+          AND m.sub_category != ''
+        <if test="_parameter != null and _parameter != ''">
+          AND m.sub_category = #{_parameter}
+        </if>
+        ORDER BY
+            m.sub_category,
+            m.name
+    </select>
+
+</mapper>

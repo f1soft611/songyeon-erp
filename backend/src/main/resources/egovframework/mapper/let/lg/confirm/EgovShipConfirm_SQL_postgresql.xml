@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 물류관리 - 출하확정 (송연 LG0002, 기존 app.py /api/logistics-schedule?date=, …/confirm-shipment, …/unconfirm-shipment, /api/charter-summary) -->
+<mapper namespace="ShipConfirmDAO">
+
+    <!-- ① 출하등록에서 넣은 줄. 로트(생산확정 줄)의 생산일·로트번호·실생산량을 같이 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <!-- 2026-10-26 배차 · 포장방법은 공통코드(VEHICLE_INFO · PACKING_TYPE) 코드로 저장한다. 화면에는 코드명 -->
+    <select id="selectManualRows" parameterType="string" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        SELECT
+            ls.id AS "id",
+            ls.schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = ls.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = ls.product_code) AS "productName",
+            COALESCE(ls.actual_qty, ls.order_qty) AS "orderQty",
+            ls.order_qty AS "plannedQty",
+            ls.actual_qty AS "actualQty",
+            ls.note AS "note",
+            ls.ship_note AS "shipNote",
+            ls.lot_id AS "lotId",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'VEHICLE_INFO' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ls.vehicle LIMIT 1), ls.vehicle) AS "vehicle",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'PACKING_TYPE' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ls.packing_method LIMIT 1), ls.packing_method) AS "packingMethod",
+            ls.visit_order AS "visitOrder",
+            (SELECT emp.name FROM employees emp WHERE emp.id = ls.driver_id LIMIT 1) AS "driverName",
+            ls.charter_info AS "charterInfo",
+            ls.charter_amount AS "charterAmount",
+            ls.ship_confirmed AS "shipConfirmed",
+            ls.box_qty AS "boxQty",
+            ls.sort_order AS "sortOrder",
+            ls.created_at AS "createdAt",
+            ps.schedule_date AS "lotDate",
+            ps.lot_no AS "lotNo",
+            ps.actual_qty AS "lotActualQty",
+            ps.order_qty AS "lotPlannedQty"
+        FROM logistics_schedule ls
+        LEFT JOIN production_schedule ps ON ps.id = ls.lot_id
+        WHERE ls.schedule_date = #{date}
+        ORDER BY ls.sort_order, ls.id
+    </select>
+
+    <!-- 한 줄을 로트 여러 개로 나눠 적은 내역 -->
+    <select id="selectAllocations" resultType="egovframework.let.lg.confirm.domain.model.ShipLotAllocationVO">
+        SELECT
+            a.shipment_id AS "shipmentId",
+            a.qty AS "qty",
+            p.lot_no AS "lotNo",
+            p.schedule_date AS "lotDate"
+        FROM shipment_lot_allocation a
+        LEFT JOIN production_schedule p ON p.id = a.lot_id
+        WHERE a.shipment_table = 'logistics_schedule'
+        ORDER BY p.schedule_date, a.id
+    </select>
+
+    <!-- ② 물류출고일이 적힌 생산확정 줄. 그 줄 자신이 로트다 -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <!-- 2026-10-26 배차 · 포장방법은 공통코드(VEHICLE_INFO · PACKING_TYPE) 코드로 저장한다. 화면에는 코드명 -->
+    <select id="selectProductionRows" parameterType="string" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        SELECT
+            id AS "id",
+            logistics_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            COALESCE(logistics_actual_qty, actual_qty, order_qty) AS "orderQty",
+            order_qty AS "plannedQty",
+            logistics_actual_qty AS "actualQty",
+            note AS "note",
+            ship_note AS "shipNote",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'VEHICLE_INFO' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ship_vehicle LIMIT 1), ship_vehicle) AS "vehicle",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'PACKING_TYPE' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ship_packing_method LIMIT 1), ship_packing_method) AS "packingMethod",
+            visit_order AS "visitOrder",
+            (SELECT emp.name FROM employees emp WHERE emp.id = driver_id LIMIT 1) AS "driverName",
+            charter_info AS "charterInfo",
+            charter_amount AS "charterAmount",
+            ship_confirmed AS "shipConfirmed",
+            box_qty AS "boxQty",
+            schedule_date AS "lotDate",
+            lot_no AS "lotNo",
+            actual_qty AS "lotActualQty",
+            order_qty AS "lotPlannedQty"
+        FROM production_schedule
+        WHERE logistics_date = #{date}
+        ORDER BY id
+    </select>
+
+    <select id="selectLinkedLotIds" resultType="long">
+        SELECT DISTINCT lot_id FROM logistics_schedule WHERE lot_id IS NOT NULL
+    </select>
+
+    <select id="selectProductsForDisplay" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        <!-- 2026-10-23 보관방법은 코드로 저장한다. 화면에는 공통코드 STORAGE_METHOD 이름 -->
+        SELECT name AS "name", spec AS "spec",
+               COALESCE((SELECT i.item_nm
+                         FROM tb_common_code_item i
+                         JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+                         JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                         WHERE i.item_code = storage
+                         LIMIT 1), storage) AS "storage",
+               stock_qty AS "stockQty"
+        FROM products
+    </select>
+
+    <!-- 운행자 칸의 자동완성(이름만) -->
+    <select id="selectEmployeeNames" resultType="string">
+        SELECT name FROM employees WHERE name IS NOT NULL ORDER BY department, name
+    </select>
+
+    <!-- 2026-10-26 운행자는 사번(driver_id)으로 저장한다. 화면이 보낸 직원 이름 → 사번 -->
+    <select id="selectEmployeeIdByName" parameterType="string" resultType="string">
+        SELECT id FROM employees WHERE name = #{name} ORDER BY id LIMIT 1
+    </select>
+
+    <!-- 2026-10-26 배차 · 포장방법: 화면이 보낸 코드명 → 공통코드 코드(사용 중인 것 먼저) -->
+    <select id="selectCommonCodeByName" parameterType="map" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = #{groupCode}
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE i.item_nm = #{name}
+        ORDER BY CASE WHEN i.use_at = 'Y' THEN 0 ELSE 1 END, i.sort_order, i.item_code
+        LIMIT 1
+    </select>
+
+    <!-- 재고를 움직일 때 보는 한 줄. 생산확정 줄은 자기 자신이 로트다 -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectShipment" parameterType="map" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        <choose>
+            <when test="production">
+        SELECT
+            id AS "id",
+            ship_confirmed AS "shipConfirmed",
+            product_code AS "productCode",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            logistics_date AS "movedOn",
+            logistics_actual_qty AS "logisticsActualQty",
+            actual_qty AS "actualQty",
+            order_qty AS "orderQty",
+            id AS "lotId",
+            box_qty AS "boxQty"
+        FROM production_schedule
+        WHERE id = #{id}
+            </when>
+            <otherwise>
+        SELECT
+            id AS "id",
+            ship_confirmed AS "shipConfirmed",
+            product_code AS "productCode",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) AS "productName",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) AS "clientName",
+            schedule_date AS "movedOn",
+            actual_qty AS "actualQty",
+            order_qty AS "orderQty",
+            lot_id AS "lotId",
+            box_qty AS "boxQty"
+        FROM logistics_schedule
+        WHERE id = #{id}
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="selectAllocationsOf" parameterType="long" resultType="egovframework.let.lg.confirm.domain.model.ShipLotAllocationVO">
+        SELECT
+            a.lot_id AS "lotId",
+            a.qty AS "qty",
+            p.lot_no AS "lotNo",
+            p.schedule_date AS "lotDate"
+        FROM shipment_lot_allocation a
+        LEFT JOIN production_schedule p ON p.id = a.lot_id
+        WHERE a.shipment_table = 'logistics_schedule'
+          AND a.shipment_id = #{shipmentId}
+        ORDER BY p.schedule_date, a.id
+    </select>
+
+    <!-- 제품코드가 안 적힌 옛 줄은 품목명 '이름(규격)' 으로 찾는다 -->
+    <select id="selectProductCodeByDisplayName" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE CASE WHEN spec IS NOT NULL AND spec != '' THEN name || '(' || spec || ')' ELSE COALESCE(name, '') END = #{displayName}
+        ORDER BY code
+        LIMIT 1
+    </select>
+
+    <select id="selectLotNo" parameterType="long" resultType="string">
+        SELECT lot_no FROM production_schedule WHERE id = #{id}
+    </select>
+
+    <update id="updateActualQty" parameterType="map">
+        <choose>
+            <when test="production">
+        UPDATE production_schedule SET logistics_actual_qty = #{actualQty} WHERE id = #{id}
+            </when>
+            <otherwise>
+        UPDATE logistics_schedule SET actual_qty = #{actualQty} WHERE id = #{id}
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="updateBoxQty" parameterType="map">
+        <choose>
+            <when test="production">
+        UPDATE production_schedule SET box_qty = #{boxQty, jdbcType=DOUBLE} WHERE id = #{id}
+            </when>
+            <otherwise>
+        UPDATE logistics_schedule SET box_qty = #{boxQty, jdbcType=DOUBLE} WHERE id = #{id}
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="updateConfirm" parameterType="map">
+        <choose>
+            <when test="production">
+        UPDATE production_schedule
+        SET
+            ship_vehicle = #{row.vehicle},
+            ship_packing_method = #{row.packingMethod},
+            ship_note = #{row.shipNote},
+            visit_order = #{row.visitOrder, jdbcType=INTEGER},
+            driver_id = #{row.driverId},
+            charter_info = #{row.charterInfo},
+            charter_amount = #{row.charterAmount, jdbcType=DOUBLE},
+            ship_confirmed = 1
+        WHERE id = #{id}
+            </when>
+            <otherwise>
+        UPDATE logistics_schedule
+        SET
+            vehicle = #{row.vehicle},
+            packing_method = #{row.packingMethod},
+            ship_note = #{row.shipNote},
+            visit_order = #{row.visitOrder, jdbcType=INTEGER},
+            driver_id = #{row.driverId},
+            charter_info = #{row.charterInfo},
+            charter_amount = #{row.charterAmount, jdbcType=DOUBLE},
+            ship_confirmed = 1
+        WHERE id = #{id}
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="updateUnconfirm" parameterType="map">
+        <choose>
+            <when test="production">
+        UPDATE production_schedule SET ship_confirmed = 0 WHERE id = #{id}
+            </when>
+            <otherwise>
+        UPDATE logistics_schedule SET ship_confirmed = 0 WHERE id = #{id}
+            </otherwise>
+        </choose>
+    </update>
+
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <select id="selectLot" parameterType="long" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        SELECT
+            id AS "id",
+            actual_qty AS "actualQty",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            product_code AS "productCode",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            order_qty AS "orderQty"
+        FROM production_schedule
+        WHERE id = #{id}
+    </select>
+
+    <update id="updateLotActualQty" parameterType="map">
+        UPDATE production_schedule SET actual_qty = #{actualQty} WHERE id = #{id}
+    </update>
+
+    <!-- 확정된 출하 중 용차정보나 용차금액이 적힌 것 -->
+    <select id="selectCharterRows" parameterType="map" resultType="egovframework.let.lg.confirm.domain.model.ShipConfirmVO">
+        <choose>
+            <when test="production">
+        SELECT logistics_date AS "scheduleDate", charter_info AS "charterInfo", charter_amount AS "charterAmount"
+        FROM production_schedule
+        WHERE ship_confirmed = 1
+          AND logistics_date BETWEEN #{start} AND #{end}
+          AND ((charter_info IS NOT NULL AND charter_info != '') OR (charter_amount IS NOT NULL AND charter_amount != 0))
+            </when>
+            <otherwise>
+        SELECT schedule_date AS "scheduleDate", charter_info AS "charterInfo", charter_amount AS "charterAmount"
+        FROM logistics_schedule
+        WHERE ship_confirmed = 1
+          AND schedule_date BETWEEN #{start} AND #{end}
+          AND ((charter_info IS NOT NULL AND charter_info != '') OR (charter_amount IS NOT NULL AND charter_amount != 0))
+            </otherwise>
+        </choose>
+    </select>
+</mapper>

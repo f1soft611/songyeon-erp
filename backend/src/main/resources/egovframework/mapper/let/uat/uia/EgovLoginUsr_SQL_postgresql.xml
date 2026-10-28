@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="loginDAO">
+
+    <!-- 로그인 처리를 위한 resultMap -->
+    <resultMap id="login" type="egovframework.com.cmm.LoginVO">
+        <result property="tenantId" column="tenantId"/>
+        <result property="tenantCode" column="tenantCode"/>
+        <result property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="profileImage" column="profileImage"/>
+        <result property="signatureImage" column="signatureImage"/>
+        <result property="stampImage" column="stampImage"/>
+        <result property="ihidNum" column="ihidNum"/>
+        <result property="email" column="email"/>
+        <result property="departmentName" column="departmentName"/>
+        <result property="levelId" column="levelId"/>
+        <result property="levelCode" column="levelCode"/>
+        <result property="levelName" column="levelName"/>
+        <result property="password" column="password"/>
+        <result property="userSe" column="userSe"/>
+        <result property="orgnztId" column="orgnztId"/>
+        <result property="uniqId" column="uniqId"/>
+        <!-- 누락된 필드 추가 -->
+        <result property="groupId" column="groupId"/>
+        <result property="groupNm" column="groupNm"/>
+        <result property="roleCode" column="roleCode"/>
+        <result property="roleId" column="roleId"/>
+    </resultMap>
+
+    <resultMap id="id" type="egovframework.com.cmm.LoginVO">
+        <result property="id" column="id"/>
+    </resultMap>
+
+    <resultMap id="password" type="egovframework.com.cmm.LoginVO">
+        <result property="password" column="password"/>
+    </resultMap>
+
+    <!-- 송연 로그인: 계정은 S_ERP 계정 표(tb_login_account, login_code = 사번)이고, 이름 · 부서는 employees 에서 읽는다(2026-10-21).
+         비밀번호(Werkzeug 해시)는 서비스에서 검증한다(퇴사자도 걸러내지 않음 — 기존 송연과 같음).
+         역할은 S_ERP actionLogin 과 같은 순서로 하나를 고른다. 역할이 없으면 roleCode/roleId 가 비고 로그인은 되지만 메뉴는 없다.
+         tenantId 는 메뉴 표(tb_module/tb_menu)를 읽기 위한 내부 값이며 화면에서 입력받지 않는다. -->
+    <select id="actionLoginEmployee" parameterType="map" resultMap="login">
+        SELECT
+            t.tenant_id AS tenantId,
+            t.tenant_code AS tenantCode,
+            <!-- 2026-10-22: S_ERP 와 같이 id = 계정 login_code(사번). 그룹웨어가 이 값으로 계정 · 작성자를 찾는다 -->
+            li.login_code AS id,
+            e.name AS name,
+            <!-- 2026-10-23: 프로필 · 도장 이미지는 S_ERP 와 같이 계정 표(tb_login_account)에 둔다(전자결재 결재선이 여기서 도장을 읽는다) -->
+            li.profile_image AS profileImage,
+            li.stamp_image AS signatureImage,
+            li.stamp_image AS stampImage,
+            li.password_hash AS password,
+            NULL AS ihidNum,
+            e.email AS email,
+            e.department AS departmentName,
+            NULL AS levelId,
+            NULL AS levelCode,
+            NULL AS levelName,
+            CASE
+                WHEN sr.role_code = 'PLATFORM_ADMIN' THEN 'ADM'
+                ELSE 'USR'
+            END AS userSe,
+            NULL AS orgnztId,
+            <!-- 2026-10-22: S_ERP 와 같이 uniqId = tb_user.user_id(전자결재가 이 값으로 사람을 찾는다).
+                 tb_user 가 없는 계정은 예전처럼 사번. 사번이 필요한 송연 화면은 LoginEmployeeResolver 로 사번을 찾는다 -->
+            COALESCE(CAST(gu.user_id AS varchar), e.id) AS uniqId,
+            NULL AS groupId,
+            CASE
+                WHEN sr.role_code = 'PLATFORM_ADMIN' THEN 'ROLE_ADMIN'
+                WHEN sr.role_code = 'TENANT_ADMIN' THEN 'ROLE_TENANT_ADMIN'
+                ELSE 'ROLE_USER'
+            END AS groupNm,
+            sr.role_code AS roleCode,
+            sr.role_id AS roleId
+        FROM tb_login_account li
+        JOIN tb_tenant t
+          ON t.tenant_id = li.tenant_id
+         AND t.tenant_code = #{tenantCode}
+         AND COALESCE(t.use_at, 'Y') = 'Y'
+        JOIN employees e
+          ON e.id = li.login_code
+        LEFT JOIN LATERAL (
+            SELECT u.user_id
+            FROM tb_user u
+            WHERE u.tenant_id = li.tenant_id
+              AND u.login_id = li.login_id
+            ORDER BY u.user_id
+            LIMIT 1
+        ) gu ON TRUE
+        LEFT JOIN LATERAL (
+            SELECT
+                r.role_code,
+                lr.role_id
+            FROM tb_login_account_role lr
+            JOIN tb_role r
+              ON r.role_id = lr.role_id
+            WHERE lr.login_id = li.login_id
+              AND r.tenant_id = li.tenant_id
+              AND COALESCE(r.use_at, 'Y') = 'Y'
+            ORDER BY
+                CASE
+                    WHEN r.role_code = 'PLATFORM_ADMIN' THEN 1
+                    WHEN r.role_code = 'TENANT_ADMIN' THEN 2
+                    WHEN r.role_code = 'TENANT_USER' THEN 3
+                    ELSE 4
+                END,
+                lr.role_id DESC
+            LIMIT 1
+        ) sr ON TRUE
+        <!-- 이 프로젝트는 사번(employees.id = tb_login_account.login_code, 예: '0000')으로 로그인한다.
+             (송연 원본은 username '관리자' 로 로그인 — 같은 비밀번호) -->
+        WHERE li.login_code = #{username}
+          AND COALESCE(li.use_at, 'Y') = 'Y'
+        LIMIT 1
+    </select>
+
+    <!-- 일반 로그인 -->
+    <select id="actionLogin" resultMap="login">
+        SELECT
+            li.tenant_id AS tenantId,
+            t.tenant_code AS tenantCode,
+            li.login_code AS id,
+            u.user_nm AS name,
+            li.profile_image AS profileImage,
+            li.stamp_image AS signatureImage,
+            li.stamp_image AS stampImage,
+            li.password_hash AS password,
+            NULL AS ihidNum,
+            u.email_addr AS email,
+            d.department_nm AS departmentName,
+            u.level_id AS levelId,
+            lvl.item_code AS levelCode,
+            lvl.item_nm AS levelName,
+            CASE
+                WHEN sr.role_code = 'PLATFORM_ADMIN' THEN 'ADM'
+                ELSE 'USR'
+            END AS userSe,
+            u.department_id AS orgnztId,
+            u.user_id::text AS uniqId,
+            u.department_id AS groupId,
+            COALESCE(d.department_nm, u.department_id::text) AS groupCode,
+            CASE
+                WHEN sr.role_code = 'PLATFORM_ADMIN' THEN 'ROLE_ADMIN'
+                WHEN sr.role_code = 'TENANT_ADMIN' THEN 'ROLE_TENANT_ADMIN'
+                ELSE 'ROLE_USER'
+            END AS groupNm,
+            sr.role_code AS roleCode,
+            sr.role_id AS roleId
+        FROM tb_login_account li
+        JOIN tb_user u
+          ON u.login_id = li.login_id
+        JOIN tb_tenant t
+          ON t.tenant_id = li.tenant_id
+        JOIN LATERAL (
+            SELECT
+                r.role_code,
+                r.use_at,
+                lr.role_id
+            FROM tb_login_account_role lr
+            JOIN tb_role r
+              ON r.role_id = lr.role_id
+            WHERE lr.login_id = li.login_id
+              AND r.tenant_id = li.tenant_id
+            <if test="roleCode != null and roleCode != ''">
+              AND r.role_code = #{roleCode}
+            </if>
+            ORDER BY
+                CASE
+                    WHEN r.role_code = 'PLATFORM_ADMIN' THEN 1
+                    WHEN r.role_code = 'TENANT_ADMIN' THEN 2
+                    WHEN r.role_code = 'TENANT_USER' THEN 3
+                    ELSE 4
+                END,
+                lr.role_id DESC
+            LIMIT 1
+        ) sr ON TRUE
+        LEFT JOIN tb_department d
+          ON d.department_id = u.department_id
+         AND d.tenant_id = li.tenant_id
+        LEFT JOIN tb_common_code_group lg
+          ON lg.tenant_id = li.tenant_id
+         AND lg.group_code = 'LEVEL'
+         AND COALESCE(lg.use_at, 'Y') = 'Y'
+        LEFT JOIN tb_common_code_item lvl
+          ON lvl.common_code_item_id = u.level_id
+         AND lvl.group_id = lg.common_code_group_id
+         AND lvl.tenant_id = li.tenant_id
+         AND COALESCE(lvl.use_at, 'Y') = 'Y'
+        WHERE (li.login_code = #{id} OR u.email_addr = #{id})
+          AND li.password_hash = #{password}
+        <if test="tenantId != null">
+          AND li.tenant_id = CAST(#{tenantId} AS bigint)
+        </if>
+        <if test="tenantId == null and tenantCode != null and tenantCode != ''">
+          AND li.tenant_id = (
+              SELECT tenant_id
+              FROM tb_tenant
+              WHERE tenant_code = #{tenantCode}
+              LIMIT 1
+          )
+        </if>
+          AND COALESCE(li.use_at, 'Y') = 'Y'
+          AND COALESCE(u.use_at, 'Y') = 'Y'
+          AND COALESCE(d.use_at, 'Y') = 'Y'
+          AND COALESCE(t.use_at, 'Y') = 'Y'
+          AND COALESCE(sr.use_at, 'Y') = 'Y'
+    </select>
+
+    <select id="searchId" resultMap="id">
+        SELECT
+            li.login_code AS id
+        FROM tb_login_account li
+        JOIN tb_user u
+          ON u.login_id = li.login_id
+        WHERE u.user_nm = #{name}
+          AND u.email_addr = #{email}
+        <if test="tenantId != null">
+          AND li.tenant_id = CAST(#{tenantId} AS bigint)
+        </if>
+        <if test="tenantCode != null and tenantCode != ''">
+          AND li.tenant_id = (
+              SELECT tenant_id
+              FROM tb_tenant
+              WHERE tenant_code = #{tenantCode}
+              LIMIT 1
+          )
+        </if>
+          AND COALESCE(li.use_at, 'Y') = 'Y'
+          AND COALESCE(u.use_at, 'Y') = 'Y'
+        ORDER BY li.created_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="searchPassword" resultMap="password">
+        SELECT
+            li.password_hash AS password
+        FROM tb_login_account li
+        JOIN tb_user u
+          ON u.login_id = li.login_id
+        WHERE li.login_code = #{id}
+          AND u.user_nm = #{name}
+          AND u.email_addr = #{email}
+        <if test="tenantId != null">
+          AND li.tenant_id = CAST(#{tenantId} AS bigint)
+        </if>
+        <if test="tenantCode != null and tenantCode != ''">
+          AND li.tenant_id = (
+              SELECT tenant_id
+              FROM tb_tenant
+              WHERE tenant_code = #{tenantCode}
+              LIMIT 1
+          )
+        </if>
+          AND COALESCE(li.use_at, 'Y') = 'Y'
+          AND COALESCE(u.use_at, 'Y') = 'Y'
+    </select>
+
+    <select id="selectLoginCodeByTenantIdAndEmail" parameterType="map" resultType="string">
+        SELECT li.login_code
+        FROM tb_login_account li
+        JOIN tb_user u
+          ON u.login_id = li.login_id
+        WHERE li.tenant_id = CAST(#{tenantId} AS bigint)
+          AND u.email_addr = #{email}
+          AND COALESCE(li.use_at, 'Y') = 'Y'
+          AND COALESCE(u.use_at, 'Y') = 'Y'
+        ORDER BY li.created_at DESC
+        LIMIT 1
+    </select>
+
+    <!-- 내 정보 관리(S_ERP 화면): 송연 employees 를 읽는다. 아이디=사번(2026-10-22 부터 LoginVO.id = 사번), 직급=position.
+         tenantId 는 S_ERP 화면이 넘기는 값이라 받기만 하고 쓰지 않는다(송연 직원은 회사 구분이 없음) -->
+    <select id="selectMyProfile" parameterType="map" resultType="egovframework.let.uat.uia.domain.model.MyProfileVO">
+        SELECT
+            e.id AS userId,
+            gu.user_id AS employeeId,
+            e.name AS name,
+            e.email AS email,
+            e.department AS departmentName,
+            e.position AS levelName,
+            <!-- 2026-10-23: 이미지는 계정 표에서 읽는다(S_ERP 와 같음) -->
+            la.profile_image AS profileImage,
+            la.stamp_image AS stampImage
+        FROM employees e
+        <!-- 2026-10-22: employeeId = tb_user.user_id(S_ERP 내 정보와 같은 값). 문서작성 · 결재 화면이 로그인 사용자를 찾는다 -->
+        LEFT JOIN tb_login_account la
+          ON la.login_code = e.id
+        LEFT JOIN LATERAL (
+            SELECT u.user_id
+            FROM tb_user u
+            WHERE u.tenant_id = la.tenant_id
+              AND u.login_id = la.login_id
+            ORDER BY u.user_id
+            LIMIT 1
+        ) gu ON TRUE
+        WHERE e.id = #{loginCode}
+        LIMIT 1
+    </select>
+
+    <!-- 비밀번호는 계정 표(tb_login_account, login_code = 사번)에서 확인한다(2026-10-21). loginCode 는 LoginVO.id(= 사번, 2026-10-22 부터) -->
+    <select id="selectCurrentPasswordHash" parameterType="map" resultType="string">
+        SELECT la.password_hash
+        FROM tb_login_account la
+        JOIN employees e
+          ON e.id = la.login_code
+        WHERE e.id = #{loginCode}
+          AND la.tenant_id = #{tenantId}
+        LIMIT 1
+    </select>
+
+    <update id="updateUserEmail" parameterType="map">
+        UPDATE employees
+        SET email = #{email}
+        WHERE id = #{loginCode}
+    </update>
+
+    <!-- 2026-10-23: 프로필 · 도장 이미지는 S_ERP 와 같이 계정 표에 저장한다.
+         예전에는 employees 에 저장해서 전자결재 결재선 · 공지 · 댓글에 도장 · 사진이 안 나왔다(20261023_011 로 옮겼다) -->
+    <update id="updateLoginImages" parameterType="map">
+        UPDATE tb_login_account
+        SET profile_image = #{profileImage},
+            stamp_image = #{stampImage},
+            updated_at = now()
+        WHERE tenant_id = CAST(#{tenantId} AS bigint)
+          AND login_code = #{loginCode}
+    </update>
+
+    <!-- 비밀번호는 송연과 같은 Werkzeug 해시로 넣는다(송연 원본에서도 같은 비밀번호로 로그인됨).
+         로그인은 계정 표로 확인하고, employees.password_hash 도 같은 값으로 맞춘다(2026-10-21) -->
+    <update id="updateCurrentPassword" parameterType="map">
+        WITH emp AS (
+            UPDATE employees
+            SET password_hash = #{password}
+            WHERE id = #{loginCode}
+            RETURNING id
+        )
+        UPDATE tb_login_account la
+        SET password_hash = #{password},
+            password_changed_at = now(),
+            updated_at = now()
+        FROM emp
+        WHERE la.login_code = emp.id
+          AND la.tenant_id = #{tenantId}
+    </update>
+
+    <select id="selectTenantIdByCode" parameterType="string" resultType="long">
+        SELECT tenant_id
+        FROM tb_tenant
+        WHERE tenant_code = #{value}
+          AND COALESCE(use_at, 'Y') = 'Y'
+        LIMIT 1
+    </select>
+
+    <update id="updatePassword">
+        UPDATE tb_login_account
+        SET password_hash = #{password},
+            updated_at = now()
+        WHERE login_code = #{id}
+        <if test="tenantId != null">
+          AND tenant_id = CAST(#{tenantId} AS bigint)
+        </if>
+        <if test="tenantCode != null and tenantCode != '' and tenantId == null">
+          AND tenant_id = (
+              SELECT tenant_id
+              FROM tb_tenant
+              WHERE tenant_code = #{tenantCode}
+              LIMIT 1
+          )
+        </if>
+    </update>
+
+    <!-- 송연(2026-10-22): 로그인 uniqId(tb_user.user_id)로 사번(tb_login_account.login_code)을 찾는다 -->
+    <select id="selectEmployeeIdByUserId" parameterType="map" resultType="string">
+        SELECT la.login_code
+        FROM tb_user u
+        JOIN tb_login_account la
+          ON la.login_id = u.login_id
+         AND la.tenant_id = u.tenant_id
+        WHERE u.user_id = #{userId}
+        <if test="tenantId != null">
+          AND u.tenant_id = #{tenantId}
+        </if>
+        LIMIT 1
+    </select>
+
+</mapper>

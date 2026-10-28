@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 물류관리 - 제품재고관리 (송연 LG0001, 기존 app.py /api/products/stock, stock-as-of). 조회만 한다 -->
+<mapper namespace="ProductStockDAO">
+
+    <!-- 사용안함 제품은 뺀다(재고가 0이어야만 사용안함이 되므로 셀 것이 없다). 대소문자는 가리지 않는다 -->
+    <select id="selectStock" parameterType="map" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT
+            code AS "code",
+            name AS "name",
+            spec AS "spec",
+            <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
+            (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) AS "clientName",
+            COALESCE(stock_qty, 0) AS "stockQty"
+        FROM products
+        WHERE COALESCE(discontinued, 0) = 0
+        <if test="q != null">
+          AND name ILIKE '%' || #{q} || '%'
+        </if>
+        <if test="clientName != null">
+          AND (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+        <choose>
+            <when test="desc">ORDER BY name DESC</when>
+            <otherwise>ORDER BY name ASC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 생산확정됐지만 실생산량이 아직 없는 줄(품목명·지시량) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <select id="selectPendingProduction" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName", order_qty AS "orderQty"
+        FROM production_schedule
+        WHERE actual_qty IS NULL
+    </select>
+
+    <!-- 재고금액은 사용안함 제품도 센다(송연과 같음) -->
+    <select id="selectProductsForAsOf" parameterType="map" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT
+            code AS "code",
+            name AS "name",
+            spec AS "spec",
+            (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) AS "clientName",
+            COALESCE(stock_qty, 0) AS "stockQty"
+        FROM products
+        <if test="clientName != null">
+        WHERE (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+        ORDER BY name
+    </select>
+
+    <select id="selectMaterialCosts" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT product_code AS "productCode", material_cost AS "materialCost"
+        FROM pricing
+    </select>
+
+    <!-- 그 날짜 뒤(다음 날부터)의 제품 수불 합계. 지금 재고에서 이만큼 되감으면 그 날짜 끝의 재고다 -->
+    <select id="selectProductDeltaAfter" parameterType="string" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT product_code AS "productCode", COALESCE(SUM(qty), 0) AS "qty"
+        FROM product_stock_movement
+        WHERE moved_on > #{date}
+        GROUP BY product_code
+    </select>
+
+    <select id="selectProduct" parameterType="string" resultType="egovframework.let.lg.stock.domain.model.ProductStockVO">
+        SELECT code AS "code", name AS "name", spec AS "spec"
+        FROM products
+        WHERE code = #{code}
+    </select>
+</mapper>

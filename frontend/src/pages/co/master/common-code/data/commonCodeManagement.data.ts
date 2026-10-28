@@ -1,0 +1,81 @@
+import type {
+  CommonCodeGroupRow,
+  CommonCodeItemRow,
+} from '../types/commonCodeManagement.types';
+
+export const commonCodeGroupSeed: CommonCodeGroupRow[] = [
+  {
+    id: 'group-root-1',
+    groupCode: 'ATTACH_DOC',
+    groupNm: '첨부문서업무',
+    parentGroupId: null,
+    groupDc: '첨부문서 업무 공통코드',
+    sortOrder: 1,
+    useAt: 'Y',
+  },
+  {
+    id: 'group-child-1',
+    groupCode: 'DOC_TYPE',
+    groupNm: '첨부문서구분',
+    parentGroupId: 'group-root-1',
+    groupDc: '문서 유형 분류',
+    sortOrder: 1,
+    useAt: 'Y',
+  },
+  {
+    id: 'group-root-2',
+    groupCode: 'BIZ_PARTNER',
+    groupNm: '거래처 구분',
+    parentGroupId: null,
+    groupDc: '거래처 관련 분류',
+    sortOrder: 2,
+    useAt: 'Y',
+  },
+];
+
+export const commonCodeItemSeed: CommonCodeItemRow[] = [
+  {
+    id: 'item-1',
+    groupId: 'group-root-1',
+    itemCode: 'STATEMENT',
+    itemNm: '거래명세서',
+    parentItemId: null,
+    parentItemNm: '기본값',
+    sortOrder: 1,
+    useAt: 'Y',
+    itemDc: '거래명세서 첨부문서',
+  },
+  {
+    id: 'item-2',
+    groupId: 'group-root-1',
+    itemCode: 'LICENSE',
+    itemNm: '사업자등록증',
+    parentItemId: null,
+    parentItemNm: '기본값',
+    sortOrder: 2,
+    useAt: 'Y',
+    itemDc: '사업자등록증 첨부문서',
+  },
+  {
+    id: 'item-3',
+    groupId: 'group-child-1',
+    itemCode: 'REQ',
+    itemNm: '요청서',
+    parentItemId: 'item-1',
+    parentItemNm: '거래명세서',
+    sortOrder: 1,
+    useAt: 'Y',
+    itemDc: '요청서 유형',
+  },
+  {
+    id: 'item-4',
+    groupId: 'group-child-1',
+    itemCode: 'QUIT',
+    itemNm: '사직서',
+    parentItemId: 'item-2',
+    parentItemNm: '사업자등록증',
+    sortOrder: 2,
+    useAt: 'N',
+    itemDc: '사직서 첨부문서',
+  },
+];

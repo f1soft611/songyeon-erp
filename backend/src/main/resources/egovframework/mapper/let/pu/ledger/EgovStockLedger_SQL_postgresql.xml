@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 구매관리 - 수불대장 (송연 app.py /api/purchase-stock-range · /api/materials/stock-as-of). 조회만 한다.
+     발주 등록은 발주관리(/api/v1/pu/purchase-orders/bulk, source=ledger)가, '그 날짜 재고' 는 공통 재고(MaterialStockSnapshotDAO)가 한다. -->
+<mapper namespace="StockLedgerDAO">
+
+    <resultMap id="ledgerMaterial" type="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="stockQty" column="stock_qty"/>
+        <result property="safetyStock" column="safety_stock"/>
+        <result property="baseOrderQty" column="base_order_qty"/>
+        <result property="warehouse" column="warehouse"/>
+        <result property="subCategory" column="sub_category"/>
+        <result property="subCategoryNm" column="sub_category_nm"/>
+        <result property="unit" column="unit"/>
+        <result property="unitNm" column="unit_nm"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="suppliers" column="suppliers" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+    </resultMap>
+
+    <!-- 원재료 전부(이름 순). 납품업체는 원재료BOM 과 같은 기준(materials.supplier 업체코드 배열 → 거래처 이름).
+         지워진 거래처는 발주처가 될 수 없어 뺀다. 배열이 아닌 옛 값(업체명)은 그 이름 하나로 본다 -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectMaterials" resultMap="ledgerMaterial">
+        SELECT
+            m.code,
+            m.name,
+            m.spec,
+            COALESCE(m.stock_qty, 0) AS stock_qty,
+            m.safety_stock,
+            m.base_order_qty,
+            (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = m.warehouse_cd LIMIT 1) AS warehouse,
+            m.sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm,
+            m.unit,
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = unit
+             LIMIT 1) AS unit_nm,
+            m.unit_price,
+            CASE
+                <!-- 2026-10-23 납품업체는 materials.client_code 의 거래처코드 배열 -->
+                WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]("[0-9]+"(,"[0-9]+")*)?[]]$' THEN (
+                    SELECT array_agg(c.name ORDER BY e.ord)
+                    FROM jsonb_array_elements_text(m.client_code::jsonb) WITH ORDINALITY AS e(code, ord)
+                    JOIN clients c ON c.client_code = e.code
+                    WHERE c.name IS NOT NULL AND c.name != ''
+                )
+                WHEN TRIM(COALESCE(m.client_code, '')) != '' THEN ARRAY[TRIM(m.client_code)]
+                ELSE NULL
+            END AS suppliers
+        FROM materials m
+        ORDER BY m.name
+    </select>
+
+    <!-- 날짜별로 이미 넣어둔 발주량(이 칸은 잠근다) -->
+    <select id="selectOrders" parameterType="map" resultType="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        SELECT material_code AS "code", order_date AS "d", SUM(qty) AS "qty"
+        FROM material_purchase_order
+        WHERE order_date BETWEEN #{start} AND #{end}
+        GROUP BY material_code, order_date
+    </select>
+
+    <!-- 생산 사용(생산일 기준) -->
+    <select id="selectUsage" parameterType="map" resultType="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        SELECT u.material_code AS "code", s.schedule_date AS "d", SUM(u.qty_used) AS "qty"
+        FROM production_material_usage u
+        JOIN production_schedule s ON u.schedule_id = s.id
+        WHERE s.schedule_date BETWEEN #{start} AND #{end}
+        GROUP BY u.material_code, s.schedule_date
+    </select>
+
+    <!-- 입고·반품(반품은 음수) -->
+    <select id="selectReceiving" parameterType="map" resultType="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        SELECT material_code AS "code", receive_date AS "d", SUM(qty) AS "qty"
+        FROM material_receiving
+        WHERE receive_date BETWEEN #{start} AND #{end}
+        GROUP BY material_code, receive_date
+    </select>
+
+    <!-- 손으로 고친 것과 부자재 차감(배합표를 거치지 않고 재고를 움직인다). created_at 의 날짜 부분 -->
+    <select id="selectMovements" parameterType="map" resultType="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        SELECT material_code AS "code", SUBSTRING(created_at, 1, 10) AS "d",
+               SUM(COALESCE(in_qty, 0)) AS "inQty", SUM(COALESCE(out_qty, 0)) AS "outQty"
+        FROM material_stock_movement
+        WHERE SUBSTRING(created_at, 1, 10) BETWEEN #{start} AND #{end}
+        GROUP BY material_code, SUBSTRING(created_at, 1, 10)
+    </select>
+
+    <!-- 재고조사로 맞춘 양과 사유(송연 GROUP_CONCAT(DISTINCT note) — 쉼표로 잇는다) -->
+    <select id="selectAdjustments" parameterType="map" resultType="egovframework.let.pu.ledger.domain.model.LedgerDataVO">
+        SELECT material_code AS "code",
+               SUM(COALESCE(new_stock_qty, 0) - COALESCE(old_stock_qty, 0)) AS "qty",
+               string_agg(DISTINCT note, ',') AS "notes"
+        FROM material_stock_schedule
+        WHERE applied = 1 AND effective_date BETWEEN #{start} AND #{end}
+        GROUP BY material_code
+    </select>
+</mapper>

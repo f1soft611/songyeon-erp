@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 거래처별관리대장 (송연 accounting.py /api/accounting/client-ledger). 조회만 한다.
+     채권은 매출 − 입금, 채무는 매입 − 출금. 받은 돈 · 준 돈은 회계거래현황의 acc_transaction 에서 거래처 이름이 똑같은 것만 읽는다. -->
+<mapper namespace="AccLedgerDAO">
+
+    <select id="sumPaidBefore" parameterType="map" resultType="double">
+        SELECT COALESCE(SUM(amount), 0) FROM acc_transaction
+        WHERE kind = #{kind} AND client_name = #{clientName} AND tx_date &lt; #{start}
+    </select>
+
+    <select id="selectPaid" parameterType="map" resultType="egovframework.let.ha.acctx.domain.model.AccTransactionVO">
+        SELECT id AS "id", tx_date AS "txDate", amount AS "amount", note AS "note"
+        FROM acc_transaction
+        WHERE kind = #{kind} AND client_name = #{clientName} AND tx_date BETWEEN #{start} AND #{end}
+        ORDER BY tx_date, id
+    </select>
+
+    <select id="selectBusinessNo" parameterType="string" resultType="string">
+        SELECT business_no FROM clients WHERE name = #{clientName} LIMIT 1
+    </select>
+</mapper>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 판매관리 - 판매등록 (송연 sales.py /api/sales/shippable · /api/sales/pull · POST /api/sales) -->
+<mapper namespace="SalesRegisterDAO">
+
+    <!-- 출하확정된 건. 출하등록 줄과 물류출고일이 적힌 생산확정 줄. 거래처는 일부만 적어도 찾는다(대소문자 무시) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectShipped" parameterType="map" resultType="egovframework.let.sl.register.domain.model.ShippableSaleVO">
+        <choose>
+            <when test="production">
+        SELECT
+            'production' AS "sourceType",
+            id AS "sourceId",
+            logistics_date AS "saleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            COALESCE(logistics_actual_qty, actual_qty, order_qty) AS "qtyText",
+            client_code AS "clientCode",
+            product_code AS "productCode"
+        FROM production_schedule
+        WHERE logistics_date BETWEEN #{start} AND #{end}
+          AND ship_confirmed = 1
+        <if test="clientName != null">
+          AND (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+            </when>
+            <otherwise>
+        SELECT
+            'logistics' AS "sourceType",
+            id AS "sourceId",
+            schedule_date AS "saleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) AS "productName",
+            COALESCE(actual_qty, order_qty) AS "qtyText",
+            client_code AS "clientCode",
+            product_code AS "productCode"
+        FROM logistics_schedule
+        WHERE schedule_date BETWEEN #{start} AND #{end}
+          AND ship_confirmed = 1
+        <if test="clientName != null">
+          AND (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 이미 판매로 들어간 출하 건 -->
+    <select id="selectTakenSources" resultType="egovframework.let.sl.register.domain.model.ShippableSaleVO">
+        SELECT source_type AS "sourceType", source_id AS "sourceId"
+        FROM sales_record
+        WHERE source_id IS NOT NULL
+    </select>
+
+    <!-- '품명(규격)' → 판매단가(송연 product_price_map): 현재 판매단가가 있으면 그것, 없으면 계산단가 -->
+    <select id="selectProductPrices" resultType="egovframework.let.sl.register.domain.model.ShippableSaleVO">
+        SELECT
+            CASE WHEN p.spec IS NOT NULL AND p.spec != '' THEN p.name || '(' || p.spec || ')' ELSE COALESCE(p.name, '') END AS "productName",
+            (SELECT COALESCE(pr.current_price, pr.total_price) FROM pricing pr WHERE pr.product_code = p.code LIMIT 1) AS "unitPrice"
+        FROM products p
+        ORDER BY p.code
+    </select>
+
+    <!-- 2026-10-26 sales_record 는 거래처코드 · 제품코드 · 등록자 사번을 저장한다. 직접 추가는 화면이 보낸 이름을 코드로 바꾼다 -->
+    <select id="selectClientCodeByName" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE name = #{clientName}
+          AND client_code IS NOT NULL
+          AND client_code != ''
+        ORDER BY client_code
+        LIMIT 1
+    </select>
+
+    <!-- '품명(규격)' 또는 품명 → 제품코드('품명 (규격)' 띄어 쓴 모양도) -->
+    <select id="selectProductCodeByDisplayName" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE name = #{displayName}
+           OR (spec IS NOT NULL AND spec != ''
+               AND (name || '(' || spec || ')' = #{displayName}
+                 OR name || ' (' || spec || ')' = #{displayName}))
+        ORDER BY code
+        LIMIT 1
+    </select>
+
+    <!-- 판매 한 건. 같은 출하 건은 한 번만(부분 유일 색인) — 동시에 두 사람이 눌러도 DB 가 막고 0건이 된다 -->
+    <insert id="insertSale" parameterType="egovframework.let.sl.register.domain.model.SalesRecordVO">
+        INSERT INTO sales_record (
+            sale_date, client_code, product_code, qty, unit_price, amount, note,
+            source_type, source_id, created_at, created_by
+        ) VALUES (
+            #{saleDate}, #{clientCode}, #{productCode}, #{qty, jdbcType=DOUBLE}, #{unitPrice, jdbcType=DOUBLE}, #{amount, jdbcType=DOUBLE}, #{note},
+            #{sourceType}, #{sourceId, jdbcType=INTEGER}, #{createdAt}, #{createdBy}
+        )
+        ON CONFLICT (source_type, source_id) WHERE source_id IS NOT NULL DO NOTHING
+    </insert>
+</mapper>

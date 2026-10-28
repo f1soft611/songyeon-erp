@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="DraftingWorkDAO">
+
+    <resultMap id="userOption" type="egovframework.let.co.workflow.form.domain.model.DraftingWorkUserOptionVO">
+        <result property="userId" column="user_id"/>
+        <result property="loginId" column="login_id"/>
+        <result property="userNm" column="user_nm"/>
+        <result property="departmentNm" column="department_nm"/>
+        <result property="profileImage" column="profile_image"/>
+        <result property="levelNm" column="level_nm"/>
+    </resultMap>
+
+    <select id="selectUserOptions" parameterType="long" resultMap="userOption">
+        SELECT
+            u.user_id,
+            u.login_id,
+            u.user_nm,
+            d.department_nm,
+            la.profile_image,
+            CASE WHEN lg.group_code = 'LEVEL' THEN li.item_nm END AS level_nm
+        FROM tb_user u
+        JOIN tb_login_account la
+          ON la.login_id = u.login_id
+         AND la.tenant_id = u.tenant_id
+         AND la.use_at = 'Y'
+        LEFT JOIN tb_department d
+          ON d.department_id = u.department_id
+         AND d.tenant_id = u.tenant_id
+        LEFT JOIN tb_common_code_item li
+          ON li.common_code_item_id = u.level_id
+         AND li.tenant_id = u.tenant_id
+         AND li.use_at = 'Y'
+        LEFT JOIN tb_common_code_group lg
+          ON lg.common_code_group_id = li.group_id
+         AND lg.tenant_id = u.tenant_id
+         AND lg.group_code = 'LEVEL'
+         AND lg.use_at = 'Y'
+        WHERE u.tenant_id = #{value}
+          AND u.use_at = 'Y'
+        ORDER BY u.user_nm ASC, u.user_id ASC
+    </select>
+
+      <resultMap id="draftingWork" type="egovframework.let.co.workflow.form.domain.model.DraftingWorkVO">
+        <result property="draftingWorkCategoryId" column="drafting_work_category_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="cataTypeCode" column="cata_type_code"/>
+        <result property="codeName" column="code_name"/>
+        <result property="categoryItemId" column="category_item_id"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="regTermId" column="reg_term_id"/>
+        <result property="regTerm" column="reg_term"/>
+        <result property="reviewerId" column="reviewer_id"/>
+        <result property="reviewerName" column="reviewer_name"/>
+        <result property="approverId" column="approver_id"/>
+        <result property="approverName" column="approver_name"/>
+        <result property="assigneeSummary" column="assignee_summary"/>
+        <result property="useAt" column="use_at"/>
+        <result property="createdByName" column="created_by_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="hasDocument" column="has_document"/>
+          <collection property="assigneeIds" ofType="java.lang.String"
+            column="{tenantId=tenant_id,workId=drafting_work_category_id}"
+            select="selectAssigneeIds"/>
+      </resultMap>
+
+      <select id="selectWorkList"
+          parameterType="egovframework.let.co.workflow.form.domain.model.DraftingWorkSearchConditionVO"
+          resultMap="draftingWork">
+        SELECT
+          w.drafting_work_category_id,
+          w.tenant_id,
+          w.cata_type_code,
+          w.code_name,
+          w.category_item_id,
+          CASE WHEN cg.group_code = 'WF_FORM_CATEGORY' THEN ci.item_nm END AS category_name,
+          w.reg_term_id,
+          CASE WHEN rg.group_code = 'WF_FORM_CYCLE' THEN ri.item_nm ELSE w.reg_term END AS reg_term,
+          w.reviewer_id,
+          COALESCE(ru.user_nm, '') AS reviewer_name,
+          w.approver_id,
+          COALESCE(au.user_nm, '') AS approver_name,
+          CASE
+            WHEN COALESCE(am.assignee_count, 0) = 0 THEN ''
+            WHEN am.assignee_count = 1 THEN am.first_assignee_name
+            ELSE am.first_assignee_name || ' 외 ' || CAST(am.assignee_count - 1 AS varchar) || '명'
+          END AS assignee_summary,
+          w.use_at,
+          COALESCE(NULLIF(TRIM(cu.user_nm), ''), CAST(w.created_by AS varchar), '-') AS created_by_name,
+          TO_CHAR(w.created_at, 'YYYY-MM-DD HH24:MI') AS created_at,
+          (
+            w.drafting_work_template_json IS NOT NULL
+            OR NULLIF(TRIM(COALESCE(w.drafting_work_template_html, '')), '') IS NOT NULL
+          ) AS has_document
+        FROM public.tb_drafting_work_category w
+        LEFT JOIN public.tb_common_code_item ci
+          ON ci.common_code_item_id = w.category_item_id
+         AND ci.tenant_id = w.tenant_id
+        LEFT JOIN public.tb_common_code_group cg
+          ON cg.common_code_group_id = ci.group_id
+         AND cg.tenant_id = w.tenant_id
+        LEFT JOIN public.tb_common_code_item ri
+          ON ri.common_code_item_id = w.reg_term_id
+         AND ri.tenant_id = w.tenant_id
+        LEFT JOIN public.tb_common_code_group rg
+          ON rg.common_code_group_id = ri.group_id
+         AND rg.tenant_id = w.tenant_id
+         AND rg.group_code = 'WF_FORM_CYCLE'
+        LEFT JOIN public.tb_user cu
+          ON cu.tenant_id = w.tenant_id
+         AND cu.login_id = w.created_by
+        LEFT JOIN public.tb_user ru
+          ON ru.tenant_id = w.tenant_id
+         AND ru.login_id = w.reviewer_id
+        LEFT JOIN public.tb_user au
+          ON au.tenant_id = w.tenant_id
+         AND au.login_id = w.approver_id
+        LEFT JOIN LATERAL (
+          SELECT
+            COUNT(*) AS assignee_count,
+            (ARRAY_AGG(COALESCE(NULLIF(TRIM(u.user_nm), ''), a.employee_no)
+              ORDER BY a.drafting_work_category_authority_id))[1] AS first_assignee_name
+          FROM public.tb_drafting_work_category_authority a
+          LEFT JOIN public.tb_user u
+            ON u.tenant_id = a.tenant_id
+           AND CAST(u.user_id AS varchar) = a.employee_no
+          WHERE a.tenant_id = w.tenant_id
+            AND a.drafting_work_category_id = w.drafting_work_category_id
+            AND a.use_at = 'Y'
+            AND COALESCE(a.delete_status, 'N') &lt;&gt; 'Y'
+        ) am ON TRUE
+        WHERE w.tenant_id = #{tenantId}
+          AND COALESCE(w.delete_status, 'N') &lt;&gt; 'Y'
+        <if test='keyword != null and keyword != ""'>
+          AND (
+            LOWER(COALESCE(w.cata_type_code, '')) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            OR LOWER(COALESCE(w.code_name, '')) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+          )
+        </if>
+        <if test="categoryItemId != null">
+          AND w.category_item_id = #{categoryItemId}
+        </if>
+        <if test="workId != null">
+          AND w.drafting_work_category_id = #{workId}
+        </if>
+        <if test="regTermId != null">
+          AND w.reg_term_id = #{regTermId}
+        </if>
+        <if test='useAt != null and useAt != ""'>
+          AND w.use_at = #{useAt}
+        </if>
+        ORDER BY w.view_seq ASC, w.drafting_work_category_id ASC
+      </select>
+
+      <select id="selectTemplate" parameterType="map" resultType="map">
+        SELECT
+          drafting_work_category_id AS "draftingWorkCategoryId",
+          cata_type_code AS "cataTypeCode",
+          code_name AS "codeName",
+          drafting_work_template_json::text AS "templateJson",
+          drafting_work_template_html AS "templateHtml",
+          (
+            drafting_work_template_json IS NOT NULL
+            OR NULLIF(TRIM(COALESCE(drafting_work_template_html, '')), '') IS NOT NULL
+          ) AS "hasDocument"
+        FROM public.tb_drafting_work_category
+        WHERE tenant_id = #{tenantId}
+          AND drafting_work_category_id = #{workId}
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+      </select>
+
+      <select id="lockTemplate" parameterType="map" resultType="long">
+        SELECT drafting_work_category_id
+        FROM public.tb_drafting_work_category
+        WHERE tenant_id = #{tenantId}
+          AND drafting_work_category_id = #{workId}
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+        FOR UPDATE
+      </select>
+
+      <select id="selectAssigneeIds" parameterType="map" resultType="string">
+          SELECT employee_no
+          FROM public.tb_drafting_work_category_authority
+          WHERE tenant_id = #{tenantId}
+            AND drafting_work_category_id = #{workId}
+            AND use_at = 'Y'
+            AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+          ORDER BY employee_no ASC
+      </select>
+
+      <select id="selectWorkIdByCode" parameterType="map" resultType="long">
+        SELECT drafting_work_category_id
+        FROM public.tb_drafting_work_category
+        WHERE tenant_id = #{tenantId}
+          AND cata_type_code = #{cataTypeCode}
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+        LIMIT 1
+      </select>
+
+      <select id="insertWork" parameterType="map" resultType="long">
+        INSERT INTO public.tb_drafting_work_category (
+          tenant_id, category_item_id, cata_type_code, code_name, view_seq,
+          reg_term, reg_term_id, reviewer_id, approver_id, use_at, delete_status,
+          created_by, created_at, updated_by, updated_at
+        ) VALUES (
+          #{tenantId}, #{categoryItemId}, #{divisionCode}, #{divisionName}, 0,
+          #{cycle}, #{regTermId}, #{reviewerId, jdbcType=BIGINT}, #{approverId, jdbcType=BIGINT},
+          #{useAt}, 'N', #{createdBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP,
+          #{updatedBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (tenant_id, cata_type_code)
+          WHERE delete_status IS DISTINCT FROM 'Y'
+        DO NOTHING
+        RETURNING drafting_work_category_id
+      </select>
+
+      <insert id="insertWorkAuthorityMapping" parameterType="map">
+        INSERT INTO public.tb_drafting_work_category_authority (
+          tenant_id, drafting_work_category_id, cata_type_code, employee_no,
+          use_at, delete_status, created_by, created_at, updated_by, updated_at
+        ) VALUES (
+          #{tenantId}, #{workId}, #{cataTypeCode}, #{employeeNo},
+          'Y', 'N', #{createdBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP,
+          #{updatedBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (tenant_id, drafting_work_category_id, employee_no)
+        DO UPDATE SET
+          cata_type_code = EXCLUDED.cata_type_code,
+          use_at = 'Y',
+          delete_status = 'N',
+          updated_by = EXCLUDED.updated_by,
+          updated_at = CURRENT_TIMESTAMP
+      </insert>
+
+      <update id="updateWork" parameterType="map">
+        UPDATE public.tb_drafting_work_category
+        SET category_item_id = #{categoryItemId},
+          code_name = #{codeName},
+          reg_term_id = #{regTermId},
+          reg_term = #{cycle},
+          reviewer_id = #{reviewerId, jdbcType=BIGINT},
+          approver_id = #{approverId, jdbcType=BIGINT},
+          use_at = #{useAt},
+          updated_by = #{updatedBy, jdbcType=BIGINT},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND drafting_work_category_id = #{workId}
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+      </update>
+
+      <update id="updateTemplate" parameterType="map">
+        UPDATE public.tb_drafting_work_category
+        SET drafting_work_template_json = CAST(#{templateJson} AS jsonb),
+          drafting_work_template_html = #{templateHtml},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND drafting_work_category_id = #{workId}
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+      </update>
+
+      <update id="deactivateWorkAuthorityMappings" parameterType="map">
+        UPDATE public.tb_drafting_work_category_authority
+        SET use_at = 'N',
+          updated_by = #{updatedBy, jdbcType=BIGINT},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND drafting_work_category_id = #{workId}
+          AND use_at = 'Y'
+          AND COALESCE(delete_status, 'N') &lt;&gt; 'Y'
+      </update>
+</mapper>

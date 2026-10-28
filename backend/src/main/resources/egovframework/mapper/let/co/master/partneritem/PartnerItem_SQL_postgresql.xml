@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 > 기초정보 > 거래처별 제품조회(BSPartnerItemView). 사용 중인 제품 목록(거래처명 포함).
+     거래처명으로 거르는 것은 화면이 한다. 제품마스터 목록(ItemMaster_SQL selectProductList)과 같은 칸이다(2026-10-20 화면별로 나눔) -->
+<mapper namespace="PartnerItemDAO">
+
+    <resultMap id="partnerItem" type="egovframework.let.co.master.itemmaster.domain.model.ProductBomVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="storage" column="storage"/>
+        <result property="storageNm" column="storage_nm"/>
+        <result property="clientName" column="client_name"/>
+        <result property="clientCode" column="client_code"/>
+        <result property="discontinued" column="discontinued"/>
+        <result property="discontinuedAt" column="discontinued_at"/>
+        <result property="discontinuedBy" column="discontinued_by"/>
+        <result property="discontinuedNote" column="discontinued_note"/>
+        <result property="stockQty" column="stock_qty"/>
+        <result property="materialCount" column="material_count"/>
+        <result property="lastProducedDate" column="last_produced_date"/>
+    </resultMap>
+
+    <select id="selectPartnerItemList" resultMap="partnerItem">
+        SELECT
+            p.code,
+            p.name,
+            p.spec,
+            p.storage,
+            <!-- 2026-10-23 보관방법: 저장은 공통코드 STORAGE_METHOD 코드, 이름은 공통코드에서 -->
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = p.storage
+             LIMIT 1) AS storage_nm,
+            <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
+            p.client_code,
+            (SELECT c.name FROM clients c WHERE c.client_code = p.client_code LIMIT 1) AS client_name,
+            COALESCE(p.discontinued, 0) AS discontinued,
+            p.discontinued_at,
+            p.discontinued_by,
+            p.discontinued_note,
+            COALESCE(p.stock_qty, 0) AS stock_qty,
+            (SELECT COUNT(*) FROM bom b WHERE b.product_code = p.code) AS material_count,
+            (SELECT MAX(s.schedule_date)
+               FROM production_schedule s
+              WHERE s.product_code = p.code <!-- 2026-10-26 production_schedule 은 제품코드만 둔다 -->
+                AND s.actual_qty IS NOT NULL
+                AND s.actual_qty != '') AS last_produced_date
+        FROM products p
+        WHERE COALESCE(p.discontinued, 0) = 0
+        ORDER BY p.code DESC
+    </select>
+
+</mapper>

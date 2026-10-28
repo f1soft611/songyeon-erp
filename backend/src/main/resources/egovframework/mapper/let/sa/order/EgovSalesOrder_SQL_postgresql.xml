@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 영업관리 - 수주등록 (송연 SA0004, 기존 /api/sales-order·/api/clients/sales-names·/api/products/order-candidates 와 같은 값) -->
+<mapper namespace="SalesOrderDAO">
+
+    <resultMap id="salesOrder" type="egovframework.let.sa.order.domain.model.SalesOrderVO">
+        <id property="id" column="id"/>
+        <result property="orderDate" column="order_date"/>
+        <result property="clientName" column="client_name"/>
+        <result property="clientCode" column="client_code"/>
+        <result property="productName" column="product_name"/>
+        <result property="productCode" column="product_code"/>
+        <result property="orderQty" column="order_qty"/>
+        <result property="note" column="note"/>
+        <result property="productionDate" column="production_date"/>
+        <result property="logisticsDate" column="logistics_date"/>
+        <result property="isStockProduction" column="is_stock_production"/>
+        <result property="imported" column="imported"/>
+        <result property="importedProduction" column="imported_production"/>
+        <result property="importedShipment" column="imported_shipment"/>
+        <result property="sortOrder" column="sort_order"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="orderProduct" type="egovframework.let.sa.order.domain.model.OrderProductVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="clientName" column="client_name"/>
+    </resultMap>
+
+    <!-- 그 수주일의 수주(날짜가 없으면 전체) -->
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <select id="selectOrderList" parameterType="string" resultMap="salesOrder">
+        SELECT
+            id,
+            order_date,
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS client_name,
+            client_code,
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS product_name,
+            product_code,
+            order_qty,
+            note,
+            production_date,
+            logistics_date,
+            is_stock_production,
+            imported,
+            imported_production,
+            imported_shipment,
+            sort_order,
+            created_at
+        FROM sales_order
+        <where>
+            <if test="_parameter != null and _parameter != ''">
+                order_date = #{_parameter}
+            </if>
+        </where>
+        ORDER BY production_date, sort_order, id
+    </select>
+
+    <select id="selectMaxSortOrder" parameterType="string" resultType="java.lang.Integer">
+        SELECT MAX(sort_order)
+        FROM sales_order
+        WHERE order_date = #{orderDate}
+    </select>
+
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <insert id="insertOrder" parameterType="egovframework.let.sa.order.domain.model.SalesOrderVO"
+            useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO sales_order (
+            order_date,
+            client_code,
+            product_code,
+            order_qty,
+            note,
+            production_date,
+            logistics_date,
+            is_stock_production,
+            imported,
+            sort_order,
+            created_at
+        ) VALUES (
+            #{orderDate},
+            #{clientCode},
+            #{productCode},
+            #{orderQty},
+            #{note},
+            #{productionDate},
+            #{logisticsDate},
+            #{isStockProduction,jdbcType=INTEGER},
+            0,
+            #{sortOrder,jdbcType=INTEGER},
+            #{createdAt}
+        )
+    </insert>
+
+    <!-- 수주일·순서는 바꾸지 않는다 -->
+    <!-- 2026-10-26 sales_order 는 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <update id="updateOrder" parameterType="egovframework.let.sa.order.domain.model.SalesOrderVO">
+        UPDATE sales_order
+        SET client_code = #{clientCode},
+            product_code = #{productCode},
+            order_qty = #{orderQty},
+            note = #{note},
+            production_date = #{productionDate},
+            logistics_date = #{logisticsDate},
+            is_stock_production = #{isStockProduction,jdbcType=INTEGER}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 2026-10-23 생산확정 · 출하등록에서 가져간 수주는 지우지 않는다(생산계획 · 출하가 source_order_id 로 가리킨다).
+         지운 줄 수: 0 이면 없거나 가져간 수주 -->
+    <delete id="deleteOrder" parameterType="long">
+        DELETE FROM sales_order
+        WHERE id = #{id}
+          AND COALESCE(imported_production, 0) = 0
+          AND COALESCE(imported_shipment, 0) = 0
+    </delete>
+
+    <!-- 지우기 전 확인(2026-10-23): 가져간 수주인지. 없으면 null -->
+    <select id="selectOrderImported" parameterType="long" resultType="java.lang.Integer">
+        SELECT CASE WHEN COALESCE(imported_production, 0) = 1 OR COALESCE(imported_shipment, 0) = 1 THEN 1 ELSE 0 END
+        FROM sales_order
+        WHERE id = #{id}
+    </select>
+
+    <!-- 분류에 '매출' 이 들어간 거래처(매출, 매입+매출). 2026-10-23 분류는 공통코드 이름으로 보고, 사용 중 거래처만 -->
+    <select id="selectSalesClientNames" resultType="string">
+        SELECT name
+        FROM clients
+        WHERE client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매출%'
+        )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND name IS NOT NULL
+        ORDER BY name
+    </select>
+
+    <!-- 저장 검사: 분류 이름을 돌려준다(2026-10-23, 코드 → 공통코드 이름). 서비스가 '매출' 이 들어 있는지 본다. 사용안함 거래처도 찾는다 -->
+    <select id="selectClientType" parameterType="string" resultType="string">
+        SELECT COALESCE((
+            SELECT i.item_nm
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_code = clients.client_type
+            LIMIT 1), '')
+        FROM clients
+        WHERE name = #{name}
+        LIMIT 1
+    </select>
+
+    <!-- 사용 중인 제품 -->
+    <select id="selectProductCandidates" resultMap="orderProduct">
+        SELECT
+            code,
+            name,
+            spec,
+            <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
+            (SELECT c.name FROM clients c WHERE c.client_code = products.client_code LIMIT 1) AS client_name
+        FROM products
+        WHERE COALESCE(discontinued, 0) = 0
+          AND name IS NOT NULL
+          AND name != ''
+        ORDER BY name
+    </select>
+
+    <!-- 2026-10-26 화면은 거래처명을 보내고, sales_order 에는 거래처코드를 남긴다 -->
+    <select id="selectClientCodeByName" parameterType="string" resultType="string">
+        SELECT client_code
+        FROM clients
+        WHERE name = #{clientName}
+          AND client_code IS NOT NULL
+          AND client_code != ''
+        ORDER BY client_code
+        LIMIT 1
+    </select>
+
+    <select id="selectProductCode" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE code = #{code}
+    </select>
+
+    <select id="selectProductCodesByNameAndSpec" parameterType="map" resultType="string">
+        SELECT code
+        FROM products
+        WHERE name = #{name}
+          AND spec = #{spec}
+    </select>
+
+    <select id="selectProductCodesByName" parameterType="string" resultType="string">
+        SELECT code
+        FROM products
+        WHERE name = #{name}
+    </select>
+
+    <select id="selectProductNameSpecs" resultMap="orderProduct">
+        SELECT
+            code,
+            name,
+            spec
+        FROM products
+    </select>
+</mapper>

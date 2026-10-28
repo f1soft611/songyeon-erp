@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 물류관리 - 출하현황 (송연 LG0003, 기존 app.py /api/shipment-status). 조회만 한다 -->
+<mapper namespace="ShipStatusDAO">
+
+    <!-- 출하확정된 기록. 품목명·거래처명은 일부만 적어도 찾는다(대소문자 무시) -->
+    <!-- 2026-10-26 production_schedule 은 제품코드만 둔다. 제품명은 products 에서 붙인다 -->
+    <!-- 2026-10-26 production_schedule 은 거래처코드(client_code)를 저장한다. 거래처명은 거래처마스터에서 붙인다 -->
+    <!-- 2026-10-26 logistics_schedule 은 거래처코드(client_code) · 제품코드(product_code)만 둔다. 이름은 거래처마스터 · 제품마스터에서 붙인다 -->
+    <!-- 2026-10-26 배차 · 포장방법은 공통코드(VEHICLE_INFO · PACKING_TYPE) 코드로 저장한다. 화면에는 코드명 -->
+    <select id="selectShipped" parameterType="map" resultType="egovframework.let.lg.status.domain.model.ShipStatusVO">
+        <choose>
+            <when test="production">
+        SELECT
+            id AS "id",
+            logistics_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) AS "productName",
+            COALESCE(logistics_actual_qty, actual_qty, order_qty) AS "orderQty",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'VEHICLE_INFO' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ship_vehicle LIMIT 1), ship_vehicle) AS "vehicle",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'PACKING_TYPE' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = ship_packing_method LIMIT 1), ship_packing_method) AS "packingMethod",
+            ship_note AS "shipNote",
+            visit_order AS "visitOrder",
+            (SELECT emp.name FROM employees emp WHERE emp.id = driver_id LIMIT 1) AS "driverName"
+        FROM production_schedule
+        WHERE ship_confirmed = 1
+          AND logistics_date BETWEEN #{start} AND #{end}
+        <if test="productName != null">
+          AND (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) ILIKE '%' || #{productName} || '%'
+        </if>
+        <if test="clientName != null">
+          AND (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+            </when>
+            <otherwise>
+        SELECT
+            id AS "id",
+            schedule_date AS "scheduleDate",
+            (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) AS "clientName",
+            (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) AS "productName",
+            COALESCE(actual_qty, order_qty) AS "orderQty",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'VEHICLE_INFO' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = vehicle LIMIT 1), vehicle) AS "vehicle",
+            COALESCE((SELECT ci.item_nm FROM tb_common_code_item ci JOIN tb_common_code_group cg ON cg.common_code_group_id = ci.group_id AND cg.group_code = 'PACKING_TYPE' JOIN tb_tenant ct ON ct.tenant_id = cg.tenant_id AND ct.tenant_code = 'SONGYEON' WHERE ci.item_code = packing_method LIMIT 1), packing_method) AS "packingMethod",
+            ship_note AS "shipNote",
+            visit_order AS "visitOrder",
+            (SELECT emp.name FROM employees emp WHERE emp.id = driver_id LIMIT 1) AS "driverName"
+        FROM logistics_schedule
+        WHERE ship_confirmed = 1
+          AND schedule_date BETWEEN #{start} AND #{end}
+        <if test="productName != null">
+          AND (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = logistics_schedule.product_code) ILIKE '%' || #{productName} || '%'
+        </if>
+        <if test="clientName != null">
+          AND (SELECT cln.name FROM clients cln WHERE cln.client_code = logistics_schedule.client_code LIMIT 1) ILIKE '%' || #{clientName} || '%'
+        </if>
+            </otherwise>
+        </choose>
+    </select>
+
+    <!-- 금액만 다른 때로 넘긴(이월) 기록 -->
+    <select id="selectCarryovers" resultType="egovframework.let.lg.status.domain.model.ShipStatusVO">
+        SELECT
+            schedule_type AS "scheduleType",
+            schedule_id AS "scheduleId",
+            qty AS "qty",
+            target_month AS "targetMonth",
+            target_date AS "targetDate"
+        FROM delivery_carryover
+    </select>
+
+    <select id="selectProductStorage" resultType="egovframework.let.lg.status.domain.model.ShipStatusVO">
+        <!-- 2026-10-23 보관방법은 코드로 저장한다. 화면에는 공통코드 STORAGE_METHOD 이름 -->
+        SELECT name AS "name", spec AS "spec",
+               COALESCE((SELECT i.item_nm
+                         FROM tb_common_code_item i
+                         JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+                         JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                         WHERE i.item_code = storage
+                         LIMIT 1), storage) AS "storage"
+        FROM products
+    </select>
+</mapper>

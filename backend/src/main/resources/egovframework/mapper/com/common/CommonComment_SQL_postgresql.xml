@@ -1,0 +1,764 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="CommonCommentDAO">
+
+    <resultMap id="commonCommentMap" type="egovframework.com.common.domain.model.CommonCommentVO">
+        <id property="commentId" column="comment_id"/>
+        <result property="tenantId" column="tenant_id"/>
+        <result property="ownerType" column="owner_type"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="parentCommentId" column="parent_comment_id"/>
+        <result property="content" column="content"/>
+        <result property="commentType" column="comment_type"/>
+        <result property="eventType" column="event_type"/>
+        <result property="writerId" column="writer_id"/>
+        <result property="writerName" column="writer_name"/>
+        <result property="writerProfileImage" column="writer_profile_image"/>
+        <result property="lastModifiedBy" column="last_modified_by"/>
+        <result property="lastModifiedByName" column="last_modified_by_name"/>
+        <result property="deletedYn" column="deleted_yn"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="writerProfileImageSelect">
+        CASE
+            WHEN c.deleted_yn = 'N'
+            THEN la.profile_image
+            ELSE NULL
+        END AS writer_profile_image
+    </sql>
+
+    <sql id="writerProfileImageJoin">
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = c.tenant_id
+         AND la.login_code = c.writer_id
+    </sql>
+
+    <select id="selectCommonCommentList" parameterType="map" resultMap="commonCommentMap">
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM tb_common_comment c
+        <include refid="writerProfileImageJoin"/>
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_type = #{ownerType}
+          AND c.owner_id = #{ownerId}
+          AND c.deleted_yn = 'N'
+        ORDER BY c.created_at ASC
+    </select>
+
+    <select id="selectCommonCommentPageByOwnerIds" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE all_comment_tree AS (
+            SELECT c.comment_id, c.parent_comment_id, c.deleted_yn, c.owner_id,
+                   c.comment_id AS root_comment_id
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = #{ownerType}
+              AND c.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND c.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.parent_comment_id, child.deleted_yn, child.owner_id,
+                   tree.root_comment_id
+            FROM tb_common_comment child
+            JOIN all_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = #{ownerType}
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_id &lt;> ALL(ARRAY[tree.comment_id])
+        ), root_page AS (
+            SELECT owner_id, root_comment_id AS comment_id,
+                   ROW_NUMBER() OVER (PARTITION BY owner_id ORDER BY root_comment_id DESC) AS root_order
+            FROM all_comment_tree
+            GROUP BY owner_id, root_comment_id
+            HAVING BOOL_OR(deleted_yn = 'N')
+        ), comment_tree AS (
+            SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id,
+                   c.parent_comment_id, c.content, c.comment_type, c.event_type,
+                   c.writer_id, c.writer_name, c.last_modified_by, c.last_modified_by_name,
+                   c.deleted_yn, c.created_at, c.updated_at, rp.root_order,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            JOIN root_page rp ON rp.comment_id = c.comment_id AND rp.owner_id = c.owner_id
+            WHERE rp.root_order &lt;= #{limit}
+            UNION ALL
+            SELECT child.comment_id, child.tenant_id, child.owner_type, child.owner_id,
+                   child.parent_comment_id, child.content, child.comment_type, child.event_type,
+                   child.writer_id, child.writer_name, child.last_modified_by, child.last_modified_by_name,
+                   child.deleted_yn, child.created_at, child.updated_at, tree.root_order,
+                   tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = #{ownerType}
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM comment_tree c
+        <include refid="writerProfileImageJoin"/>
+        ORDER BY c.owner_id, c.root_order, c.comment_path
+    </select>
+
+    <select id="selectCommonCommentCountsByOwnerIds" parameterType="map" resultType="map">
+        SELECT owner_id AS ownerId, COUNT(*) AS totalCount
+        FROM tb_common_comment
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = #{ownerType}
+          AND owner_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+          AND parent_comment_id IS NULL
+          AND deleted_yn = 'N'
+        GROUP BY owner_id
+    </select>
+
+    <select id="selectApprovalSystemEvents" parameterType="map" resultMap="commonCommentMap">
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM tb_common_comment c
+        <include refid="writerProfileImageJoin"/>
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_type = 'APPROVAL'
+          AND c.owner_id = #{ownerId}
+          AND c.comment_type = 'SYSTEM'
+          AND c.deleted_yn = 'N'
+        ORDER BY c.created_at ASC, c.comment_id ASC
+    </select>
+
+    <select id="selectApprovalSystemEventsByOwnerIds" parameterType="map" resultMap="commonCommentMap">
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM tb_common_comment c
+        <include refid="writerProfileImageJoin"/>
+        WHERE c.tenant_id = #{tenantId}
+          AND c.owner_type = #{ownerType}
+          AND c.owner_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+          AND c.comment_type = 'SYSTEM'
+          AND c.deleted_yn = 'N'
+        ORDER BY c.owner_id, c.created_at ASC, c.comment_id ASC
+    </select>
+
+    <select id="selectCommonCommentPage" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE all_comment_tree AS (
+            SELECT c.comment_id, c.parent_comment_id, c.deleted_yn,
+                   c.comment_id AS root_comment_id
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = #{ownerType}
+              AND c.owner_id = #{ownerId}
+              AND c.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.parent_comment_id, child.deleted_yn,
+                   tree.root_comment_id
+            FROM tb_common_comment child
+            JOIN all_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = #{ownerType}
+              AND child.owner_id = #{ownerId}
+              AND child.comment_id &lt;> ALL(ARRAY[tree.comment_id])
+        ), root_page AS (
+            SELECT root_comment_id AS comment_id,
+                   ROW_NUMBER() OVER (ORDER BY root_comment_id DESC) AS root_order
+            FROM all_comment_tree
+            GROUP BY root_comment_id
+            HAVING BOOL_OR(deleted_yn = 'N')
+            <if test="beforeCommentId != null">
+                AND root_comment_id &lt; #{beforeCommentId}
+            </if>
+            ORDER BY root_comment_id DESC
+            LIMIT #{limit}
+        ), comment_tree AS (
+            SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id,
+                   c.parent_comment_id, c.content, c.comment_type, c.event_type,
+                   c.writer_id, c.writer_name,
+                   c.last_modified_by, c.last_modified_by_name, c.deleted_yn,
+                   c.created_at, c.updated_at, rp.root_order,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            JOIN root_page rp ON rp.comment_id = c.comment_id
+            UNION ALL
+            SELECT child.comment_id, child.tenant_id, child.owner_type, child.owner_id,
+                   child.parent_comment_id, child.content, child.comment_type, child.event_type,
+                   child.writer_id, child.writer_name,
+                   child.last_modified_by, child.last_modified_by_name, child.deleted_yn,
+                   child.created_at, child.updated_at, tree.root_order,
+                   tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = #{ownerType}
+              AND child.owner_id = #{ownerId}
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM comment_tree c
+        <include refid="writerProfileImageJoin"/>
+        ORDER BY c.root_order, c.comment_path
+    </select>
+
+    <select id="selectApprovalUserCommentPage" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE all_comment_tree AS (
+            SELECT c.comment_id, c.parent_comment_id, c.deleted_yn,
+                   c.comment_id AS root_comment_id
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = 'APPROVAL'
+              AND c.owner_id = #{ownerId}
+              AND c.comment_type = 'USER'
+            UNION ALL
+            SELECT child.comment_id, child.parent_comment_id, child.deleted_yn,
+                   tree.root_comment_id
+            FROM tb_common_comment child
+            JOIN all_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id = #{ownerId}
+              AND child.comment_type = 'USER'
+              AND child.comment_id &lt;> tree.comment_id
+        ), root_page AS (
+            SELECT root_comment_id AS comment_id,
+                   ROW_NUMBER() OVER (ORDER BY root_comment_id DESC) AS root_order
+            FROM all_comment_tree
+            GROUP BY root_comment_id
+            HAVING BOOL_OR(deleted_yn = 'N')
+            <if test="beforeCommentId != null">
+                AND root_comment_id &lt; #{beforeCommentId}
+            </if>
+            ORDER BY root_comment_id DESC
+            LIMIT #{limit}
+        ), comment_tree AS (
+            SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id,
+                   c.parent_comment_id, c.content, c.comment_type, c.event_type,
+                   c.writer_id, c.writer_name,
+                   c.last_modified_by, c.last_modified_by_name, c.deleted_yn,
+                   c.created_at, c.updated_at, rp.root_order,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            JOIN root_page rp ON rp.comment_id = c.comment_id
+            UNION ALL
+            SELECT child.comment_id, child.tenant_id, child.owner_type, child.owner_id,
+                   child.parent_comment_id, child.content, child.comment_type, child.event_type,
+                   child.writer_id, child.writer_name,
+                   child.last_modified_by, child.last_modified_by_name, child.deleted_yn,
+                   child.created_at, child.updated_at, tree.root_order,
+                   tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id = #{ownerId}
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM comment_tree c
+        <include refid="writerProfileImageJoin"/>
+        ORDER BY c.root_order, c.comment_path
+    </select>
+
+    <select id="selectApprovalUserCommentPagesByOwnerIds" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE all_comment_tree AS (
+            SELECT c.comment_id, c.parent_comment_id, c.deleted_yn, c.owner_id,
+                   c.comment_id AS root_comment_id,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = 'APPROVAL'
+              AND c.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND c.comment_type = 'USER'
+              AND c.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.parent_comment_id, child.deleted_yn, child.owner_id,
+                   tree.root_comment_id, tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN all_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        ), root_page AS (
+            SELECT owner_id, root_comment_id AS comment_id,
+                   ROW_NUMBER() OVER (PARTITION BY owner_id ORDER BY root_comment_id DESC) AS root_order
+            FROM all_comment_tree
+            GROUP BY owner_id, root_comment_id
+            HAVING BOOL_OR(deleted_yn = 'N')
+        ), comment_tree AS (
+            SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id,
+                   c.parent_comment_id, c.content, c.comment_type, c.event_type,
+                   c.writer_id, c.writer_name, c.last_modified_by, c.last_modified_by_name,
+                   c.deleted_yn, c.created_at, c.updated_at, rp.root_order,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            JOIN root_page rp ON rp.comment_id = c.comment_id AND rp.owner_id = c.owner_id
+            WHERE rp.root_order &lt;= #{limit}
+            UNION ALL
+            SELECT child.comment_id, child.tenant_id, child.owner_type, child.owner_id,
+                   child.parent_comment_id, child.content, child.comment_type, child.event_type,
+                   child.writer_id, child.writer_name, child.last_modified_by, child.last_modified_by_name,
+                   child.deleted_yn, child.created_at, child.updated_at, tree.root_order,
+                   tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM comment_tree c
+        <include refid="writerProfileImageJoin"/>
+        ORDER BY c.owner_id, c.root_order, c.comment_path
+    </select>
+
+    <select id="selectApprovalUserCommentCountsByOwnerIds" parameterType="map" resultType="map">
+        SELECT owner_id AS ownerId, COUNT(*) AS totalCount
+        FROM tb_common_comment
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = 'APPROVAL'
+          AND owner_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+              #{ownerId}
+          </foreach>
+          AND comment_type = 'USER'
+          AND parent_comment_id IS NULL
+          AND deleted_yn = 'N'
+        GROUP BY owner_id
+    </select>
+
+    <select id="selectApprovalCommentStreamPagesByOwnerIds" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE user_comment_tree AS (
+            SELECT c.comment_id, c.owner_id, c.deleted_yn,
+                   c.comment_id AS root_comment_id,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = 'APPROVAL'
+              AND c.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND c.comment_type = 'USER'
+              AND c.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.owner_id, child.deleted_yn,
+                   tree.root_comment_id, tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN user_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        ), visible_user_roots AS (
+            SELECT root.owner_id, root.comment_id, root.created_at
+            FROM tb_common_comment root
+            WHERE root.tenant_id = #{tenantId}
+              AND root.owner_type = 'APPROVAL'
+              AND root.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND root.comment_type = 'USER'
+              AND root.parent_comment_id IS NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM user_comment_tree tree
+                  WHERE tree.owner_id = root.owner_id
+                    AND tree.root_comment_id = root.comment_id
+                  GROUP BY tree.owner_id, tree.root_comment_id
+                  HAVING BOOL_OR(tree.deleted_yn = 'N')
+              )
+        ), system_roots AS (
+            SELECT event.owner_id, event.comment_id, event.created_at
+            FROM tb_common_comment event
+            WHERE event.tenant_id = #{tenantId}
+              AND event.owner_type = 'APPROVAL'
+              AND event.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND event.comment_type = 'SYSTEM'
+              AND event.parent_comment_id IS NULL
+              AND event.deleted_yn = 'N'
+        ), stream_roots AS (
+            SELECT owner_id, comment_id, created_at, 'USER' AS comment_type
+            FROM visible_user_roots
+            UNION ALL
+            SELECT owner_id, comment_id, created_at, 'SYSTEM' AS comment_type
+            FROM system_roots
+        )
+        <if test="beforeCommentId != null">
+        , cursor_item AS (
+            SELECT c.owner_id, c.created_at, c.comment_id
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = 'APPROVAL'
+              AND c.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND c.comment_id = #{beforeCommentId}
+        )
+        </if>
+        , eligible_roots AS (
+            SELECT root.owner_id, root.comment_id, root.created_at, root.comment_type
+            FROM stream_roots root
+            <if test="beforeCommentId != null">
+                JOIN cursor_item cursor
+                  ON cursor.owner_id = root.owner_id
+                  AND (root.created_at, root.comment_id) &lt; (cursor.created_at, cursor.comment_id)
+            </if>
+        ), ranked_roots AS (
+            SELECT owner_id, comment_id, created_at,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY owner_id
+                       ORDER BY created_at DESC, comment_id DESC
+                   ) AS stream_order
+            FROM eligible_roots
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id,
+               c.parent_comment_id, c.content, c.comment_type, c.event_type,
+               c.writer_id, c.writer_name, c.last_modified_by, c.last_modified_by_name,
+               c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM ranked_roots root
+        JOIN tb_common_comment c
+          ON c.comment_id = root.comment_id
+         AND c.owner_id = root.owner_id
+        <include refid="writerProfileImageJoin"/>
+        WHERE root.stream_order &lt;= #{limit}
+        ORDER BY root.owner_id, root.stream_order
+    </select>
+
+    <select id="selectApprovalUserCommentThreadsByRootIds" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE comment_tree AS (
+            SELECT root.comment_id, root.tenant_id, root.owner_type, root.owner_id,
+                   root.parent_comment_id, root.content, root.comment_type, root.event_type,
+                   root.writer_id, root.writer_name, root.last_modified_by, root.last_modified_by_name,
+                   root.deleted_yn, root.created_at, root.updated_at,
+                   root.comment_id AS root_comment_id, root.created_at AS root_created_at,
+                   ARRAY[root.comment_id] AS comment_path
+            FROM tb_common_comment root
+            WHERE root.tenant_id = #{tenantId}
+              AND root.owner_type = 'APPROVAL'
+              AND root.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND root.comment_id IN
+              <foreach collection="rootIds" item="rootId" open="(" separator="," close=")">
+                  #{rootId}
+              </foreach>
+              AND root.comment_type = 'USER'
+              AND root.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.tenant_id, child.owner_type, child.owner_id,
+                   child.parent_comment_id, child.content, child.comment_type, child.event_type,
+                   child.writer_id, child.writer_name, child.last_modified_by, child.last_modified_by_name,
+                   child.deleted_yn, child.created_at, child.updated_at,
+                   tree.root_comment_id, tree.root_created_at, tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM comment_tree c
+        <include refid="writerProfileImageJoin"/>
+        ORDER BY c.owner_id, c.root_created_at, c.root_comment_id, c.comment_path
+    </select>
+
+    <select id="selectApprovalCommentStreamCountsByOwnerIds" parameterType="map" resultType="map">
+        WITH RECURSIVE user_comment_tree AS (
+            SELECT c.comment_id, c.owner_id, c.deleted_yn,
+                   c.comment_id AS root_comment_id,
+                   ARRAY[c.comment_id] AS comment_path
+            FROM tb_common_comment c
+            WHERE c.tenant_id = #{tenantId}
+              AND c.owner_type = 'APPROVAL'
+              AND c.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND c.comment_type = 'USER'
+              AND c.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.owner_id, child.deleted_yn,
+                   tree.root_comment_id, tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN user_comment_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        ), visible_user_roots AS (
+            SELECT owner_id, root_comment_id AS comment_id
+            FROM user_comment_tree
+            GROUP BY owner_id, root_comment_id
+            HAVING BOOL_OR(deleted_yn = 'N')
+        ), system_roots AS (
+            SELECT owner_id, comment_id
+            FROM tb_common_comment
+            WHERE tenant_id = #{tenantId}
+              AND owner_type = 'APPROVAL'
+              AND owner_id IN
+              <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">
+                  #{ownerId}
+              </foreach>
+              AND comment_type = 'SYSTEM'
+              AND parent_comment_id IS NULL
+              AND deleted_yn = 'N'
+        ), stream_roots AS (
+            SELECT owner_id, comment_id FROM visible_user_roots
+            UNION ALL
+            SELECT owner_id, comment_id FROM system_roots
+        )
+        SELECT owner_id AS "ownerId", COUNT(*) AS "totalCount"
+        FROM stream_roots
+        GROUP BY owner_id
+    </select>
+
+    <select id="selectApprovalCommentStreamCursor" parameterType="map" resultMap="commonCommentMap">
+        WITH RECURSIVE cursor_user_tree AS (
+            SELECT root.comment_id, root.deleted_yn,
+                   ARRAY[root.comment_id] AS comment_path
+            FROM tb_common_comment root
+            WHERE root.tenant_id = #{tenantId}
+              AND root.owner_type = 'APPROVAL'
+              AND root.owner_id = #{ownerId}
+              AND root.comment_id = #{commentId}
+              AND root.comment_type = 'USER'
+              AND root.parent_comment_id IS NULL
+            UNION ALL
+            SELECT child.comment_id, child.deleted_yn,
+                   tree.comment_path || child.comment_id
+            FROM tb_common_comment child
+            JOIN cursor_user_tree tree ON tree.comment_id = child.parent_comment_id
+            WHERE child.tenant_id = #{tenantId}
+              AND child.owner_type = 'APPROVAL'
+              AND child.owner_id = #{ownerId}
+              AND child.comment_type = 'USER'
+              AND NOT child.comment_id = ANY(tree.comment_path)
+        )
+        SELECT cursor.comment_id, cursor.tenant_id, cursor.owner_type, cursor.owner_id,
+               cursor.parent_comment_id, cursor.content, cursor.comment_type, cursor.event_type,
+               cursor.writer_id, cursor.writer_name, cursor.last_modified_by,
+               cursor.last_modified_by_name, cursor.deleted_yn, cursor.created_at, cursor.updated_at,
+               CASE
+                   WHEN cursor.deleted_yn = 'N'
+                   THEN la.profile_image
+                   ELSE NULL
+               END AS writer_profile_image
+        FROM tb_common_comment cursor
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = cursor.tenant_id
+         AND la.login_code = cursor.writer_id
+        WHERE cursor.tenant_id = #{tenantId}
+          AND cursor.owner_type = 'APPROVAL'
+          AND cursor.owner_id = #{ownerId}
+          AND cursor.comment_id = #{commentId}
+          AND cursor.parent_comment_id IS NULL
+          AND (
+              (cursor.comment_type = 'SYSTEM' AND cursor.deleted_yn = 'N')
+              OR (
+                  cursor.comment_type = 'USER'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM cursor_user_tree
+                      GROUP BY cursor_user_tree.comment_id
+                      HAVING BOOL_OR(cursor_user_tree.deleted_yn = 'N')
+                  )
+              )
+          )
+    </select>
+
+    <select id="countCommonComments" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_common_comment
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = #{ownerType}
+          AND owner_id = #{ownerId}
+          AND parent_comment_id IS NULL
+          AND deleted_yn = 'N'
+    </select>
+
+    <select id="countApprovalUserComments" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM tb_common_comment
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = 'APPROVAL'
+          AND owner_id = #{ownerId}
+          AND comment_type = 'USER'
+          AND parent_comment_id IS NULL
+          AND deleted_yn = 'N'
+    </select>
+
+    <select id="selectApprovalUserCommentById" parameterType="map" resultMap="commonCommentMap">
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM tb_common_comment c
+        <include refid="writerProfileImageJoin"/>
+        WHERE c.tenant_id = #{tenantId}
+          AND c.comment_id = #{commentId}
+          AND c.owner_type = 'APPROVAL'
+          AND c.owner_id = #{ownerId}
+          AND c.comment_type = 'USER'
+          AND c.deleted_yn = 'N'
+    </select>
+
+    <select id="selectCommonCommentById" parameterType="map" resultMap="commonCommentMap">
+        SELECT c.comment_id, c.tenant_id, c.owner_type, c.owner_id, c.parent_comment_id,
+               c.content, c.comment_type, c.event_type, c.writer_id, c.writer_name, c.last_modified_by,
+               c.last_modified_by_name, c.deleted_yn, c.created_at, c.updated_at,
+               <include refid="writerProfileImageSelect"/>
+        FROM tb_common_comment c
+        <include refid="writerProfileImageJoin"/>
+        WHERE c.tenant_id = #{tenantId}
+          AND c.comment_id = #{commentId}
+          AND c.deleted_yn = 'N'
+    </select>
+
+    <select id="insertCommonComment" parameterType="map" resultType="long">
+        INSERT INTO tb_common_comment (
+            tenant_id, owner_type, owner_id, parent_comment_id, content,
+            comment_type, event_type, writer_id, writer_name, last_modified_by, last_modified_by_name,
+            deleted_yn, created_at, updated_at
+        ) VALUES (
+            #{tenantId}, #{ownerType}, #{ownerId}, #{parentCommentId, jdbcType=BIGINT}, #{content},
+            'USER', NULL, #{writerId}, #{writerName}, #{writerId}, #{writerName}, #{deletedYn},
+            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        RETURNING comment_id
+    </select>
+
+    <select id="insertSystemComment" parameterType="map" resultType="long">
+        INSERT INTO tb_common_comment (
+            tenant_id, owner_type, owner_id, parent_comment_id, content,
+            comment_type, event_type, writer_id, writer_name,
+            last_modified_by, last_modified_by_name, deleted_yn, created_at, updated_at
+        ) VALUES (
+            #{tenantId}, #{ownerType}, #{ownerId}, NULL, #{content},
+            #{commentType}, #{eventType}, #{writerId}, #{writerName},
+            #{writerId}, #{writerName}, 'N', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        RETURNING comment_id
+    </select>
+
+    <update id="updateCommonComment" parameterType="map">
+        UPDATE tb_common_comment
+        SET content = #{content},
+            last_modified_by = #{actorId},
+            last_modified_by_name = #{actorName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND comment_id = #{commentId}
+          AND writer_id = #{actorId}
+          AND comment_type = 'USER'
+          AND COALESCE(UPPER(owner_type), '') &lt;&gt; 'APPROVAL'
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="updateApprovalUserComment" parameterType="map">
+        UPDATE tb_common_comment
+        SET content = #{content},
+            last_modified_by = #{actorId},
+            last_modified_by_name = #{actorName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND comment_id = #{commentId}
+          AND owner_type = 'APPROVAL'
+          AND owner_id = #{ownerId}
+          AND writer_id = #{actorId}
+          AND comment_type = 'USER'
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="softDeleteCommonComment" parameterType="map">
+        UPDATE tb_common_comment
+        SET deleted_yn = 'Y',
+            last_modified_by = #{actorId},
+            last_modified_by_name = #{actorName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND comment_id = #{commentId}
+          AND writer_id = #{actorId}
+          AND comment_type = 'USER'
+          AND COALESCE(UPPER(owner_type), '') &lt;&gt; 'APPROVAL'
+          AND deleted_yn = 'N'
+    </update>
+
+    <update id="softDeleteApprovalUserComment" parameterType="map">
+        UPDATE tb_common_comment
+        SET deleted_yn = 'Y',
+            last_modified_by = #{actorId},
+            last_modified_by_name = #{actorName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND comment_id = #{commentId}
+          AND owner_type = 'APPROVAL'
+          AND owner_id = #{ownerId}
+          AND writer_id = #{actorId}
+          AND comment_type = 'USER'
+          AND deleted_yn = 'N'
+    </update>
+</mapper>

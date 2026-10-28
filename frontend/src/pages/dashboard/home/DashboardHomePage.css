@@ -1,0 +1,61 @@
+/* 기존 송연 대시보드 모양. 송연 화면 틀(.mes-app)의 색 변수를 이 화면 안(.songyeon-dashboard)으로만 둔다. */
+.songyeon-dashboard {
+  --bg: #f7f8fa; --soft: #f0f2f6; --panel: #fff; --line: #e4e7ed;
+  --ink: #14171f; --text: #3b414f; --muted: #6a7180;
+  --sidebar: #eceef3; --sidebar-selected: #dbe0ea; --sidebar-border: #c7cedb;
+  --accent: #2b4c8c; --accent-text: #1d376b; --button-text: #fff;
+  --danger: #b03a2e; --danger-bg: #fbe9e6; --info: #1f6fb2; --info-soft: #e6f0f9;
+  --line-strong: #cbd1db; --accent-soft: #e7edf7;
+  --ok: #1d7a5f; --ok-soft: #e3f2ec; --warn: #875707; --warn-soft: #fbf0dc; --faint: #a5abb8;
+  color: var(--ink);
+}
+.songyeon-dashboard[data-theme='dark'] {
+  --bg: #14171c; --soft: #191d23; --panel: #1c2027; --line: #2b313a;
+  --ink: #e8ebf0; --text: #c2c8d2; --muted: #8f97a5;
+  --sidebar: #0f1216; --sidebar-selected: #242a33; --sidebar-border: #333b47;
+  --accent: #6ba5ff; --accent-text: #8fbeff; --button-text: #0e1420;
+  --danger: #ff7a6b; --danger-bg: #3a211e; --info: #63bdec; --info-soft: #15303e;
+  --line-strong: #39414d; --accent-soft: #1b2a44;
+  --ok: #59d6a4; --ok-soft: #123029; --warn: #e5ac55; --warn-soft: #382c17; --faint: #5c6470;
+}
+.songyeon-dashboard button, .songyeon-dashboard input, .songyeon-dashboard textarea { font-family: inherit; }
+.songyeon-dashboard button { cursor: pointer; }
+.songyeon-dashboard button:disabled { opacity: .5; cursor: not-allowed; }
+.songyeon-dashboard :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* 시작하기 안내·버튼·메모 창 입력 (기존 송연 common.css) */
+.mes-start-panel { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px 18px; margin-bottom: 20px; }
+.mes-section-title { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); color: var(--accent-text); font-size: 12.5px; font-weight: 800; letter-spacing: .04em; }
+.mes-start-panel p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--text); }
+.mes-ghost, .mes-primary { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--accent-text); font-size: 13px; font-weight: 600; }
+.mes-primary { padding: 6px 14px; border-color: var(--accent); background: var(--accent); color: var(--button-text); }
+.mes-muted { color: var(--muted); font-size: 13px; line-height: 1.7; }
+.mes-form-field { display: grid; gap: 7px; margin-bottom: 14px; color: var(--text); font-size: 13px; }
+.mes-form-field input, .mes-form-field textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); resize: vertical; }
+.mes-scope { border: 0; padding: 0; margin: 0 0 18px; color: var(--text); font-size: 12px; }
+.mes-scope legend { margin-bottom: 8px; }
+
+/* 달력 (기존 송연 dashboard.css) */
+.mes-calendar-panel { padding: 20px 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 20px; }
+.mes-calendar-toolbar, .mes-month-controls { display: flex; align-items: center; }
+.mes-calendar-toolbar { justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.mes-month-controls { gap: 10px; }
+.mes-month-controls h2 { margin: 0; min-width: 110px; text-align: center; font-size: 15px; font-weight: 800; }
+.mes-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); border-radius: 8px; background: var(--line); overflow: hidden; }
+.mes-weekday { padding: 8px; background: var(--soft); color: var(--muted); font-size: 11.5px; font-weight: 700; text-align: center; }
+.mes-calendar-day { min-height: 84px; padding: 6px; border: 0; border-radius: 0; background: var(--panel); color: var(--text); font-size: 12px; font-weight: 600; text-align: left; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; }
+.mes-calendar-day small { margin-top: 1px; font-size: 10px; overflow-wrap: anywhere; }
+.mes-calendar-day:hover { background: var(--soft); }
+.mes-calendar-empty { min-height: 84px; }
+.mes-calendar-empty.leading { background: var(--panel); }
+.mes-calendar-grid .sunday { color: var(--danger); }
+.mes-calendar-grid .saturday { color: var(--info); }
+.mes-calendar-day.today { box-shadow: inset 0 0 0 2px var(--accent); }
+.mes-calendar-day.today > span { color: var(--accent-text); font-weight: 800; }
+@media (max-width: 760px) {
+  .mes-calendar-panel { padding: 16px 10px; }
+  .mes-calendar-day, .mes-calendar-empty { min-height: 65px; }
+  .mes-calendar-day { padding: 4px; }
+  .mes-month-controls { gap: 5px; }
+  .mes-month-controls h2 { min-width: 92px; font-size: 14px; }
+}

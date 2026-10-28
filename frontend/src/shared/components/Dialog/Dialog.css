@@ -1,0 +1,7 @@
+/* ===== 공용 대화상자(Dialog) — shared/components/Dialog ===== */
+.mes-dialog { width: min(520px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 12px 32px #14171f40; }
+.mes-dialog::backdrop { background: #14171f80; }
+.mes-dialog-content { padding: 24px; }
+.mes-dialog-content header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.mes-dialog h2 { margin: 0; font-size: 16px; }
+.mes-close { border: 0; background: transparent; color: var(--muted); font-size: 25px; }

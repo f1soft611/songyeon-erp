@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="ApprovalLineTemplateDAO">
+
+    <resultMap id="template" type="egovframework.let.groupware.approval.domain.model.ApprovalLineTemplateVO">
+        <id property="templateId" column="template_id"/>
+        <result property="name" column="template_name"/>
+        <result property="eabusNo" column="eabus_no"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="templateLine" type="egovframework.let.groupware.approval.domain.model.ApprovalLineTemplateLineVO">
+        <result property="stageOrder" column="stage_order"/>
+        <result property="participantOrder" column="participant_order"/>
+        <result property="participantType" column="participant_type"/>
+        <result property="participantUserId" column="participant_user_id"/>
+    </resultMap>
+
+    <select id="selectOwnedTemplates" parameterType="map" resultMap="template">
+        SELECT template_id, template_name, eabus_no, updated_at
+        FROM public.tb_electronic_approval_line_template
+        WHERE tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+          AND eabus_no = #{eabusNo}
+        ORDER BY template_name ASC, template_id ASC
+    </select>
+
+    <select id="selectOwnedTemplate" parameterType="map" resultMap="template">
+        SELECT template_id, template_name, eabus_no, updated_at
+        FROM public.tb_electronic_approval_line_template
+        WHERE tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+          AND template_id = #{templateId}
+    </select>
+
+    <select id="selectOwnedTemplateLines" parameterType="map" resultMap="templateLine">
+        SELECT line.stage_order, line.participant_order,
+               line.participant_type, line.participant_user_id
+        FROM public.tb_electronic_approval_line_template_info line
+        JOIN public.tb_electronic_approval_line_template template
+          ON template.tenant_id = line.tenant_id
+         AND template.template_id = line.template_id
+        WHERE template.tenant_id = #{tenantId}
+          AND template.owner_user_id = #{ownerUserId}
+          AND template.template_id = #{templateId}
+        ORDER BY line.stage_order, line.participant_order
+    </select>
+
+    <select id="selectOwnedTemplateNameExists" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_electronic_approval_line_template
+            WHERE tenant_id = #{tenantId}
+              AND owner_user_id = #{ownerUserId}
+              AND eabus_no = #{eabusNo}
+              AND template_name = #{name}
+            <if test="excludeTemplateId != null">
+              AND template_id &lt;&gt; #{excludeTemplateId}
+            </if>
+        )
+    </select>
+
+    <select id="insertTemplate" parameterType="map" resultType="long">
+        INSERT INTO public.tb_electronic_approval_line_template (
+            tenant_id, owner_user_id, eabus_no, template_name, created_at, updated_at
+        ) VALUES (
+            #{tenantId}, #{ownerUserId}, #{eabusNo}, #{name}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        )
+        RETURNING template_id
+    </select>
+
+    <insert id="insertTemplateLines" parameterType="map">
+        INSERT INTO public.tb_electronic_approval_line_template_info (
+            tenant_id, template_id, stage_order, participant_order,
+            participant_type, participant_user_id
+        ) VALUES
+        <foreach collection="approvalLines" item="line" separator=",">
+            (
+                #{tenantId}, #{templateId}, #{line.stageOrder}, #{line.participantOrder},
+                #{line.participantType}, #{line.participantUserId}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateOwnedTemplateName" parameterType="map">
+        UPDATE public.tb_electronic_approval_line_template
+        SET template_name = #{name},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+          AND template_id = #{templateId}
+    </update>
+
+    <delete id="deleteOwnedTemplate" parameterType="map">
+        DELETE FROM public.tb_electronic_approval_line_template
+        WHERE tenant_id = #{tenantId}
+          AND owner_user_id = #{ownerUserId}
+          AND template_id = #{templateId}
+    </delete>
+</mapper>

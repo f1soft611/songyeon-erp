@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 품질관리 - 실시간 온도 (송연 temperature.py 의 temp_sensors · temp_groups). 센서 값 자체는 타파쿨로365 에서 받아온다 -->
+<mapper namespace="TemperatureDAO">
+
+    <select id="selectSensors" resultType="egovframework.let.qm.temperature.domain.model.TempSensorVO">
+        SELECT id AS "id", name AS "name", sensor_id AS "sensorId", min_temp AS "minTemp", max_temp AS "maxTemp", group_name AS "groupName"
+        FROM temp_sensors
+        ORDER BY name
+    </select>
+
+    <insert id="insertSensor" parameterType="egovframework.let.qm.temperature.domain.model.TempSensorVO">
+        INSERT INTO temp_sensors (name, sensor_id, min_temp, max_temp, group_name, created_at)
+        VALUES (#{name}, #{sensorId}, #{minTemp, jdbcType=DOUBLE}, #{maxTemp, jdbcType=DOUBLE}, #{groupName, jdbcType=VARCHAR}, #{createdAt})
+    </insert>
+
+    <update id="updateSensor" parameterType="egovframework.let.qm.temperature.domain.model.TempSensorVO">
+        UPDATE temp_sensors
+           SET name = #{name}, sensor_id = #{sensorId}, min_temp = #{minTemp, jdbcType=DOUBLE}, max_temp = #{maxTemp, jdbcType=DOUBLE},
+               group_name = #{groupName, jdbcType=VARCHAR}
+         WHERE id = #{id}
+    </update>
+
+    <update id="updateSensorGroup" parameterType="map">
+        UPDATE temp_sensors SET group_name = #{groupName, jdbcType=VARCHAR} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteSensor" parameterType="long">
+        DELETE FROM temp_sensors WHERE id = #{id}
+    </delete>
+
+    <!-- 그룹이 없으면 만든다(송연 INSERT OR IGNORE. 이름 유일 색인 temp_groups_name_key) -->
+    <insert id="ensureGroup" parameterType="string">
+        INSERT INTO temp_groups (name, refresh_interval_sec) VALUES (#{name}, 0)
+        ON CONFLICT (name) DO NOTHING
+    </insert>
+
+    <!-- 센서에 쓰이고 있는데 아직 그룹 표에 없는 이름(예전 자료) -->
+    <select id="selectUsedGroupNames" resultType="string">
+        SELECT DISTINCT group_name FROM temp_sensors WHERE group_name IS NOT NULL
+    </select>
+
+    <select id="selectGroups" resultType="egovframework.let.qm.temperature.domain.model.TempGroupVO">
+        SELECT name AS "name", COALESCE(refresh_interval_sec, 0) AS "refreshIntervalSec"
+        FROM temp_groups
+        ORDER BY name
+    </select>
+
+    <select id="selectGroupInterval" parameterType="string" resultType="int">
+        SELECT COALESCE(refresh_interval_sec, 0) FROM temp_groups WHERE name = #{name}
+    </select>
+
+    <update id="updateGroupInterval" parameterType="map">
+        UPDATE temp_groups SET refresh_interval_sec = #{seconds} WHERE name = #{name}
+    </update>
+
+    <!-- 그룹을 지우면 그 안의 센서는 미분류로(센서는 지우지 않는다) -->
+    <update id="ungroupSensors" parameterType="string">
+        UPDATE temp_sensors SET group_name = NULL WHERE group_name = #{name}
+    </update>
+
+    <delete id="deleteGroup" parameterType="string">
+        DELETE FROM temp_groups WHERE name = #{name}
+    </delete>
+
+    <insert id="insertGroup" parameterType="map">
+        INSERT INTO temp_groups (name, refresh_interval_sec) VALUES (#{name}, #{seconds})
+        ON CONFLICT (name) DO UPDATE SET refresh_interval_sec = EXCLUDED.refresh_interval_sec
+    </insert>
+
+    <update id="renameSensorsGroup" parameterType="map">
+        UPDATE temp_sensors SET group_name = #{newName} WHERE group_name = #{name}
+    </update>
+</mapper>

@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 공통관리 > 기초정보 > 원재료마스터(BSMaterialMasterView). 부자재 목록은 부자재마스터 매퍼(SubMaterialMaster_SQL)에 있다.
+     원재료BOM·부자재BOM (송연 materials · material_supplier · material_price_log · material_price_schedule, 기존 /api/materials… 와 같은 값) -->
+<mapper namespace="MaterialMasterDAO">
+
+    <resultMap id="materialMaster" type="egovframework.let.co.master.materialmaster.domain.model.MaterialMasterVO">
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="spec" column="spec"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="stockQty" column="stock_qty"/>
+        <result property="supplier" column="supplier"/>
+        <result property="warehouse" column="warehouse"/>
+        <result property="safetyStock" column="safety_stock"/>
+        <result property="baseOrderQty" column="base_order_qty"/>
+        <result property="allergens" column="allergens"/>
+        <result property="subCategory" column="sub_category"/>
+        <result property="subCategoryNm" column="sub_category_nm"/>
+        <result property="unit" column="unit"/>
+        <result property="unitNm" column="unit_nm"/>
+        <result property="regUserNm" column="reg_user_nm"/>
+        <result property="regDt" column="reg_dt"/>
+        <result property="updUserNm" column="upd_user_nm"/>
+        <result property="updDt" column="upd_dt"/>
+        <result property="useYn" column="use_yn"/>
+        <result property="unitWeight" column="unit_weight"/>
+        <result property="boxQty" column="box_qty"/>
+        <result property="lastUsedDate" column="last_used_date"/>
+        <result property="usedByCount" column="used_by_count"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="supplierCodes" column="supplier_codes" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+        <result property="supplierNames" column="supplier_names" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+    </resultMap>
+
+    <!-- 목록. 마지막사용일은 생산에 쓴 기록에서 가져온다. 부자재는 화면에서 거른다(부자재BOM 탭에서 따로 본다). -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <select id="selectMaterialList" parameterType="string" resultMap="materialMaster">
+        SELECT
+            m.code,
+            m.name,
+            m.spec,
+            m.unit_price,
+            m.stock_qty,
+            m.client_code AS supplier, <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            (SELECT wh.warehouse_nm FROM tb_warehouse wh WHERE wh.warehouse_cd = m.warehouse_cd LIMIT 1) AS warehouse,
+            m.safety_stock,
+            m.base_order_qty,
+            m.allergens,
+            m.sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm,
+            m.unit,
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = unit
+             LIMIT 1) AS unit_nm,
+            <!-- 2026-10-23 등록자 · 등록일시 · 수정자 · 수정일시(사번은 사원 이름으로, 포장유형과 같음) -->
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = m.reg_user_id), m.reg_user_id) AS reg_user_nm,
+            TO_CHAR(m.reg_dt, 'YYYY-MM-DD HH24:MI:SS') AS reg_dt,
+            COALESCE((SELECT e.name FROM employees e WHERE e.id = m.upd_user_id), m.upd_user_id) AS upd_user_nm,
+            TO_CHAR(m.upd_dt, 'YYYY-MM-DD HH24:MI:SS') AS upd_dt,
+            m.use_yn, <!-- 사용여부 Y/N(2026-10-23) -->
+            m.unit_weight,
+            m.box_qty,
+            (SELECT MAX(SUBSTRING(u.created_at, 1, 10)) FROM production_material_usage u WHERE u.material_code = m.code) AS last_used_date,
+            sp.supplier_name,
+            sp.supplier_codes,
+            sp.supplier_names
+        FROM materials m
+        <!-- 납품업체(2026-10-23): materials.client_code 의 거래처코드 배열('["000001","000002"]', 예전 supplier = 거래처 id 배열)을
+             풀어 거래처와 조인하고 원재료 한 줄로 모은다(배열 순서).
+             supplier_name 은 '다온, 대영산업' 처럼 이어서, supplier_codes·supplier_names 는 화면 칩용 배열.
+             배열이 아닌 옛 값(업체명)·빈 값은 셋 다 NULL. 지워진 거래처는 '삭제된 업체(코드)' -->
+        LEFT JOIN LATERAL (
+            SELECT
+                string_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')'), ', ' ORDER BY e.ord) AS supplier_name,
+                array_agg(e.code ORDER BY e.ord) AS supplier_codes,
+                array_agg(COALESCE(c.name, '삭제된 업체(' || e.code || ')') ORDER BY e.ord) AS supplier_names
+            FROM jsonb_array_elements_text(
+                CASE
+                    WHEN replace(COALESCE(m.client_code, ''), ' ', '') ~ '^[[]("[0-9]+"(,"[0-9]+")*)?[]]$' THEN m.client_code::jsonb
+                    ELSE '[]'::jsonb
+                END
+            ) WITH ORDINALITY AS e(code, ord)
+            LEFT JOIN clients c ON c.client_code = e.code
+        ) sp ON TRUE
+        <if test="_parameter != null and _parameter != ''">
+        WHERE m.name LIKE '%' || #{_parameter} || '%'
+           OR m.code LIKE '%' || #{_parameter} || '%'
+        </if>
+        ORDER BY m.code
+    </select>
+
+    <!-- 부자재: 원재료와 같은 표에 sub_category 로만 갈린다. '쓰는 제품' 은 세어서 준다(지우기 전에 쓰는 데가 보이게). -->
+    <!-- 납품업체 자동완성: 매입(또는 매입+매출) 거래처만. 2026-10-23 분류는 공통코드 이름으로 보고, 사용 중 거래처만 -->
+    <select id="selectVendorClients" resultType="egovframework.let.co.master.materialmaster.domain.model.MaterialSupplierVO">
+        SELECT
+            id AS "clientId",
+            client_code AS "clientCode",
+            name AS "clientName"
+        FROM clients
+        WHERE client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매입%'
+        )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND name IS NOT NULL
+          AND client_code IS NOT NULL
+        ORDER BY name
+    </select>
+
+    <!-- 납품업체 저장 검사(2026-10-23): 거래처코드로 거래처명을 찾는다. 없으면 null -->
+    <select id="selectClientNameByCode" parameterType="string" resultType="string">
+        SELECT name
+        FROM clients
+        WHERE client_code = #{clientCode}
+        LIMIT 1
+    </select>
+
+    <!-- 부자재 분류 저장 검사(2026-10-23): 공통코드 SUB_MATERIAL_CATEGORY(SONGYEON) 의 사용 중 코드 -->
+    <select id="selectSubCategoryCodes" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE COALESCE(i.use_at, 'Y') = 'Y'
+          AND COALESCE(g.use_at, 'Y') = 'Y'
+        ORDER BY i.sort_order, i.item_code
+    </select>
+
+    <!-- 단위 저장 검사(2026-10-23): 공통코드 UNIT(SONGYEON) 의 사용 중 코드 -->
+    <select id="selectUnitCodes" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'UNIT'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE COALESCE(i.use_at, 'Y') = 'Y'
+          AND COALESCE(g.use_at, 'Y') = 'Y'
+        ORDER BY i.sort_order, i.item_code
+    </select>
+
+    <select id="selectMaterial" parameterType="string" resultMap="materialMaster">
+        SELECT
+            code,
+            name,
+            unit_price,
+            sub_category,
+            (SELECT split_part(i.item_nm, ' — ', 1)
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'SUB_MATERIAL_CATEGORY'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = sub_category
+             LIMIT 1) AS sub_category_nm,
+            client_code AS supplier, <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            spec
+        FROM materials
+        WHERE code = #{code}
+    </select>
+
+    <!-- 같은 원재료로 볼 것: 이름과 규격이 둘 다 같음(띄어쓰기·대소문자 무시, 규격이 둘 다 비어도 같음). excludeCode 는 빼고 -->
+    <select id="selectSameMaterials" parameterType="map" resultMap="materialMaster">
+        SELECT
+            code,
+            name,
+            spec
+        FROM materials
+        WHERE LOWER(REGEXP_REPLACE(COALESCE(name, ''), '\s', '', 'g')) = LOWER(REGEXP_REPLACE(#{name}, '\s', '', 'g'))
+          AND LOWER(REGEXP_REPLACE(COALESCE(spec, ''), '\s', '', 'g')) = LOWER(REGEXP_REPLACE(COALESCE(#{spec,jdbcType=VARCHAR}, ''), '\s', '', 'g'))
+        <if test="excludeCode != null and excludeCode != ''">
+          AND code != #{excludeCode}
+        </if>
+        ORDER BY code
+    </select>
+
+    <!-- 신규 원재료. 코드는 넣기 직전 발번한다(숫자 코드 최대값 + 1, 6자리로 채움) -->
+    <insert id="insertMaterial" parameterType="egovframework.let.co.master.materialmaster.domain.model.MaterialMasterVO">
+        <selectKey keyProperty="code" resultType="string" order="BEFORE">
+            SELECT
+                CASE WHEN LENGTH(t.next_code) &lt; 6 THEN LPAD(t.next_code, 6, '0') ELSE t.next_code END
+            FROM (
+                SELECT
+                    CAST(COALESCE(MAX(CAST(code AS NUMERIC)), 0) + 1 AS VARCHAR) AS next_code
+                FROM materials
+                WHERE REGEXP_LIKE(code, '^[0-9]+$')
+            ) t
+        </selectKey>
+        INSERT INTO materials (
+            code,
+            name,
+            spec,
+            unit_price,
+            reg_user_id,
+            reg_dt
+        ) VALUES (
+            #{code},
+            #{name},
+            #{spec},
+            #{unitPrice,jdbcType=DOUBLE},
+            #{regUserId,jdbcType=VARCHAR},
+            CURRENT_TIMESTAMP
+        )
+    </insert>
+
+    <!-- 보내온 칸만 고친다(안 보낸 칸을 건드리면 화면에서 뺀 값이 조용히 지워진다) -->
+    <!-- 2026-10-26 창고는 창고코드(warehouse_cd), 입고 거래처는 거래처코드, 과세구분은 공통코드 TAX_CATEGORY 코드로 저장한다. 화면에는 이름 -->
+    <update id="updateMaterialInfo" parameterType="map">
+        UPDATE materials
+        SET
+            name = #{row.name},
+            client_code = #{row.supplier} <!-- 2026-10-23 납품업체 거래처코드 배열 -->
+            <if test="fields.contains('spec')">, spec = #{row.spec}</if>
+            <if test="fields.contains('warehouse')">, warehouse_cd = (SELECT wh.warehouse_cd FROM tb_warehouse wh WHERE wh.warehouse_nm = #{row.warehouse} AND wh.factory_code = 'F001' AND wh.plant_code = 'P001' ORDER BY CASE WHEN wh.use_yn = 'Y' THEN 0 ELSE 1 END, wh.warehouse_id LIMIT 1)</if>
+            <if test="fields.contains('subCategory')">, sub_category = #{row.subCategory}</if>
+            <if test="fields.contains('unit')">, unit = #{row.unit}</if>
+            <if test="fields.contains('allergens')">, allergens = #{row.allergens}</if>
+            <if test="fields.contains('safetyStock')">, safety_stock = #{row.safetyStock,jdbcType=DOUBLE}</if>
+            <if test="fields.contains('baseOrderQty')">, base_order_qty = #{row.baseOrderQty,jdbcType=DOUBLE}</if>
+            <if test="fields.contains('unitWeight')">, unit_weight = #{row.unitWeight,jdbcType=DOUBLE}</if>
+            <if test="fields.contains('boxQty')">, box_qty = #{row.boxQty,jdbcType=INTEGER}</if>
+        WHERE code = #{row.code}
+    </update>
+
+    <!-- 이름을 바꾸면 배합표도 따라간다(코드로 찾으므로 이미 어긋나 있던 줄까지 바로잡힌다) -->
+    <update id="updateBomMaterialName" parameterType="map">
+        UPDATE bom
+        SET material_name = #{name}
+        WHERE material_code = #{code}
+    </update>
+
+    <update id="updateRecipeBomMaterialName" parameterType="map">
+        UPDATE recipe_version_bom
+        SET material_name = #{name}
+        WHERE material_code = #{code}
+    </update>
+
+    <select id="countMaterialsByName" parameterType="string" resultType="long">
+        SELECT COUNT(*)
+        FROM materials
+        WHERE name = #{name}
+    </select>
+
+    <!-- 코드가 안 적힌 옛 레시피 줄은 이름으로 찾는 수밖에 없다 -->
+    <select id="countNamelessRecipeBom" parameterType="string" resultType="long">
+        SELECT COUNT(*)
+        FROM recipe_version_bom
+        WHERE material_code IS NULL
+          AND material_name = #{name}
+    </select>
+
+    <update id="updateNamelessRecipeBom" parameterType="map">
+        UPDATE recipe_version_bom
+        SET
+            material_name = #{name},
+            material_code = #{code}
+        WHERE material_code IS NULL
+          AND material_name = #{oldName}
+    </update>
+
+    <!-- 배합비 역전개: 이 원재료를 쓰는 제품(배합비율 높은 순) -->
+    <select id="selectMaterialUsage" parameterType="string" resultType="egovframework.let.co.master.materialmaster.domain.model.MaterialUsageVO">
+        SELECT
+            p.code AS "productCode",
+            p.name AS "productName",
+            p.spec AS "productSpec",
+            b.ratio_percent AS "ratioPercent"
+        FROM bom b
+        JOIN products p ON p.code = b.product_code
+        WHERE b.material_code = #{code}
+        ORDER BY b.ratio_percent DESC
+    </select>
+
+    <select id="selectBomProductCodesByMaterial" parameterType="map" resultType="string">
+        SELECT DISTINCT
+            product_code
+        FROM bom
+        WHERE material_code = #{code}
+        <if test="productCodes != null">
+          AND product_code IN
+          <foreach item="productCode" collection="productCodes" open="(" separator="," close=")">#{productCode}</foreach>
+        </if>
+        ORDER BY product_code
+    </select>
+
+    <!-- 일괄적용: 고른 제품들의 배합표에서 이 원재료를 다른 원재료로 바꾼다(적용단가도 다시 계산) -->
+    <update id="updateBomMaterial" parameterType="map">
+        UPDATE bom
+        SET
+            material_code = #{newCode},
+            material_name = #{newName},
+            unit_price_per_kg = #{newPrice,jdbcType=DOUBLE},
+            amount_per_kg = COALESCE(ratio_percent, 0) * COALESCE(CAST(#{newPrice,jdbcType=DOUBLE} AS DOUBLE PRECISION), 0)
+        WHERE material_code = #{code}
+        <if test="productCodes != null">
+          AND product_code IN
+          <foreach item="productCode" collection="productCodes" open="(" separator="," close=")">#{productCode}</foreach>
+        </if>
+    </update>
+
+    <select id="selectBomAmountSum" parameterType="string" resultType="double">
+        SELECT COALESCE(SUM(amount_per_kg), 0)
+        FROM bom
+        WHERE product_code = #{productCode}
+    </select>
+
+    <!-- 수정자 · 수정일시(2026-10-23): 원재료 · 부자재 창의 기본정보 · 단가(바로 반영) 저장 뒤 남긴다.
+         재고 수량 · 창고 이름 따라가기 · 적용일 자동 단가는 수정으로 치지 않는다 -->
+    <!-- 사용여부(2026-10-23): 원재료마스터 · 부자재마스터 체크박스 + [저장]. 수정자 · 수정일시도 같이 남긴다 -->
+    <update id="updateMaterialUseYn" parameterType="map">
+        UPDATE materials
+        SET use_yn = #{useYn},
+            upd_user_id = #{userId, jdbcType=VARCHAR},
+            upd_dt = CURRENT_TIMESTAMP
+        WHERE code = #{code}
+    </update>
+
+    <update id="updateMaterialAudit" parameterType="map">
+        UPDATE materials
+        SET upd_user_id = #{userId, jdbcType=VARCHAR},
+            upd_dt = CURRENT_TIMESTAMP
+        WHERE code = #{code}
+    </update>
+
+    <update id="updateMaterialPrice" parameterType="map">
+        UPDATE materials
+        SET unit_price = #{unitPrice,jdbcType=DOUBLE}
+        WHERE code = #{code}
+    </update>
+
+    <!-- 단가가 바뀌면 그 원재료를 쓰는 배합표의 단가·적용단가도 따라 바뀐다 -->
+    <update id="updateBomPriceByMaterial" parameterType="map">
+        UPDATE bom
+        SET
+            unit_price_per_kg = #{unitPrice,jdbcType=DOUBLE},
+            amount_per_kg = CASE WHEN ratio_percent IS NULL THEN NULL ELSE ratio_percent * #{unitPrice,jdbcType=DOUBLE} END
+        WHERE material_code = #{code}
+    </update>
+
+    <insert id="insertMaterialPriceLog" parameterType="map">
+        INSERT INTO material_price_log (
+            material_code,
+            material_name,
+            changed_at,
+            old_price,
+            new_price
+        ) VALUES (
+            #{code},
+            #{name},
+            #{changedAt},
+            #{oldPrice,jdbcType=DOUBLE},
+            #{newPrice,jdbcType=DOUBLE}
+        )
+    </insert>
+
+    <select id="selectMaterialPriceLog" parameterType="string" resultType="egovframework.let.co.master.materialmaster.domain.model.MaterialPriceLogVO">
+        SELECT
+            changed_at AS "changedAt",
+            old_price AS "oldPrice",
+            new_price AS "newPrice"
+        FROM material_price_log
+        WHERE material_code = #{code}
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertMaterialPriceSchedule" parameterType="map">
+        INSERT INTO material_price_schedule (
+            material_code,
+            material_name,
+            new_price,
+            effective_date,
+            applied,
+            created_at
+        ) VALUES (
+            #{code},
+            #{name},
+            #{newPrice,jdbcType=DOUBLE},
+            #{effectiveDate},
+            0,
+            #{createdAt}
+        )
+    </insert>
+
+    <select id="selectMaterialPriceSchedule" parameterType="string" resultType="egovframework.let.co.master.materialmaster.domain.model.MaterialPriceScheduleVO">
+        SELECT
+            id,
+            new_price AS "newPrice",
+            effective_date AS "effectiveDate",
+            applied
+        FROM material_price_schedule
+        WHERE material_code = #{code}
+        ORDER BY effective_date
+    </select>
+
+    <delete id="deleteMaterialPriceSchedule" parameterType="long">
+        DELETE FROM material_price_schedule
+        WHERE id = #{id}
+          AND applied = 0
+    </delete>
+
+    <!-- 적용일자가 오늘이거나 지난 예약(송연 apply_due_price_schedules) -->
+    <select id="selectDueMaterialPriceSchedules" parameterType="string" resultType="egovframework.let.co.master.materialmaster.domain.model.MaterialPriceScheduleVO">
+        SELECT
+            id,
+            material_code AS "materialCode",
+            material_name AS "materialName",
+            new_price AS "newPrice"
+        FROM material_price_schedule
+        WHERE applied = 0
+          AND effective_date &lt;= #{today}
+        ORDER BY
+            effective_date,
+            id
+    </select>
+
+    <update id="markMaterialPriceScheduleApplied" parameterType="long">
+        UPDATE material_price_schedule
+        SET applied = 1
+        WHERE id = #{id}
+    </update>
+</mapper>

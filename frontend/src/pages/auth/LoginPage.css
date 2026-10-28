@@ -1,0 +1,28 @@
+/* 기존 송연 로그인 화면(styles/global.css + styles/auth.css)과 같은 모양.
+ * S_ERP 공통 스타일과 섞이지 않도록 .songyeon-login 아래로만 적용한다. */
+.songyeon-login {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Segoe UI', sans-serif;
+  color: #16241f;
+  background: #16241f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  line-height: normal;
+  min-width: 280px;
+}
+.songyeon-login * { box-sizing: border-box; }
+.songyeon-login .login-layout { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.songyeon-login .login-box { width: 100%; max-width: 360px; padding: 40px 36px; background: #fff; border-radius: 14px; box-shadow: 0 20px 50px -12px rgb(0 0 0 / 40%); }
+.songyeon-login .brand { margin: 0 0 28px; font-size: 32px; font-weight: 800; text-align: center; }
+.songyeon-login .field { margin-bottom: 16px; }
+.songyeon-login .field label { display: block; margin-bottom: 6px; color: #33443c; font-size: 12px; font-weight: 600; }
+.songyeon-login .field input { width: 100%; padding: 11px 13px; border: 1.5px solid #dde3dd; border-radius: 8px; font: inherit; font-size: 14px; background: #fff; color: inherit; }
+.songyeon-login .field input:focus { outline: 2px solid #1f6f5c; outline-offset: 1px; border-color: #1f6f5c; }
+.songyeon-login .login-btn { width: 100%; margin-top: 8px; padding: 12px; border: 0; border-radius: 8px; background: #1f6f5c; color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.songyeon-login .login-btn:hover:not(:disabled) { background: #144f41; }
+.songyeon-login .login-btn:focus-visible { outline: 3px solid #16241f; outline-offset: 3px; }
+.songyeon-login .login-btn:disabled { opacity: .65; cursor: not-allowed; }
+.songyeon-login .error-msg { min-height: 16px; margin: 12px 0 0; color: #b54a3f; font-size: 12.5px; line-height: 1.5; text-align: center; overflow-wrap: anywhere; }
+@media (max-width: 380px) { .songyeon-login .login-box { padding: 32px 24px; } }

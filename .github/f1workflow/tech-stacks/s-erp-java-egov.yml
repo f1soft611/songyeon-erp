@@ -1,0 +1,33 @@
+name: 'SONGYEON ERP Java Backend'
+language: 'Java 8+'
+framework: 'Spring Boot / eGovFrame 4.x'
+orm: 'MyBatis (PostgreSQL)'
+build_system: 'Maven'
+
+paths:
+  source: 'backend/src/main/java'
+  resources: 'backend/src/main/resources'
+  mappers: 'backend/src/main/resources/egovframework/sqlmap/mappers'
+  tests: 'backend/src/test/java'
+  database: 'backend/DATABASE'
+
+commands:
+  compile: 'cd backend && mvn compile'
+  test_all: 'mvn test'
+  test_single: 'mvn "-Dtest={test_class}" test'
+  run: 'mvn spring-boot:run'
+
+db_schema_policy:
+  - 'DB 테이블/컬럼 변경 시 backend/DATABASE/YYYYMMDD 및 docs/database/ 에 동시에 SQL 및 MD 생성'
+  - '필수 파일 세트: YYYYMMDD_NNN_작업명.sql, YYYYMMDD_NNN_작업명_change_schema.md, YYYYMMDD_NNN_rollback.sql'
+  - 'docs/database/db-schema.md 누적 스키마 문서 즉시 업데이트'
+
+rules:
+  - 'JWT 인증 필터 및 DB 접근 전 TenantContextHolder에 tenantId/dbKey 세팅 보장'
+  - 'EgovAbstractDAO 상속 시 raw 타입 처리 및 select(...) 캐스팅 패턴 준수'
+  - 'MyBatis XML namespace와 DAO 메소드 호출 네임스페이스 일치 보장'
+  - 'MyBatis XML test 조건문 문자열 비교 시 이중 따옴표 사용 (test=\'active == "Y"\' )'
+  - 'Java 8 대상 코드에서 Java 9+ 문법 또는 API를 사용하지 않는다.'
+  - 'Java 9+ API 금지 예: List.of(), Set.of(), Map.of(), Stream.toList(), Path.of()'
+  - 'Java 8 대체 예: 명시 타입, Arrays.asList(), Collectors.toList(), Paths.get(), 기존 switch 문'
+  - '구현 전후 Maven Compiler source/target/release 값을 Java 8과 맞추고 확인한다.'

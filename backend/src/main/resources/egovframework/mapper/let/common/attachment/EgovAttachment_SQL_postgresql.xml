@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 첨부 파일 (송연 attachments.py). 파일은 디스크에, 이름·크기·누가는 이 표에 -->
+<mapper namespace="AttachmentDAO">
+
+    <!-- 여러 대상의 첨부를 한 번에(목록 화면에서 줄마다 따로 묻지 않게) -->
+    <select id="selectByRefs" parameterType="map" resultType="egovframework.let.common.attachment.domain.model.AttachmentVO">
+        SELECT
+            id AS "id",
+            scope AS "scope",
+            ref_id AS "refId",
+            orig_name AS "origName",
+            stored_name AS "storedName",
+            size_bytes AS "sizeBytes",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = uploaded_by LIMIT 1), uploaded_by) AS "uploadedBy", <!-- 2026-10-26 사번으로 저장, 보여 줄 때 직원 이름(없으면 저장값) -->
+            created_at AS "createdAt"
+        FROM attachment
+        WHERE scope = #{scope}
+          AND ref_id IN
+        <foreach collection="refIds" item="refId" open="(" separator="," close=")">#{refId}</foreach>
+        ORDER BY id
+    </select>
+
+    <select id="selectOne" parameterType="long" resultType="egovframework.let.common.attachment.domain.model.AttachmentVO">
+        SELECT
+            id AS "id",
+            scope AS "scope",
+            ref_id AS "refId",
+            orig_name AS "origName",
+            stored_name AS "storedName",
+            size_bytes AS "sizeBytes",
+            COALESCE((SELECT emp.name FROM employees emp WHERE emp.id = uploaded_by LIMIT 1), uploaded_by) AS "uploadedBy", <!-- 2026-10-26 사번으로 저장, 보여 줄 때 직원 이름(없으면 저장값) -->
+            created_at AS "createdAt"
+        FROM attachment
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insertAttachment" parameterType="egovframework.let.common.attachment.domain.model.AttachmentVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO attachment (scope, ref_id, orig_name, stored_name, size_bytes, uploaded_by, created_at)
+        VALUES (#{scope}, #{refId}, #{origName}, #{storedName}, #{sizeBytes, jdbcType=INTEGER}, #{uploadedBy}, #{createdAt})
+    </insert>
+
+    <delete id="deleteAttachment" parameterType="long">
+        DELETE FROM attachment WHERE id = #{id}
+    </delete>
+
+    <!-- 원본이 없어지면 공유도 같이 없어져야 한다(받는 사람 목록에 눌러도 아무것도 안 나오는 줄이 남지 않게) -->
+    <delete id="deleteShares" parameterType="long">
+        DELETE FROM document_share WHERE attachment_id = #{id}
+    </delete>
+
+    <delete id="deleteByRef" parameterType="map">
+        DELETE FROM attachment WHERE scope = #{scope} AND ref_id = #{refId}
+    </delete>
+</mapper>

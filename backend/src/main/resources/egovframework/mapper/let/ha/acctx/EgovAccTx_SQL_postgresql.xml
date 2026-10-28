@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 인사·회계 - 회계거래현황 (송연 accounting.py 의 /api/accounting/transactions).
+     입금과 출금은 acc_transaction 한 표에 적힌다. 적는 곳은 이 화면 하나뿐이고, 입·출금관리 · 채무대장은 같은 것을 묶어 볼 뿐이다.
+     계정과목 이름은 붙여 읽고 전표에 따로 적어두지 않는다 — 이름을 고치는 것은 바로잡는 일이라 지난 전표도 같이 바뀌어야 한다. -->
+<mapper namespace="AccTxDAO">
+
+    <select id="selectTransactions" parameterType="map" resultType="egovframework.let.ha.acctx.domain.model.AccTransactionVO">
+        SELECT t.id AS "id", t.kind AS "kind", t.tx_date AS "txDate", t.client_name AS "clientName", t.subject_id AS "subjectId",
+               t.amount AS "amount", t.method AS "method", t.bank_account_id AS "bankAccountId", t.card_id AS "cardId",
+               t.note AS "note", t.created_by AS "createdBy",
+               s.code AS "subjectCode", s.name AS "subjectName", s.category AS "subjectCategory",
+               b.bank_name AS "bankName", b.account_no AS "accountNo", c.issuer AS "cardIssuer", c.last4 AS "cardLast4"
+        FROM acc_transaction t
+        LEFT JOIN acc_subject s ON s.id = t.subject_id
+        LEFT JOIN acc_bank_account b ON b.id = t.bank_account_id
+        LEFT JOIN acc_card c ON c.id = t.card_id
+        WHERE 1 = 1
+        <if test="kind != null and kind != ''">AND t.kind = #{kind}</if>
+        <if test="start != null and start != '' and end != null and end != ''">AND t.tx_date BETWEEN #{start} AND #{end}</if>
+        <!-- 송연 SQLite LIKE 는 영문 대소문자를 가리지 않는다 -->
+        <if test="clientName != null and clientName != ''">AND t.client_name ILIKE '%' || #{clientName} || '%'</if>
+        ORDER BY t.tx_date, t.id
+    </select>
+
+    <select id="countSubject" parameterType="long" resultType="int">
+        SELECT COUNT(*) FROM acc_subject WHERE id = #{id}
+    </select>
+
+    <insert id="insertTransaction" parameterType="map">
+        INSERT INTO acc_transaction (kind, tx_date, client_name, subject_id, amount, method, bank_account_id, card_id, note, created_by, created_at)
+        VALUES (#{kind}, #{txDate}, #{clientName, jdbcType=VARCHAR}, #{subjectId, jdbcType=BIGINT}, #{amount}, #{method},
+                #{bankAccountId, jdbcType=BIGINT}, #{cardId, jdbcType=BIGINT}, #{note, jdbcType=VARCHAR}, #{createdBy, jdbcType=VARCHAR}, #{now})
+    </insert>
+
+    <!-- 적은 사람 · 적은 때는 바꾸지 않는다 -->
+    <update id="updateTransaction" parameterType="map">
+        UPDATE acc_transaction
+           SET kind = #{kind}, tx_date = #{txDate}, client_name = #{clientName, jdbcType=VARCHAR}, subject_id = #{subjectId, jdbcType=BIGINT},
+               amount = #{amount}, method = #{method}, bank_account_id = #{bankAccountId, jdbcType=BIGINT}, card_id = #{cardId, jdbcType=BIGINT},
+               note = #{note, jdbcType=VARCHAR}
+         WHERE id = #{id}
+    </update>
+
+    <delete id="deleteTransaction" parameterType="long">
+        DELETE FROM acc_transaction WHERE id = #{id}
+    </delete>
+</mapper>
