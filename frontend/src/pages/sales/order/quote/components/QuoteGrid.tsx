@@ -79,7 +79,12 @@ export function createQuoteColumns(onOpenDetail: (row: QuoteRow) => void): F1Gri
     },
     {
       // [상세]: 가견적은 수정 창(저장 · 확정), 확정된 견적은 상세보기(읽기 전용)
-      field: 'detailAction', headerName: '상세', width: 60, headerAlign: 'center', align: 'center', editable: false, pinned: 'right',
+      field: 'detailAction',
+      headerName: '상세',
+      width: 60,
+      align: 'center'
+      , editable: false,
+      pinned: 'right',
       getValue: () => '',
       renderCell: ({ row }) => (
         <Box

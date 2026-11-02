@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normalizeDateInput } from '../../../../../shared/components/f1-grid/editing/DateEditor';
 import { toPageSearchFields } from '../../../../../shared/components/page-search/searchFields';
 import { usePageSessionState } from '../../../../../shared/hooks/usePageSessionState';
 import { usePageSearchDefaults } from '../../../../../shared/hooks/usePageSearchDefaults';
@@ -13,11 +14,31 @@ import type {
   DocumentStatusSearchSession,
   DocumentStatusSearchValues,
 } from '../types/documentStatusSearch.types';
+import type { DocumentApprovalScope } from '../../write/types/documentWrite.types';
 
 const DOCUMENT_STATUS_SESSION_KEY = 's-erp:page:document-status';
 const DOCUMENT_STATUS_SESSION_VERSION = 1;
 
-export function useDocumentStatusSearch() {
+function getCompleteDateRange(
+  value: DocumentStatusSearchValues[string] | undefined,
+): { from: string; to: string } | null {
+  if (!value || typeof value !== 'object') return null;
+  const from = normalizeDateInput(value.from ?? '');
+  const to = normalizeDateInput(value.to ?? '');
+  return from && to ? { from, to } : null;
+}
+
+function withScope(
+  filters: DocumentStatusFilters,
+  scope: DocumentApprovalScope | null,
+): DocumentStatusFilters {
+  return scope ? { ...filters, scope } : filters;
+}
+
+export function useDocumentStatusSearch(
+  initialScope: DocumentApprovalScope | null = null,
+  onScopeChange?: (scope: DocumentApprovalScope | null) => void,
+) {
   const detailFields = useMemo(
     () => toPageSearchFields(createDocumentStatusColumns()),
     [],
@@ -27,6 +48,7 @@ export function useDocumentStatusSearch() {
     loading: defaultsLoading,
     error: defaultsError,
     retry: retryDefaults,
+    initialLoad: defaultsInitialLoad,
   } = usePageSearchDefaults(detailFields);
   const { state: searchSession, setState: setSearchSession } =
     usePageSessionState<DocumentStatusSearchSession | null>(
@@ -45,11 +67,12 @@ export function useDocumentStatusSearch() {
     () => cloneDetailValues(searchSession?.detailValues ?? {}),
   );
   const [appliedFilters, setAppliedFilters] = useState<DocumentStatusFilters>(
-    () => toDocumentStatusFilters(
+    () => withScope(toDocumentStatusFilters(
       searchSession?.keyword ?? '',
       searchSession?.detailValues ?? {},
-    ),
+    ), initialScope),
   );
+  const [dashboardScope, setDashboardScope] = useState(initialScope);
 
   useEffect(() => {
     if (!defaultValues) return;
@@ -63,14 +86,50 @@ export function useDocumentStatusSearch() {
       setDetailValues(initialSnapshot.detailValues);
       setSearchSession(initialSnapshot);
       setAppliedFilters(
-        toDocumentStatusFilters(
+        withScope(toDocumentStatusFilters(
           initialSnapshot.keyword,
           initialSnapshot.detailValues,
-        ),
+        ), initialScope),
       );
+    } else {
+      const savedDateRange = getCompleteDateRange(
+        searchSession.detailValues.submittedAt,
+      );
+      const submittedAt =
+        savedDateRange ?? getCompleteDateRange(defaultValues.submittedAt);
+      if (submittedAt) {
+        const currentDateValue = searchSession.detailValues.submittedAt;
+        const needsDateRestore =
+          !savedDateRange ||
+          !currentDateValue ||
+          typeof currentDateValue !== 'object' ||
+          currentDateValue.from !== submittedAt.from ||
+          currentDateValue.to !== submittedAt.to;
+        if (needsDateRestore) {
+          const restoredValues = {
+            ...cloneDetailValues(searchSession.detailValues),
+            submittedAt,
+          };
+          const restoredSnapshot = {
+            ...searchSession,
+            detailValues: restoredValues,
+          };
+          setDetailValues(restoredValues);
+          setSearchSession(restoredSnapshot);
+          setAppliedFilters(
+            withScope(
+              toDocumentStatusFilters(
+                restoredSnapshot.keyword,
+                restoredSnapshot.detailValues,
+              ),
+              initialScope,
+            ),
+          );
+        }
+      }
     }
     setDefaultsInitialized(true);
-  }, [defaultValues, searchSession, setSearchSession]);
+  }, [defaultValues, initialScope, searchSession, setSearchSession]);
 
   const applySearch = useCallback(
     (values: DocumentStatusSearchValues = detailValues) => {
@@ -79,11 +138,12 @@ export function useDocumentStatusSearch() {
         detailValues: cloneDetailValues(values),
       };
       setSearchSession(snapshot);
-      setAppliedFilters(
+      setAppliedFilters(withScope(
         toDocumentStatusFilters(snapshot.keyword, snapshot.detailValues),
-      );
+        dashboardScope,
+      ));
     },
-    [detailValues, keyword, setSearchSession],
+    [dashboardScope, detailValues, keyword, setSearchSession],
   );
 
   const resetSearch = useCallback(() => {
@@ -95,25 +155,41 @@ export function useDocumentStatusSearch() {
     };
     setKeyword('');
     setDetailValues(resetDetailValues);
+    setDashboardScope(null);
     setSearchSession(resetSnapshot);
     setAppliedFilters(
       toDocumentStatusFilters(resetSnapshot.keyword, resetSnapshot.detailValues),
     );
-  }, [defaultValues, setSearchSession]);
+    onScopeChange?.(null);
+  }, [defaultValues, onScopeChange, setSearchSession]);
+
+  const clearDashboardScope = useCallback(() => {
+    setDashboardScope(null);
+    setAppliedFilters((current) => {
+      const next = { ...current };
+      delete next.scope;
+      return next;
+    });
+    onScopeChange?.(null);
+  }, [onScopeChange]);
 
   return {
     keyword,
     setKeyword,
     detailFields,
     detailValues,
+    appliedDetailValues: searchSession?.detailValues ?? {},
     setDetailValues,
     appliedFilters,
     defaultsInitialized,
     defaultsLoading,
     defaultsError,
+    defaultsInitialLoad,
     retryDefaults,
     searchAreaDefaultValues: searchSession === null ? (defaultValues ?? {}) : {},
     applySearch,
     resetSearch,
+    dashboardScope,
+    clearDashboardScope,
   };
 }

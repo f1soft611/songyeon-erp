@@ -1,9 +1,12 @@
 import { Alert, Box, type AlertProps } from '@mui/material';
+import type { ReactNode } from 'react';
 
 type PageMessageAreaProps = {
   message: string;
-  onClose: () => void;
+  onClose?: () => void;
   severity?: AlertProps['severity'];
+  action?: ReactNode;
+  role?: 'alert' | 'status';
 };
 
 function normalizePageMessage(message: string): string {
@@ -28,6 +31,8 @@ export function PageMessageArea({
   message,
   onClose,
   severity = 'error',
+  action,
+  role = 'alert',
 }: PageMessageAreaProps) {
   const normalizedMessage = normalizePageMessage(message);
 
@@ -38,7 +43,17 @@ export function PageMessageArea({
       <Alert
         severity={severity}
         onClose={onClose}
-        sx={{ overflowWrap: 'anywhere', whiteSpace: 'pre-line' }}
+        action={action}
+        role={role}
+        sx={{
+          overflowWrap: 'anywhere',
+          whiteSpace: 'pre-line',
+          ...(action && {
+            flexWrap: 'wrap',
+            '& .MuiAlert-message': { flex: '1 1 240px', minWidth: 0 },
+            '& .MuiAlert-action': { m: 0, p: 0, alignSelf: 'center' },
+          }),
+        }}
       >
         {normalizedMessage}
       </Alert>

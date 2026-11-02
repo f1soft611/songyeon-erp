@@ -1,12 +1,10 @@
 import {
   Box,
   Container,
-  IconButton,
-  Typography,
   useTheme,
 } from '@mui/material';
 import AddOutlined from '@mui/icons-material/AddOutlined';
-import ReplayOutlined from '@mui/icons-material/ReplayOutlined';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '../../../../shared/components/PageHeader';
@@ -67,6 +65,11 @@ export function CommunityNoticePage({
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const { showError, showSuccess } = useNotification();
+  const [dashboardPostId] = useState(() => {
+    const value = Number(new URLSearchParams(window.location.search).get('dashboardPostId'));
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  });
+  const dashboardNoticeOpened = useRef(false);
   const hasCreatePermission = true;
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [pendingPinnedNotice, setPendingPinnedNotice] =
@@ -88,6 +91,7 @@ export function CommunityNoticePage({
   );
   const noticeGubunNamesRef = useRef(noticeGubunNames);
   const {
+    initialLoad,
     noticeItems,
     setNoticeItems,
     pinnedNoticeItems,
@@ -201,7 +205,12 @@ export function CommunityNoticePage({
     void loadNoticePosts();
   }, [loadNoticePosts]);
 
-  const hasVisibleNoticeList = noticeItems.length > 0 || !errorMessage;
+  useEffect(() => {
+    if (dashboardPostId === null || dashboardNoticeOpened.current || isInitialLoading || errorMessage) return;
+    dashboardNoticeOpened.current = true;
+    const exists = [...noticeItems, ...pinnedNoticeItems].some((item) => item.id === dashboardPostId);
+    void handleSelectNotice({ id: dashboardPostId, appendMissing: !exists });
+  }, [dashboardPostId, isInitialLoading, errorMessage, noticeItems, pinnedNoticeItems, handleSelectNotice]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = useMemo(
     () => [
@@ -336,7 +345,9 @@ export function CommunityNoticePage({
         actionGroups={hasCreatePermission ? pageActionGroups : undefined}
       />
 
-      <PageMessageArea message="" onClose={() => setErrorMessage(null)} />
+      <PageLoadBoundary {...initialLoad} label="공지사항"
+        onRetry={() => { void loadNoticePosts(); }}>
+      <PageMessageArea message={errorMessage ?? ''} onClose={() => setErrorMessage(null)} />
 
       <Box
         ref={setScrollRoot}
@@ -395,34 +406,6 @@ export function CommunityNoticePage({
                 />
               }
             />
-          ) : errorMessage && !isRefreshing && !hasVisibleNoticeList ? (
-            <Box
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                boxSizing: 'border-box',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
-                bgcolor: theme.palette.background.default,
-                color: theme.palette.text.primary,
-              }}
-            >
-              <Typography variant="body2" color="text.primary" align="center">
-                공지사항을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시
-                시도해 주세요.
-              </Typography>
-              <IconButton
-                aria-label="공지사항 다시 불러오기"
-                onClick={() => {
-                  void loadNoticePosts();
-                }}
-              >
-                <ReplayOutlined />
-              </IconButton>
-            </Box>
           ) : noticeItems.length === 0 ? (
             <ContentSplitLayout
               left={
@@ -624,6 +607,7 @@ export function CommunityNoticePage({
           )}
         </Container>
       </Box>
+      </PageLoadBoundary>
 
       {selectedNotice && (
         <PageAreaOverlay onClose={handleCloseNoticeDetail}>

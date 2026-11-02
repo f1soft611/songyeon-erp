@@ -33,6 +33,7 @@ type ArchiveFileGridProps = {
   loading: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  canExportExcel: boolean;
   onFolderOpen: (folderCode: string) => void;
   onDownload: (row: ArchiveFileRow) => void;
   onEdit: (row: ArchiveFileRow) => void;
@@ -84,6 +85,7 @@ export function ArchiveFileGrid({
   loading,
   canUpdate,
   canDelete,
+  canExportExcel,
   onFolderOpen,
   onDownload,
   onEdit,
@@ -290,7 +292,7 @@ export function ArchiveFileGrid({
         disableSorting
         disableFiltering
         stripeRows
-        canExportExcel
+        canExportExcel={canExportExcel}
         allowAddRootInContextMenu={false}
         allowAddRowInContextMenu={false}
         allowDeleteRowInContextMenu={false}

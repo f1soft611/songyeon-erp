@@ -40,6 +40,9 @@ public class LotRowVO implements Serializable {
     @Schema(description = "거래처")
     private String clientName;
 
+    @Schema(description = "거래처코드")
+    private String clientCode;
+
     @Schema(description = "로트번호")
     private String lotNo;
 

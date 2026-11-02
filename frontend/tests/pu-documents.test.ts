@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   childFolders, deptTag, docHint, docPath, emptyText, folderCounts, folderDialogHint, folderDialogTitle, isLockedMessage, isPeeking,
   ownerOptions, shareResultText, sizeText, uploadResultText,
-  type DocFolder, type DocPlace, type DocUser,
-} from '../src/pages/pu/documents/utils/documentBox';
+} from '../src/pages/pu/document/document-box/utils/documentBox';
+import type { DocFolder, DocPlace, DocUser } from '../src/pages/pu/document/document-box/types/documentBox.types';
 
 const f = (id: number, parentId: number | null, name: string, extra: Partial<DocFolder> = {}): DocFolder => ({ id, parentId, name, ...extra });
 const me: DocUser = { id: '0001', name: '사원1', department: '생산부', admin: false };

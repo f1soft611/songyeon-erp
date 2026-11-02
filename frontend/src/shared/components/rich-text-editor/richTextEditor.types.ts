@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import type { ReactNode } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
@@ -30,6 +31,7 @@ export type RichTextEditorProps = {
   className?: string;
   scrollMode?: RichTextEditorScrollMode;
   contentSx?: SystemStyleObject<Theme>;
+  renderContentPreview?: (html: string) => ReactNode;
 };
 
 export type RichTextEditorToolbarProps = {

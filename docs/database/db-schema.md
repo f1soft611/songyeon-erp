@@ -590,6 +590,11 @@
 
 ## 변경 이력
 
+- 2026-11-02: 구매관리(`PU /pu`)에 중분류 4개(`PU_ORDER` 발주관리 · `PU_INBOUND` 입고관리 · `PU_STOCK` 재고관리 · `PU_DOCUMENT` 문서관리)를 두어 화면을 옮기고, 발주관리 탭을 발주등록(`POOrderRegisterView`) · 발주현황(`POOrderStatusView`, 새 화면, 권한은 발주관리 복사)으로 나눴다. 2026-11-02 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261102_002` 참고.
+- 2026-11-02: 판매관리(`SL /sl`)에 중분류 2개(`SL_ENTRY` 판매처리 · `SL_INQUIRY` 판매조회)를 두어 화면 3개를 옮기는 스크립트를 만들었다. 화면ID 는 `ENSalesRegisterView` · `INSalesStatusView` · `INSalesTotalView`. 메뉴 번호 · 권한 행 그대로. 2026-11-02 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261102_001` 참고.
+- 2026-10-30: 물류관리(`LG /lg`)에 중분류 2개(`LG_STOCK` 재고관리 · `LG_OUTBOUND` 출고관리)를 두어 화면 3개를 옮기는 스크립트를 만들었다. 화면ID 는 `STProductStockView` · `OBShipConfirmView` · `OBShipStatusView`. 메뉴 번호 · 권한 행 그대로. 2026-10-30 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261030_002` 참고.
+- 2026-10-30: 생산관리(`PD /pd`)에 영업관리처럼 중분류 3개(`PD_PLAN` 생산계획 · `PD_RESULT` 생산실적 · `PD_LABEL` 라벨관리)를 두어 화면 4개를 옮기는 스크립트를 만들었다. 화면ID 는 `PPProdConfirmView` · `PRProdActualView` · `PRProdStatusView` · `LBLabelPrintView`. 메뉴 번호 · 권한 행 그대로. 2026-10-30 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261030_001` 참고.
+- 2026-10-29: 전자결재 문서번호 `tb_electronic_approval_main.document_no`(`EA-YYYYMMDD-NNNN`, 테넌트 안 유일)를 추가하고 기존 문서 번호를 채웠다. 새 번호는 번호표 키 `ELECTRONIC_APPROVAL_NO`(테넌트 · 날짜). S_ERP `20261028_010` 과 같은 SQL. `20261029_001` 참고.
 - 2026-10-22: 그룹웨어 이관 0단계 — GROUPWARE 모듈 아래 S_ERP 와 같은 메뉴 7개(종합현황 / 문서관리 > 문서작성 · 문서현황 / 커뮤니티 > 공지사항 · 자료실), 기능 권한 30 · ADMIN 역할 권한 30, 게시판 종류 `tb_board_type` NOTICE · ARCHIVE 를 넣었다. `20261022_003` 참고.
 - 2026-10-22: 그룹웨어 이관 1단계 — S_ERP 공통 댓글 매퍼에 맞춰 `tb_common_comment` 에 `comment_type` · `event_type` · 고유키 · 검사 제약을 더하고 `tb_common_comment_like` 를 만들었다(S_ERP DB 정의와 같음). `20261022_004` 참고.
 - 2026-10-22: 그룹웨어 메뉴관리를 S_ERP 와 같게 — 게시판(`GW_BOARD`, 사용안함) 메뉴 · 게시판 종류 `BOARD` 추가, 그룹웨어 기능 권한을 게시판 권한만으로, 일반 사용자 · 플랫폼 관리자 · 커뮤니티 관리자 역할 권한을 S_ERP 값으로 넣었다(ADMIN 은 그대로). `20261022_005` 참고.

@@ -1,7 +1,13 @@
 // 송연 handleBomFile: 레시피 엑셀에서 원재료 배합비를 읽는다(제품등록의 끌어다 놓기).
 // 배합비율은 화면 칸처럼 소수 셋째 자리까지(송연은 둘째 자리였다. 2026-10-06 배합비율 셋째 자리 요청에 맞춤).
+// 2026-10-30 "품목" 머리줄에 '원재료코드'(또는 '코드') 칸이 있으면 코드도 읽는다(비워도 된다. 화면이 코드를 먼저, 없으면 이름으로 맞춘다)
 
-export type RecipeLine = { materialName: string; ratioPercent: number };
+import type { BomEditRow, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
+import { materialNamePatch } from '../../../../co/master/item-master/utils/productBom';
+
+export type RecipeLine = { materialName: string; ratioPercent: number; materialCode?: string };
+
+const CODE_HEADERS = ['원재료코드', '코드'];
 
 const text = (value: unknown) => (value ?? '').toString().trim();
 const number = (value: unknown) => parseFloat(String(value));
@@ -24,7 +30,9 @@ export function parseRecipeRows(rows: unknown[][]): RecipeLine[] {
 
   const lines: RecipeLine[] = [];
   if (headerRow >= 0) {
-    // 원재료 줄: 머리줄 다음 ~ "합계" 가 나오기 전까지, 이름이 있는 줄
+    const codeCol = (rows[headerRow] || []).findIndex((cell) => CODE_HEADERS.includes(text(cell)));
+    const codeOf = (i: number) => (codeCol >= 0 ? text(rows[i]?.[codeCol]) : '');
+    // 원재료 줄: 머리줄 다음 ~ "합계" 가 나오기 전까지, 이름이나 코드가 있는 줄
     let endRow = rows.length;
     for (let i = headerRow + 1; i < rows.length; i += 1) {
       if (/^합계/.test(text(rows[i]?.[nameCol]))) {
@@ -34,13 +42,14 @@ export function parseRecipeRows(rows: unknown[][]): RecipeLine[] {
     }
     const ingredientRows: number[] = [];
     for (let i = headerRow + 1; i < endRow; i += 1) {
-      if (text(rows[i]?.[nameCol])) ingredientRows.push(i);
+      if (text(rows[i]?.[nameCol]) || codeOf(i)) ingredientRows.push(i);
     }
     // 2) 배합비율 칸 찾기: 원재료 줄들의 합이 1(=100%)에 가까운 칸.
     //    날짜별 개정으로 여러 칸이 맞을 수 있어 가장 오른쪽(최신으로 본다) 칸을 쓴다.
     const maxCol = rows.reduce((max, row) => Math.max(max, row ? row.length : 0), 0);
     let ratioCol = -1;
     for (let c = nameCol + 1; c < maxCol; c += 1) {
+      if (c === codeCol) continue;
       let sum = 0;
       let count = 0;
       let valid = true;
@@ -62,9 +71,10 @@ export function parseRecipeRows(rows: unknown[][]): RecipeLine[] {
     if (ratioCol >= 0) {
       ingredientRows.forEach((i) => {
         const name = text(rows[i][nameCol]);
+        const code = codeOf(i);
         const ratio = number(rows[i][ratioCol]);
-        if (!name || Number.isNaN(ratio)) return;
-        lines.push({ materialName: name, ratioPercent: round3(ratio * 100) });
+        if ((!name && !code) || Number.isNaN(ratio)) return;
+        lines.push({ materialName: name, ratioPercent: round3(ratio * 100), ...(code ? { materialCode: code } : {}) });
       });
     }
   }
@@ -81,6 +91,24 @@ export function parseRecipeRows(rows: unknown[][]): RecipeLine[] {
     });
   }
   return lines;
+}
+
+// 읽은 줄 → 배합비 표 줄. 등록된 원재료코드면 그 원재료(이름 · 단가 · 코드)로, 아니면 원재료명으로 맞춘다.
+// 맞는 코드가 없고 이름도 비었으면 적힌 코드를 이름 칸에 둔다(빨간 글자 → [저장] 때 원재료명 확인 창)
+export function bomRowsFromRecipe(lines: RecipeLine[], materials: MaterialOption[], newId: () => string): BomEditRow[] {
+  return lines.map((line) => {
+    const byCode = line.materialCode ? materials.find((material) => material.code === line.materialCode) : undefined;
+    const name = byCode ? byCode.name : line.materialName || line.materialCode || '';
+    return {
+      id: newId(),
+      materialName: name,
+      ratioPercent: line.ratioPercent,
+      unitPrice: null,
+      autoPrice: false,
+      materialCode: null,
+      ...materialNamePatch({ autoPrice: false }, name, byCode ? [byCode] : materials),
+    };
+  });
 }
 
 export const RECIPE_NOT_FOUND_MESSAGE =

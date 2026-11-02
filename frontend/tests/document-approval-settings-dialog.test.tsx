@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  waitForElementToBeRemoved,
   within,
 } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
@@ -74,6 +75,7 @@ function renderSettings(
     approvalStages: DocumentApprovalStage[];
     referenceUserIds: string[];
     documentCode: '001' | '008' | '004' | '031';
+    mode: 'approval' | 'reference';
     onClose: () => void;
     onApply: (
       stages: DocumentApprovalStage[],
@@ -87,7 +89,8 @@ function renderSettings(
   const dialog = (
     <DocumentApprovalSettingsDialog
       open
-      documentCode="001"
+      documentCode={overrides.documentCode ?? '001'}
+      mode={overrides.mode}
       userOptions={users}
       approvalStages={overrides.approvalStages ?? approvalStages}
       referenceUserIds={overrides.referenceUserIds ?? ['reference-1']}
@@ -175,6 +178,190 @@ function getTemplateManagerCloseButton() {
 }
 
 describe('DocumentApprovalSettingsDialog', () => {
+  it('renders reference-only mode without approval controls', () => {
+    renderSettings({
+      mode: 'reference',
+      documentCode: '008',
+      approvalStages: [],
+    });
+
+    expect(
+      screen.getByRole('dialog', { name: '참조자 설정' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('결재 단계')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('결재자 및 합의자 변경'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '결재 추가' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '합의 추가' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '자주 쓰는 참조자 저장' }),
+    ).toBeInTheDocument();
+  });
+
+  it('saves only ordered references from reference-only mode', async () => {
+    templateApi.list.mockResolvedValue([]);
+    templateApi.create.mockResolvedValue({
+      templateId: 9,
+      name: '기본 참조자',
+      eabusNo: '008',
+    });
+    renderSettings({
+      mode: 'reference',
+      documentCode: '008',
+      approvalStages: [],
+      referenceUserIds: ['reference-2', 'reference-1'],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '자주 쓰는 참조자 저장' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '참조자 이름' }), {
+      target: { value: '기본 참조자' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() =>
+      expect(templateApi.create).toHaveBeenCalledWith({
+        eabusNo: '008',
+        name: '기본 참조자',
+        approvalLines: [
+          {
+            stageOrder: 2,
+            participantOrder: 1,
+            participantType: 'REFERENCE',
+            participantUserId: 'reference-2',
+          },
+          {
+            stageOrder: 2,
+            participantOrder: 2,
+            participantType: 'REFERENCE',
+            participantUserId: 'reference-1',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('applies only the ordered reference draft from a reference-only template', async () => {
+    templateApi.list.mockResolvedValue([
+      { templateId: 9, name: '팀 참조', eabusNo: '008' },
+    ]);
+    templateApi.get.mockResolvedValue({
+      templateId: 9,
+      name: '팀 참조',
+      eabusNo: '008',
+      approvalLines: [
+        {
+          stageOrder: 3,
+          participantOrder: 2,
+          participantType: 'REFERENCE',
+          participantUserId: 'reference-1',
+        },
+        {
+          stageOrder: 2,
+          participantOrder: 1,
+          participantType: 'REFERENCE',
+          participantUserId: 'reference-2',
+        },
+      ],
+    });
+    const { onApply } = renderSettings({
+      mode: 'reference',
+      documentCode: '008',
+      approvalStages: [],
+      referenceUserIds: ['reference-1'],
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: '자주 쓰는 참조자' }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '설정' }));
+    const manager = await screen.findByRole('dialog', {
+      name: '자주 쓰는 참조자 불러오기',
+    });
+    const managerGrid = within(manager).getByRole('grid', {
+      name: '자주 쓰는 참조자 목록',
+    });
+    fireEvent.click(
+      within(managerGrid).getByRole('button', {
+        name: '참조자 적용 팀 참조',
+      }),
+    );
+    await waitForElementToBeRemoved(manager);
+    await waitFor(() => expect(templateApi.get).toHaveBeenCalledWith(9));
+    expect(onApply).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '참조자 설정' })).getByRole(
+        'button',
+        { name: '적용' },
+      ),
+    );
+    expect(onApply).toHaveBeenCalledWith([], ['reference-2', 'reference-1']);
+  });
+
+  it('rejects mixed approval templates without closing or applying the reference draft', async () => {
+    templateApi.list.mockResolvedValue([
+      { templateId: 9, name: '기존 결재선', eabusNo: '008' },
+    ]);
+    templateApi.get.mockResolvedValue({
+      templateId: 9,
+      name: '기존 결재선',
+      eabusNo: '008',
+      approvalLines: [
+        {
+          stageOrder: 2,
+          participantOrder: 1,
+          participantType: 'APPROVAL',
+          participantUserId: 'approver',
+        },
+        {
+          stageOrder: 3,
+          participantOrder: 1,
+          participantType: 'REFERENCE',
+          participantUserId: 'reference-2',
+        },
+      ],
+    });
+    const { onApply } = renderSettings({
+      mode: 'reference',
+      documentCode: '008',
+      approvalStages: [],
+      referenceUserIds: ['reference-1'],
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: '자주 쓰는 참조자' }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '설정' }));
+    const manager = await screen.findByRole('dialog', {
+      name: '자주 쓰는 참조자 불러오기',
+    });
+    const managerGrid = within(manager).getByRole('grid', {
+      name: '자주 쓰는 참조자 목록',
+    });
+    fireEvent.click(
+      within(managerGrid).getByRole('button', {
+        name: '참조자 적용 기존 결재선',
+      }),
+    );
+
+    expect(
+      await within(manager).findByText(
+        '결재/합의 단계가 포함된 템플릿은 참조자로 적용할 수 없습니다.',
+      ),
+    ).toBeInTheDocument();
+    expect(manager).toBeInTheDocument();
+    expect(onApply).not.toHaveBeenCalled();
+    expect(templateApi.get).toHaveBeenCalledWith(9);
+  });
+
   it('stretches the favorite selector and settings button to the same row height', () => {
     renderSettings();
 

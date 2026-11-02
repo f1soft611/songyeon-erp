@@ -36,8 +36,8 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
   },
 });
 
-// 상세 조회 조건(검색칸 오른쪽 ⌄): 분류 · 납품업체 · 사용여부(열의 search 설정). 처음 값 · [초기화] 값: 사용여부 '사용'
-const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = { useYn: 'Y' };
+// 상세 조회 조건 처음 값 · [초기화] 값: 없음(전체, 2026-10-29 기본 조건 뺌)
+const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = {};
 
 const useFilterOf = (values: Record<string, PageSearchFieldValue>): MaterialUseFilter =>
   values.useYn === 'Y' || values.useYn === 'N' ? values.useYn : 'ALL';
@@ -63,6 +63,8 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
   const gridRef = useRef<F1GridRef<MaterialMasterRow>>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<MaterialUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [subCategory, setSubCategory] = useState('');
   // 상세 조회 납품업체(이름 · 거래처코드 일부)
@@ -137,8 +139,20 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading || management.saving, onClick: requestReload },
-        { label: '엑셀 다운로드', icon: FileDownloadIcon, visible: permissions.excel, disabled: management.loading, onClick: () => void exportExcel() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading || management.saving,
+          onClick: requestReload
+        },
+        {
+          label: '엑셀 다운로드',
+          icon: FileDownloadIcon,
+          visible: permissions.excel,
+          disabled: management.loading,
+          onClick: () => void exportExcel()
+        },
       ],
     },
     {
@@ -186,10 +200,12 @@ export function SubMaterialMasterManagementPage({ selectedModule, currentMenuNam
         onDefaultSearch={requestReload}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         defaultValues={DEFAULT_DETAIL_VALUES}
         onDetailValuesChange={setDetailValues}
         // 상세 [조회]: 받은 목록을 화면에서 거른다(서버에서 다시 받지 않는다)
         onDetailSearch={(values) => {
+          setAppliedDetailValues(values);
           setUseFilter(useFilterOf(values));
           setSubCategory(textOf(values.subCategory));
           setSupplierKeyword(textOf(values.supplierCodes).trim());

@@ -38,7 +38,7 @@ export function createLogisticsScheduleColumns(): F1GridColumn<LogisticsSchedule
       width: 120,
       align: 'right',
       type: 'decimal',
-      decimalPlaces: 2,
+      decimalPlaces: 4,
       editable: false
     },
     {

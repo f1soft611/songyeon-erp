@@ -191,6 +191,7 @@ export function createMaterialMasterColumns(
       field: 'unitWeight',
       headerName: '단위중량',
       type: 'decimal',
+      decimalPlaces: 4,
       width: 120,
       align: 'left',
       editable: canEdit,
@@ -210,6 +211,7 @@ export function createMaterialMasterColumns(
       field: 'boxQty',
       headerName: '박스 입수량',
       type: 'number',
+      decimalPlaces: 0,
       hidden: true,
       editable: canEdit,
       // 표에서 숨긴 칸은 form.hidden: false 를 적어야 창에 나온다(F1-Grid 규칙)
@@ -280,6 +282,8 @@ export function createMaterialMasterColumns(
     {
       field: 'stockQty',
       headerName: '재고',
+      type: 'decimal',
+      decimalPlaces: 4,
       width: 110,
       align: 'right',
       editable: false,
@@ -298,7 +302,8 @@ export function createMaterialMasterColumns(
     {
       field: 'safetyStock',
       headerName: '안전재고',
-      type: 'decimal',
+      type: 'number',
+      decimalPlaces: 0,
       width: 90,
       align: 'right',
       editable: canEdit,
@@ -309,7 +314,8 @@ export function createMaterialMasterColumns(
     {
       field: 'baseOrderQty',
       headerName: '기초발주량',
-      type: 'decimal',
+      type: 'number',
+      decimalPlaces: 0,
       hidden: true,
       editable: canEdit,
       form: { hidden: false, group: '재고', order: 2 },

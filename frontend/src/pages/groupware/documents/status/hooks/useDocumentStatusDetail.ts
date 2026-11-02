@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { DocumentApprovalDetail } from '../../write/types/documentWrite.types';
+import type { DocumentStatusRow } from '../types/documentStatus.types';
 
 export function useDocumentStatusDetail() {
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
@@ -7,9 +8,8 @@ export function useDocumentStatusDetail() {
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [detailRefreshToken, setDetailRefreshToken] = useState(0);
 
-  const handleSelectionChange = useCallback((rowIds: Array<string | number>) => {
-    const rowId = rowIds[rowIds.length - 1];
-    const parsedId = rowId === undefined ? NaN : Number(rowId);
+  const handleOpenDocument = useCallback((row: DocumentStatusRow) => {
+    const parsedId = Number(row.electronicApprovalId);
     setSelectedDocumentId(
       Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : null,
     );
@@ -35,7 +35,7 @@ export function useDocumentStatusDetail() {
     editingDocument,
     isComposerOpen,
     detailRefreshToken,
-    handleSelectionChange,
+    handleOpenDocument,
     closeDetail,
     refreshDetail,
     handleEditDocument,

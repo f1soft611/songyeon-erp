@@ -84,6 +84,7 @@ export type F1GridColumnSearchOptions = {
   group?: string;
   order?: number;
   span?: 1 | 2 | 3 | 4 | 5;
+  required?: boolean;
   defaultValue?: F1GridDateRangeDefault;
 };
 

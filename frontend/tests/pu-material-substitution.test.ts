@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   UNDO_MESSAGE, applyCount, candidatesFor, clientOrStock, detailSubText, formatQty, materialLabel, summaryText,
-  type SubstitutionSchedule,
-} from '../src/pages/pu/substitution/utils/materialSubstitution';
+} from '../src/pages/pu/inbound/substitution/utils/materialSubstitution';
+import type { SubstitutionSchedule } from '../src/pages/pu/inbound/substitution/types/materialSubstitution.types';
 
 const row = (id: number, extra: Partial<SubstitutionSchedule> = {}): SubstitutionSchedule => ({
   id, productName: `품목${id}`, clientName: '대한상사', orderQty: '1,000kg', lotNo: `20261013-0${id}`, substitutionCount: 0, ...extra,

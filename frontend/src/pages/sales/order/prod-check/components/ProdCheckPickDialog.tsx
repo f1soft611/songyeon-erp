@@ -13,54 +13,38 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 
-// 생산가능확인 — 검색 창(송연 Picker): 생산일자와 만들 제품(배합비가 있는 제품만)을 골라 '만들 것' 에 담는다.
+// 생산가능확인 — 제품 추가 창(송연 Picker): 만들 제품(배합비가 있는 제품만)을 골라 '만들 것' 에 담는다.
+// 2026-10-29 생산일자는 화면 검색줄로 옮겼다.
 // 이미 담은 제품을 다시 담지 않아도 되게 빈 선택으로 연다. 수량은 '만들 것' 에서 적는다.
 export function ProdCheckPickDialog({
-  date,
   products,
   onPick,
   onClose,
 }: {
-  date: string;
   products: string[];
-  onPick: (date: string, picked: string[]) => void;
+  onPick: (picked: string[]) => void;
   onClose: () => void;
 }) {
-  const [day, setDay] = useState(date);
   const [picked, setPicked] = useState<string[]>([]);
   const [message, setMessage] = useState('');
 
   const pick = () => {
-    if (!day) {
-      setMessage('생산일자를 골라주세요');
-      return;
-    }
     if (picked.length === 0) {
       setMessage('만들 제품을 담아주세요');
       return;
     }
-    onPick(day, picked);
+    onPick(picked);
   };
 
   return (
     <Dialog open onClose={onClose} maxWidth="sm" fullWidth aria-labelledby="prod-check-pick-title">
       <DialogTitle id="prod-check-pick-title" sx={{ pr: 6 }}>
-        생산가능확인 — 검색
+        생산가능확인 — 제품 추가
         <IconButton aria-label="닫기" onClick={onClose} sx={{ position: 'absolute', right: 12, top: 12 }}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
       <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-        <TextField
-          type="date"
-          size="small"
-          margin="none"
-          label="생산일자"
-          value={day}
-          onChange={(event) => setDay(event.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ maxWidth: 220 }}
-        />
         <Autocomplete
           multiple
           disableCloseOnSelect

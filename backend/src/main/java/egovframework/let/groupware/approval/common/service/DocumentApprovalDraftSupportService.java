@@ -44,7 +44,7 @@ public interface DocumentApprovalDraftSupportService {
 
     void insertDraftSavedMessage(LoginVO user, Long approvalId) throws Exception;
 
-    DocumentApprovalDraftVO draftResponse(Long approvalId);
+    DocumentApprovalDraftVO draftResponse(Long approvalId, String documentNo);
 
     DocumentApprovalDraftVO persistedDraftResponse(LoginVO user, Long approvalId) throws Exception;
 

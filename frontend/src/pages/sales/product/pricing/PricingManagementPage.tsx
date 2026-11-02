@@ -46,14 +46,11 @@ type PricingManagementPageProps = {
   selectedMenuPermissions?: MenuPermission;
 };
 
-// 영업관리 > 제품관리 > 단가관리 (화면ID PMPricingView, 송연 SA0002)
-// 제품마다 원재료비 + 인건비 · 포장비 · 물류비 · 마진 등 원가 항목으로 제품단가를 계산하고, 실제 판매단가(현재단가)와의 차액을 본다.
-// 원가 항목은 [상세] 칸 연필 → 단가상세 창에서 고친다.
-// 2026-10-28 S_ERP 구조로 나눴다: 화면(이 파일) · 조회/저장(hooks/usePricingManagement) · 그리드(components/PricingGrid) · 타입(types).
-// 거래처 · 차액금은 검색줄 오른쪽에서 상세 조회(⌄)로 옮겼다
 export function PricingManagementPage({ selectedModule, currentMenuName, content, breadcrumbItems, selectedMenuPermissions }: PricingManagementPageProps) {
   const [search, setSearch] = useState('');
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
   const [client, setClient] = useState('');
   const [diffOption, setDiffOption] = useState<DiffOption>('');
   const management = usePricingManagement(search);
@@ -79,8 +76,19 @@ export function PricingManagementPage({ selectedModule, currentMenuName, content
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading, onClick: () => void management.reload() },
-        { label: '엑셀 다운로드', icon: FileDownloadIcon, visible: permissions.excel, onClick: () => void exportExcel() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading,
+          onClick: () => void management.reload()
+        },
+        {
+          label: '엑셀 다운로드',
+          icon: FileDownloadIcon,
+          visible: permissions.excel,
+          onClick: () => void exportExcel()
+        },
       ],
     },
   ];
@@ -108,8 +116,10 @@ export function PricingManagementPage({ selectedModule, currentMenuName, content
         onDefaultSearch={() => void management.reload()}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         onDetailValuesChange={setDetailValues}
         onDetailSearch={(values) => {
+          setAppliedDetailValues(values);
           setClient(textOf(values.clientName).trim());
           setDiffOption((DIFF_OPTIONS.find((option) => option.value === values.diffOption)?.value ?? '') as DiffOption);
         }}

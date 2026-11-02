@@ -1,38 +1,24 @@
 import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
 import { formatQty } from '../../../../../shared/utils/numberFormat';
+import type {
+  ProdCheckLine,
+  ProdCheckRow,
+  ProdCheckResult,
+  ProdCheckGridRow,
+  Verdict,
+} from '../types/prodCheck.types';
 
 // 영업관리 > 생산가능확인 (송연 SA0006, 기존 34-prod-check.js). 조회만 한다.
 
-// 만들 것 한 줄(수량은 적는 칸의 값 그대로)
-export type ProdCheckLine = { product: string; qty: number | string | null };
-
-// 원재료 한 줄. per 는 합계 표에서만 제품마다의 필요량(lines 순서)
-export type ProdCheckRow = {
-  code: string;
-  name: string | null;
-  spec: string | null;
-  known: boolean;
-  needQty: number;
-  stockQty: number;
-  afterQty: number;
-  shortage: number;
-  per?: number[] | null;
-};
-
-export type ProdCheckByProduct = { product: string; qty: number; rows: ProdCheckRow[]; shortageCount: number; ok: boolean };
-
-export type ProdCheckResult = {
-  date: string;
-  lines: { product: string; qtyKg: number }[];
-  rows: ProdCheckRow[];
-  byProduct: ProdCheckByProduct[];
-  unknownProducts: string[];
-  shortageCount: number;
-  ok: boolean;
-};
-
-// 표에 보이는 한 줄(제품마다 필요량은 per0, per1 … 칸으로 펼친다 — 머리글로 정렬할 수 있게)
-export type ProdCheckGridRow = ProdCheckRow & { id: string; [perKey: `per${number}`]: number };
+// 타입은 types/prodCheck.types.ts(2026-10-29 표준 구조로 옮김). 예전 경로로 가져다 쓰는 곳을 위해 다시 내보낸다
+export type {
+  ProdCheckLine,
+  ProdCheckRow,
+  ProdCheckByProduct,
+  ProdCheckResult,
+  ProdCheckGridRow,
+  Verdict,
+} from '../types/prodCheck.types';
 
 export const qtyText = (value: number | null | undefined) => formatQty(value == null ? 0 : value);
 const sum = (values: number[]) => values.reduce((total, n) => total + n, 0);
@@ -52,8 +38,6 @@ export const emptyQtyLines = (lines: ProdCheckLine[]) => lines.filter((line) => 
 // 이미 줄에 있는 제품은 다시 넣지 않는다(같은 제품이 두 줄이면 어느 수량이 맞는지 모른다)
 export const addLines = (current: ProdCheckLine[], picked: string[]): ProdCheckLine[] =>
   [...current, ...picked.filter((product) => !current.some((line) => line.product === product)).map((product) => ({ product, qty: null }))];
-
-export type Verdict = { tone: 'warning' | 'success' | 'error'; text: string };
 
 export function verdictOf(data: ProdCheckResult | null): Verdict | null {
   if (!data) return null;

@@ -9,6 +9,7 @@ type DocumentStatusSearchAreaProps = {
   onKeywordChange: (value: string) => void;
   detailFields: PageSearchField[];
   detailValues: DocumentStatusSearchValues;
+  appliedDetailValues: DocumentStatusSearchValues;
   defaultValues: DocumentStatusSearchValues;
   onDetailValuesChange: (values: DocumentStatusSearchValues) => void;
   onSearch: (values?: DocumentStatusSearchValues) => void;
@@ -22,6 +23,7 @@ export function DocumentStatusSearchArea({
   onKeywordChange,
   detailFields,
   detailValues,
+  appliedDetailValues,
   defaultValues,
   onDetailValuesChange,
   onSearch,
@@ -56,14 +58,23 @@ export function DocumentStatusSearchArea({
               ) : null,
             },
           }}
-          sx={{ width: '100%', height: 40 }}
+          sx={(theme) => ({
+            width: '100%',
+            height: 40,
+            '& .MuiOutlinedInput-root': {
+              height: '100%',
+              borderRadius: '0 8px 8px 0',
+              backgroundColor: theme.palette.background.paper,
+            },
+          })}
         />
       }
       onDefaultSearch={() => {
-        if (initialized) onSearch();
+        if (initialized) onSearch(appliedDetailValues);
       }}
       detailFields={detailFields}
       detailValues={detailValues}
+      appliedDetailValues={appliedDetailValues}
       defaultValues={defaultValues}
       onDetailValuesChange={onDetailValuesChange}
       onDetailSearch={onSearch}

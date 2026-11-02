@@ -56,7 +56,7 @@ describe('영업관리 > 제품등록', () => {
   });
 });
 
-import { parseRecipeRows } from '../src/pages/sales/product/product-register/utils/recipeExcel';
+import { bomRowsFromRecipe, parseRecipeRows } from '../src/pages/sales/product/product-register/utils/recipeExcel';
 
 describe('제품등록 레시피 엑셀 읽기(송연 handleBomFile)', () => {
   it('"품목" 표에서 합계가 100% 근처인 가장 오른쪽 칸을 배합비율로 읽고, "합계" 줄 앞에서 멈춘다', () => {
@@ -97,6 +97,48 @@ describe('제품등록 레시피 엑셀 읽기(송연 handleBomFile)', () => {
     expect(parseRecipeRows([['품목', '비율'], ['A', '미정']])).toEqual([]);
     expect(parseRecipeRows([])).toEqual([]);
   });
+
+  it('"품목" 머리줄에 원재료코드 칸이 있으면 코드도 읽고(비면 이름만), 코드만 있는 줄도 읽는다', () => {
+    const rows: unknown[][] = [
+      ['No', '원재료코드', '품목', '1차'],
+      [1, 'RM0001', '양파분말', 0.5],
+      [2, '', '설탕', 0.3],
+      [3, 'RM0003', '', 0.2],
+      ['', '', '합계', 1],
+    ];
+    expect(parseRecipeRows(rows)).toEqual([
+      { materialName: '양파분말', ratioPercent: 50, materialCode: 'RM0001' },
+      { materialName: '설탕', ratioPercent: 30 },
+      { materialName: '', ratioPercent: 20, materialCode: 'RM0003' },
+    ]);
+  });
+});
+
+describe('제품등록 레시피 줄 → 배합비 표 줄(2026-10-30 코드 먼저)', () => {
+  const materials = [
+    { code: 'RM0001', name: '양파분말', unitPrice: 1700, subCategory: null, subCategoryNm: '' },
+    { code: 'RM0002', name: '설탕', unitPrice: 900, subCategory: null, subCategoryNm: '' },
+  ];
+  let seq = 0;
+  const newId = () => `r${seq++}`;
+
+  it('등록된 코드면 그 원재료 이름 · 단가로, 코드가 없거나 틀리면 이름으로 맞춘다', () => {
+    const rows = bomRowsFromRecipe([
+      { materialName: '양파 분말', ratioPercent: 50, materialCode: 'RM0001' },
+      { materialName: '설탕', ratioPercent: 30, materialCode: 'XX9999' },
+      { materialName: '설탕', ratioPercent: 10 },
+    ], materials, newId);
+    expect(rows.map(({ materialName, materialCode, unitPrice, autoPrice }) => ({ materialName, materialCode, unitPrice, autoPrice }))).toEqual([
+      { materialName: '양파분말', materialCode: 'RM0001', unitPrice: 1700, autoPrice: true },
+      { materialName: '설탕', materialCode: 'RM0002', unitPrice: 900, autoPrice: true },
+      { materialName: '설탕', materialCode: 'RM0002', unitPrice: 900, autoPrice: true },
+    ]);
+  });
+
+  it('맞는 코드도 이름도 없으면 적힌 코드를 이름 칸에 두고 단가 · 코드는 비운다', () => {
+    const [row] = bomRowsFromRecipe([{ materialName: '', ratioPercent: 20, materialCode: 'XX9999' }], materials, newId);
+    expect(row).toMatchObject({ materialName: 'XX9999', materialCode: null, unitPrice: null, autoPrice: false, ratioPercent: 20 });
+  });
 });
 
 import ExcelJS from 'exceljs';
@@ -116,18 +158,19 @@ describe('제품등록 레시피 양식 내려받기', () => {
     ]);
   });
 
-  it('예시를 지우고 원재료를 새로 적으면 그 줄만 읽힌다(빈 줄은 건너뜀)', async () => {
+  it('예시를 지우고 원재료를 새로 적으면 그 줄만 읽힌다(빈 줄은 건너뜀, 원재료코드 칸을 적으면 코드도)', async () => {
     const workbook = buildRecipeTemplate(new ExcelJS.Workbook());
     const sheet = workbook.getWorksheet('레시피')!;
-    [5, 6, 7].forEach((r) => { sheet.getCell(`B${r}`).value = null; sheet.getCell(`C${r}`).value = null; });
-    sheet.getCell('B9').value = '마늘밀링';
-    sheet.getCell('C9').value = 0.6;
-    sheet.getCell('B12').value = '요리당';
-    sheet.getCell('C12').value = 0.4;
+    [5, 6, 7].forEach((r) => { sheet.getCell(`C${r}`).value = null; sheet.getCell(`D${r}`).value = null; });
+    sheet.getCell('C9').value = '마늘밀링';
+    sheet.getCell('D9').value = 0.6;
+    sheet.getCell('B12').value = 'RM0002';
+    sheet.getCell('C12').value = '요리당';
+    sheet.getCell('D12').value = 0.4;
     const file = new File([(await workbook.xlsx.writeBuffer()) as ArrayBuffer], 'x.xlsx');
     expect(parseRecipeRows(await readExcelValues(file))).toEqual([
       { materialName: '마늘밀링', ratioPercent: 60 },
-      { materialName: '요리당', ratioPercent: 40 },
+      { materialName: '요리당', ratioPercent: 40, materialCode: 'RM0002' },
     ]);
   });
 });

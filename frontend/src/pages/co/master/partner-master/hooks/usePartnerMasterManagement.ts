@@ -164,8 +164,8 @@ export function usePartnerMasterManagement() {
   // 엑셀 올리기에서 건너뛴 줄 안내(빈 값이면 창을 닫는다)
   const [skippedAlert, setSkippedAlert] = useState('');
   const requestIdRef = useRef(0);
-  // 조회 조건(처음은 사용여부 '사용', 2026-10-23 부터 기본은 사용중). 받은 목록을 화면에서 거른다
-  const [appliedFilters, setAppliedFilters] = useState<ClientMasterFilters>({ useYn: 'Y' });
+  // 조회 조건(처음은 전체, 2026-10-29 기본 조건 뺌). 받은 목록을 화면에서 거른다
+  const [appliedFilters, setAppliedFilters] = useState<ClientMasterFilters>({});
   const visibleRows = useMemo(() => filterClientRows(rows, appliedFilters), [rows, appliedFilters]);
   // 분류 고르기: 공통코드 CUSTOMER_CATEGORY 의 사용 중 항목(2026-10-23)
   const clientTypes = useClientTypes();

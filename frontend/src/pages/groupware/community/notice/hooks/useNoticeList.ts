@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import {
   fetchNoticePosts,
   fetchPinnedNoticePosts,
@@ -50,6 +51,7 @@ export function useNoticeList({
   const [pageError, setPageError] = useState('');
   const requestGeneration = useRef(0);
   const inFlightPage = useRef<number | null>(null);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   const mapPost = useCallback(
     (post: NoticeBoardPostApi) =>
@@ -100,6 +102,7 @@ export function useNoticeList({
       quiet = false,
     }: { silent?: boolean; quiet?: boolean } = {}) => {
       const generation = requestGeneration.current + 1;
+      start();
       requestGeneration.current = generation;
       inFlightPage.current = null;
       setNoticePage(1);
@@ -111,9 +114,6 @@ export function useNoticeList({
         setIsRefreshing(true);
       } else if (!silent) {
         setIsInitialLoading(true);
-        setNoticeItems([]);
-        setPinnedNoticeItems([]);
-        setPinnedNoticeCount(0);
       }
       setErrorMessage(null);
 
@@ -129,6 +129,7 @@ export function useNoticeList({
           loadAllPinnedPosts(),
         ]);
         if (generation !== requestGeneration.current) return;
+        succeed();
         const posts = normalizeNoticeListResponse(postsResponse);
         setNoticeItems(posts.resultList.map(mapPost));
         setPinnedNoticeItems(pinnedPosts.items);
@@ -136,14 +137,10 @@ export function useNoticeList({
         setNoticePage(1);
         setNoticeHasMore(posts.resultList.length < posts.resultCnt);
         setServerItemRevision((revision) => revision + 1);
-      } catch {
+      } catch (cause) {
         if (generation === requestGeneration.current) {
+          fail(cause);
           setErrorMessage(noticeFailureMessage);
-          if (!silent) {
-            setNoticeItems([]);
-            setPinnedNoticeItems([]);
-            setPinnedNoticeCount(0);
-          }
         }
       } finally {
         if (generation === requestGeneration.current) {
@@ -155,7 +152,7 @@ export function useNoticeList({
         }
       }
     },
-    [loadAllPinnedPosts, mapPost],
+    [loadAllPinnedPosts, mapPost, start, succeed, fail],
   );
 
   const requestNoticePage = useCallback(
@@ -253,6 +250,7 @@ export function useNoticeList({
   );
 
   return {
+    initialLoad,
     noticeItems,
     setNoticeItems,
     pinnedNoticeItems,

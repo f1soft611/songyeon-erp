@@ -1,12 +1,11 @@
 import AttachFileOutlinedIcon from '@mui/icons-material/AttachFileOutlined';
 import { useTheme } from '@mui/material/styles';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Alert,
   Box,
   Button,
   Chip,
-  CircularProgress,
   IconButton,
   Tab,
   Tabs,
@@ -19,6 +18,8 @@ import {
   richTextEditorIconButtonSx,
 } from '../../../../../shared/components/rich-text-editor/RichTextEditor';
 import { CommonDialog } from '../../../../../shared/components/CommonDialog';
+import { AppSaveButton } from '../../../../../shared/components/AppSaveButton';
+import { AppLoadingSpinner } from '../../../../../shared/components/AppLoadingSpinner';
 import { richTextContentStyles } from '../../../../../shared/components/rich-text-editor/contentStyles';
 import { UnsavedChangesConfirmDialog } from '../../../../../shared/components/UnsavedChangesConfirmDialog';
 import { AttachmentList } from '../../../../../shared/components/feed/AttachmentList';
@@ -32,6 +33,7 @@ import { DocumentApprovalFields } from './DocumentApprovalFields';
 import { DocumentApprovalSettingsDialog } from './DocumentApprovalSettingsDialog';
 import { DocumentMetadataFields } from './DocumentMetadataFields';
 import { DocumentReferenceField } from './DocumentReferenceField';
+import { DocumentLinkPreviews } from './DocumentLinkPreviews';
 
 const DOCUMENT_CODE_BY_KIND: Record<DocumentKind, ApprovalLineTemplateEabusNo> =
   {
@@ -45,16 +47,25 @@ type DocumentComposerDialogProps = {
   open: boolean;
   onClose: () => void;
   initialDocument?: DocumentApprovalDetail | null;
+  onOpenDocument?: (documentId: number) => void;
+  linkedDetail?: ReactNode;
+  onCloseLinkedDocument?: () => void;
 };
 
 export function DocumentComposerDialog({
   open,
   onClose,
   initialDocument = null,
+  onOpenDocument,
+  linkedDetail,
+  onCloseLinkedDocument,
 }: DocumentComposerDialogProps) {
   const theme = useTheme();
   const [approvalSettingsOpen, setApprovalSettingsOpen] = useState(false);
   const [approvalSettingsSession, setApprovalSettingsSession] = useState(0);
+  const [approvalSettingsMode, setApprovalSettingsMode] = useState<
+    'approval' | 'reference'
+  >('approval');
   const {
     activeDocumentKind,
     requestDocumentKindChange,
@@ -114,11 +125,21 @@ export function DocumentComposerDialog({
     fieldSurfaceBackground,
   } = useDocumentComposer(open, onClose, initialDocument);
   const closeComposer = () => {
+    if (linkedDetail && onCloseLinkedDocument) {
+      onCloseLinkedDocument();
+      return;
+    }
     setApprovalSettingsOpen(false);
     resetComposer();
   };
   const openApprovalSettings = () => {
     setApprovalSettingsSession((current) => current + 1);
+    setApprovalSettingsMode('approval');
+    setApprovalSettingsOpen(true);
+  };
+  const openReferenceSettings = () => {
+    setApprovalSettingsSession((current) => current + 1);
+    setApprovalSettingsMode('reference');
     setApprovalSettingsOpen(true);
   };
   const panelBorder = theme.palette.divider;
@@ -174,12 +195,15 @@ export function DocumentComposerDialog({
         }
         size="lg"
         bodyMode="fill"
+        overlay={linkedDetail}
         footerStart={composerFooterStart}
         actions={
           <>
-            <Button
+            <AppSaveButton
               variant="contained"
               color="success"
+              saving={isSaving}
+              savingLabel="처리 중..."
               onClick={() => void submitDraft()}
               disabled={!canSubmitDraft}
               sx={{
@@ -190,10 +214,12 @@ export function DocumentComposerDialog({
                 boxShadow: 'none',
               }}
             >
-              {isSaving ? '처리 중...' : activeDocumentKind === '업무연락' ? '발송' : '결재신청'}
-            </Button>
-            <Button
+              {activeDocumentKind === '업무연락' ? '발송' : '결재신청'}
+            </AppSaveButton>
+            <AppSaveButton
               variant="contained"
+              saving={isSaving}
+              savingLabel="저장 중..."
               onClick={() => void saveDraft()}
               disabled={!canSaveDraft}
               sx={{
@@ -204,12 +230,10 @@ export function DocumentComposerDialog({
                 boxShadow: 'none',
               }}
             >
-              {isSaving
-                ? '저장 중...'
-                : uploadingCount > 0
-                  ? '이미지 업로드 중...'
-                  : '저장'}
-            </Button>
+              {uploadingCount > 0
+                ? '이미지 업로드 중...'
+                : '저장'}
+            </AppSaveButton>
             <Button
               variant="text"
               color="primary"
@@ -275,7 +299,7 @@ export function DocumentComposerDialog({
                 justifyContent: 'center',
               }}
             >
-              <CircularProgress aria-label="문서 정보 불러오는 중" />
+              <AppLoadingSpinner size={40} aria-label="문서 정보 불러오는 중" />
             </Box>
           )}
           <Box sx={{ display: isComposerLoading ? 'none' : 'contents' }}>
@@ -312,6 +336,8 @@ export function DocumentComposerDialog({
                 userOptions={referenceUserOptions}
                 referenceUserIds={referenceUserIds}
                 onChange={handleReferenceUserChange}
+                onOpenSettings={openReferenceSettings}
+                settingsDisabled={tabChangeDisabled}
               />
             )}
 
@@ -434,6 +460,9 @@ export function DocumentComposerDialog({
                   }}
                 >
                   <RichTextEditor
+                    renderContentPreview={(html) => (
+                      <DocumentLinkPreviews html={html} onOpenDocument={onOpenDocument} />
+                    )}
                     onEditorReady={handleEditorReady}
                     className="document-composer-editor"
                     readOnly={isComposerLoading || isSaving}
@@ -587,6 +616,7 @@ export function DocumentComposerDialog({
       <DocumentApprovalSettingsDialog
         key={approvalSettingsSession}
         open={approvalSettingsOpen}
+        mode={approvalSettingsMode}
         documentCode={DOCUMENT_CODE_BY_KIND[activeDocumentKind]}
         userOptions={userOptions}
         userOptionsError={

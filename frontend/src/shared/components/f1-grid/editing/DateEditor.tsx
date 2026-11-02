@@ -15,6 +15,7 @@ type DateEditorProps = {
   variant?: 'standard' | 'outlined';
   label?: string;
   onBlur?: () => void;
+  required?: boolean;
   error?: boolean;
   helperText?: string;
 };
@@ -82,6 +83,7 @@ export function DateEditor({
   variant = 'standard',
   label,
   onBlur,
+  required,
   error,
   helperText,
 }: DateEditorProps) {
@@ -108,6 +110,7 @@ export function DateEditor({
         margin="none"
         variant={variant}
         label={label}
+        required={required}
         placeholder={variant === 'outlined' ? DATE_FORMAT : undefined}
         error={error}
         helperText={helperText}

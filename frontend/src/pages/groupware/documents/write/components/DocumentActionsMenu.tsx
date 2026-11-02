@@ -7,6 +7,7 @@ type DocumentActionsMenuProps = {
   isDrafter?: boolean;
   documentStatus?: ApprovalDocumentStatus;
   disabled?: boolean;
+  onShare: () => void;
   onEdit: () => void;
   onDelete: () => void;
 };
@@ -15,6 +16,7 @@ export function DocumentActionsMenu({
   isDrafter,
   documentStatus,
   disabled = false,
+  onShare,
   onEdit,
   onDelete,
 }: DocumentActionsMenuProps) {
@@ -22,7 +24,6 @@ export function DocumentActionsMenu({
   const canEdit = isDrafter === true
     && (documentStatus === 'DRAFT' || documentStatus === 'REVISION_REQUESTED');
   const canDelete = isDrafter === true && documentStatus === 'DRAFT';
-  if (!canEdit && !canDelete) return null;
 
   return (
     <>
@@ -35,6 +36,12 @@ export function DocumentActionsMenu({
         <MoreVertIcon fontSize="small" />
       </IconButton>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem onClick={() => {
+          setAnchor(null);
+          onShare();
+        }}>
+          문서 공유하기
+        </MenuItem>
         {canEdit && (
           <MenuItem onClick={() => {
             setAnchor(null);

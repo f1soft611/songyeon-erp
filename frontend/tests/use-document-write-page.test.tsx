@@ -135,6 +135,44 @@ describe('useDocumentWritePage date metadata', () => {
       expect(result.current.activeFilterChips).toEqual([]);
     });
 
+    it('starts with the dashboard scope and requests only matching documents', async () => {
+      vi.mocked(getDocumentApprovalSummary).mockResolvedValue(emptySummary);
+      const { result } = renderHook(() => useDocumentWritePage('DRAFT'));
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      expect(result.current.scope).toBe('DRAFT');
+      expect(result.current.activeFilterChips).toEqual([
+        expect.objectContaining({ key: 'scope', label: '#작성 중 문서' }),
+      ]);
+      expect(listDocumentApprovals).toHaveBeenLastCalledWith(
+        'DRAFT',
+        undefined,
+        undefined,
+        false,
+        firstPage,
+      );
+    });
+
+    it('clears the dashboard scope when selecting a notice', async () => {
+      const onScopeChange = vi.fn();
+      const { result } = renderHook(() => useDocumentWritePage('DRAFT', onScopeChange));
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      act(() => result.current.selectNotice(42));
+      await waitFor(() =>
+        expect(listDocumentApprovals).toHaveBeenLastCalledWith(
+          'ALL',
+          undefined,
+          42,
+          false,
+          firstPage,
+        ),
+      );
+
+      expect(result.current.scope).toBe('ALL');
+      expect(onScopeChange).toHaveBeenCalledWith(null);
+    });
+
     it.each([
       ['MY_PENDING', '#내가 처리할 결재'],
       ['IN_PROGRESS', '#결재 진행 중'],

@@ -140,6 +140,40 @@
         ORDER BY name
     </select>
 
+    <!-- 2026-10-29 거래처 고르기 팝업(코드 · 이름). 거르는 조건은 selectSalesClientNames 와 같다 -->
+    <select id="selectSalesClientOptions" resultType="egovframework.let.co.master.itemmaster.domain.model.ClientOptionVO">
+        SELECT client_code AS "clientCode", name AS "name"
+        FROM clients
+        WHERE client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매출%'
+        )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND name IS NOT NULL
+          AND client_code IS NOT NULL
+        ORDER BY name
+    </select>
+
+    <!-- 2026-10-29 저장 때 거래처코드 확인: 수주를 받을 수 있는 매출 거래처면 이름, 아니면 null -->
+    <select id="selectSalesClientNameByCode" parameterType="string" resultType="string">
+        SELECT name
+        FROM clients
+        WHERE client_type IN (
+            SELECT i.item_code
+            FROM tb_common_code_item i
+            JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'CUSTOMER_CATEGORY'
+            JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+            WHERE i.item_nm LIKE '%매출%'
+        )
+          AND COALESCE(use_yn, 'Y') = 'Y'
+          AND name IS NOT NULL
+          AND client_code = #{clientCode}
+        LIMIT 1
+    </select>
+
     <!-- 저장 검사: 분류 이름을 돌려준다(2026-10-23, 코드 → 공통코드 이름). 서비스가 '매출' 이 들어 있는지 본다. 사용안함 거래처도 찾는다 -->
     <select id="selectClientType" parameterType="string" resultType="string">
         SELECT COALESCE((

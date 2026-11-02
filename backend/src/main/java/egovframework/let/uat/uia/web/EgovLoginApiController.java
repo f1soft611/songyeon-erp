@@ -23,7 +23,7 @@ import egovframework.let.uat.uia.service.impl.LoginEmployeeResolver;
 import egovframework.com.cmm.ResponseCode;
 import egovframework.com.cmm.service.ResultVO;
 import egovframework.com.jwt.EgovJwtTokenUtil;
-import egovframework.let.pu.documents.service.DocumentUnlockStore;
+import egovframework.let.pu.document.documentbox.service.DocumentUnlockStore;
 import egovframework.let.uat.uia.service.EgovLoginService;
 import egovframework.let.uat.uia.service.impl.LoginAttemptLimiter;
 import io.swagger.v3.oas.annotations.Operation;

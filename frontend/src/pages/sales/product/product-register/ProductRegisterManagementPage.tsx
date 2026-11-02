@@ -152,7 +152,7 @@ export function ProductRegisterManagementPage({
               readOnly={saved}
             />
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-              원재료명을 입력하면 등록된 원재료단가와 자동으로 매칭돼 원재료비가 계산돼요. 목록에 없는 이름이면 단가 없이 배합비만 저장돼요.
+              원재료명은 [선택]으로 고르면 등록된 원재료단가가 채워져 원재료비가 계산돼요. 레시피 엑셀에서 불러온 이름이 목록에 없으면 단가 없이 배합비만 저장돼요.
             </Typography>
           </CardContent>
         </Card>

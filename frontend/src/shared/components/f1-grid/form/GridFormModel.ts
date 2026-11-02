@@ -64,7 +64,14 @@ export function buildGridFormSections<T extends object>(
       if (column.type === 'rownumber') return false;
       if (column.form?.hidden === true) return false;
       if (column.hidden && column.form?.hidden !== false) return false;
-      if (row !== undefined && !isCellEditable(column, row)) return false;
+      // 송연 패치(2026-11-02): form.readOnly 를 적은 칸은 편집할 수 없는 줄이어도 창에 보여 준다
+      if (
+        row !== undefined &&
+        column.form?.readOnly === undefined &&
+        !isCellEditable(column, row)
+      ) {
+        return false;
+      }
       return true;
     });
 

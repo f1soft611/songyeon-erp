@@ -119,6 +119,15 @@ export function DraftFormManagementPage({
     ],
   );
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const appliedDetailValues = useMemo<Record<string, PageSearchFieldValue>>(() => {
+    const { categoryItemId, regTermId, useAt } = management.appliedFilters;
+    return {
+      categoryItemId: categoryItemId != null ? String(categoryItemId) : '',
+      regTermId: regTermId != null ? String(regTermId) : '',
+      useAt: useAt ?? '',
+    };
+  }, [management.appliedFilters]);
 
   const requestSearch = (filters: DraftFormFilters) => {
     if (management.hasChanges) {
@@ -284,6 +293,7 @@ export function DraftFormManagementPage({
         onDefaultSearch={handleDefaultSearch}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         onDetailValuesChange={setDetailValues}
         onDetailSearch={handleDetailSearch}
         detailLoading={management.loading}

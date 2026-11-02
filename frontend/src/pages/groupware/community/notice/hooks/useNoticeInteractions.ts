@@ -38,7 +38,7 @@ export function useNoticeInteractions({
   );
 
   const loadNoticeDetail = useCallback(
-    (noticeId: number, expand: boolean) => {
+    (noticeId: number, expand: boolean, appendMissing = false) => {
       const pendingRequest = noticeDetailRequests.current.get(noticeId);
       if (pendingRequest) {
         if (expand) setExpandedNoticeId(noticeId);
@@ -57,7 +57,9 @@ export function useNoticeInteractions({
             bookmarked: item.bookmarked,
           });
           setNoticeItems((current) =>
-            current.map((item) =>
+            appendMissing && !current.some((item) => item.id === noticeId)
+              ? [detailItem, ...current]
+              : current.map((item) =>
               item.id === noticeId ? mergeDetail(item) : item,
             ),
           );
@@ -96,13 +98,13 @@ export function useNoticeInteractions({
   );
 
   const handleSelectNotice = useCallback(
-    async (item: { id: string | number }) => {
+    async (item: { id: string | number; appendMissing?: boolean }) => {
       const noticeId = Number(item.id);
       if (!noticeId) return;
       setSelectedNoticeId(noticeId);
       setSelectedNoticeLoadingId(noticeId);
       try {
-        await loadNoticeDetail(noticeId, true);
+        await loadNoticeDetail(noticeId, true, item.appendMissing);
       } finally {
         setSelectedNoticeLoadingId((current) =>
           current === noticeId ? null : current,

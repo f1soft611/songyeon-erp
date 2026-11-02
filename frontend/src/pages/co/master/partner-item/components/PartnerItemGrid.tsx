@@ -25,24 +25,39 @@ export function createPartnerItemColumns(
       align: 'center',
       pinned: 'left',
     },
-    { field: 'code', headerName: '제품코드', width: 110, headerAlign: 'center', align: 'center', editable: false },
-    { field: 'name', headerName: '품목명', flex: 1.4, headerAlign: 'center', align: 'left', editable: false },
+    {
+      field: 'code',
+      headerName: '제품코드',
+      width: 110,
+      align: 'center',
+      editable: false
+    },
+    {
+      field: 'name',
+      headerName: '품목명',
+      flex: 1.4,
+      align: 'left',
+      editable: false
+    },
     {
       field: 'spec',
       headerName: '규격/단위',
       width: 130,
-      headerAlign: 'center',
       align: 'center',
       editable: false,
       getValue: (row) => row.spec || '',
     },
-    { field: 'clientName', headerName: '거래처명', flex: 1, headerAlign: 'center', align: 'left', editable: false },
     {
-      // 2026-10-27 [이력]: 배합비 변경로그(예전 제품BOM 창의 변경로그 탭, 원재료마스터 이력 칸과 같음)
+      field: 'clientName',
+      headerName: '거래처명',
+      flex: 1,
+      align: 'left',
+      editable: false
+    },
+    {
       field: 'historyAction',
       headerName: '이력',
       width: 60,
-      headerAlign: 'center',
       align: 'center',
       editable: false,
       pinned: 'right',
@@ -62,11 +77,9 @@ export function createPartnerItemColumns(
       ),
     },
     {
-      // [상세]: 연필을 누르면 제품BOM 창(상세보기 탭)
       field: 'detailAction',
       headerName: '상세',
       width: 60,
-      headerAlign: 'center',
       align: 'center',
       editable: false,
       pinned: 'right',

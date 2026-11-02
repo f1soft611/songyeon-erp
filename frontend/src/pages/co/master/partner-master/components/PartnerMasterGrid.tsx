@@ -135,7 +135,6 @@ export function createPartnerMasterColumns(
       search: { hidden: true },
     },
     {
-      // 분류: 저장은 코드, 보이는 것은 공통코드 이름(2026-10-23)
       field: 'clientType',
       headerName: '분류',
       width: 130,

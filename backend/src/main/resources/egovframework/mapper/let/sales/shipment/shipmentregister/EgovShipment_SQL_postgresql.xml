@@ -11,6 +11,8 @@
             'manual' AS "source",
             ls.schedule_date AS "scheduleDate",
             (SELECT cln.name FROM clients cln WHERE cln.client_code = ls.client_code LIMIT 1) AS "clientName",
+            ls.client_code AS "clientCode",
+            ls.product_code AS "productCode",
             (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = ls.product_code) AS "productName",
             COALESCE(ls.actual_qty, ls.order_qty) AS "orderQty",
             ls.order_qty AS "plannedQty",
@@ -35,6 +37,8 @@
             'production' AS "source",
             p.logistics_date AS "scheduleDate",
             (SELECT cln.name FROM clients cln WHERE cln.client_code = p.client_code LIMIT 1) AS "clientName",
+            p.client_code AS "clientCode",
+            p.product_code AS "productCode",
             (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = p.product_code) AS "productName",
             COALESCE(p.logistics_actual_qty, p.actual_qty, p.order_qty) AS "orderQty",
             p.order_qty AS "plannedQty",
@@ -216,6 +220,7 @@
             actual_qty AS "actualQty",
             order_qty AS "orderQty",
             (SELECT cln.name FROM clients cln WHERE cln.client_code = production_schedule.client_code LIMIT 1) AS "clientName",
+            client_code AS "clientCode",
             lot_no AS "lotNo"
         FROM production_schedule
         WHERE (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = production_schedule.product_code) = #{productName}
@@ -273,6 +278,8 @@
             id AS "id",
             order_date AS "orderDate",
             (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS "clientName",
+            client_code AS "clientCode",
+            product_code AS "productCode",
             (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS "productName",
             order_qty AS "orderQty",
             note AS "note",
@@ -291,6 +298,8 @@
             id AS "id",
             order_date AS "orderDate",
             (SELECT cln.name FROM clients cln WHERE cln.client_code = sales_order.client_code LIMIT 1) AS "clientName",
+            client_code AS "clientCode",
+            product_code AS "productCode",
             (SELECT CASE WHEN pdn.spec IS NOT NULL AND pdn.spec != '' THEN pdn.name || '(' || pdn.spec || ')' ELSE pdn.name END FROM products pdn WHERE pdn.code = sales_order.product_code) AS "productName",
             order_qty AS "orderQty",
             note AS "note",

@@ -17,6 +17,7 @@ import type { DocumentStatusRow } from '../src/pages/groupware/documents/status/
 
 const row: DocumentStatusRow = {
   electronicApprovalId: 41,
+  documentNo: 'EA-20261010-0001',
   title: 'Annual plan',
   documentType: 'DRAFTING',
   documentStatus: 'COMPLETED',
@@ -53,7 +54,7 @@ describe('document status service', () => {
     const controller = new AbortController();
     const dataSource = createDocumentStatusDataSource({
       keyword: 'annual plan',
-      electronicApprovalId: '41',
+      documentNo: 'EA-20261010-0001',
       title: 'Annual',
       documentType: 'DRAFTING',
       documentStatus: 'COMPLETED',
@@ -82,7 +83,7 @@ describe('document status service', () => {
       offset: '20',
       limit: '40',
       keyword: 'annual plan',
-      electronicApprovalId: '41',
+      documentNo: 'EA-20261010-0001',
       title: 'Annual',
       documentType: 'DRAFTING',
       documentStatus: 'COMPLETED',
@@ -102,17 +103,17 @@ describe('document status service', () => {
     expect(signal).toBe(controller.signal);
   });
 
-  it('sorts document numbers by the electronic approval ID', async () => {
+  it('sorts document numbers by the persisted document number', async () => {
     api.get.mockResolvedValue({ resultList: [row], totalRowCount: 1 });
     const dataSource = createDocumentStatusDataSource({});
     const request = query(new AbortController().signal);
-    request.sorts = [{ field: 'electronicApprovalId', direction: 'asc' }];
+    request.sorts = [{ field: 'documentNo', direction: 'asc' }];
 
     await dataSource.load(request);
 
     const [path] = api.get.mock.calls[0] as [string];
     const params = new URL(path, 'http://localhost').searchParams;
-    expect(params.get('sortField')).toBe('electronicApprovalId');
+    expect(params.get('sortField')).toBe('documentNo');
     expect(params.get('sortDirection')).toBe('ASC');
   });
 
@@ -137,6 +138,18 @@ describe('document status service', () => {
     expect(request.searchParams.has('sortDirection')).toBe(false);
     expect(signal).toBe(controller.signal);
   });
+
+  it.each(['MY_PENDING', 'DRAFT', 'REVISION_REQUESTED'] as const)(
+    'sends dashboard scope %s to the existing search API',
+    async (scope) => {
+      api.get.mockResolvedValue({ resultList: [row], totalRowCount: 1 });
+
+      await searchDocumentStatus({ scope });
+
+      const [path] = api.get.mock.calls[0] as [string];
+      expect(new URL(path, 'http://localhost').searchParams.get('scope')).toBe(scope);
+    },
+  );
 
   it('accepts the drafter role returned for the current user', async () => {
     api.get.mockResolvedValue({
@@ -199,6 +212,8 @@ describe('document status service', () => {
     { myActionStatus: 'APPROVED, INVALID' },
     { submittedAt: Number.NaN },
     { electronicApprovalId: 1.5 },
+    { documentNo: '' },
+    { documentNo: '41' },
   ])('rejects malformed rows through both service entry points: %j', async (invalid) => {
     api.get.mockResolvedValue({
       resultList: [{ ...row, ...invalid }],

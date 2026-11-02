@@ -1,94 +1,33 @@
 import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
 import { formatQty } from '../../../../../shared/utils/numberFormat';
 import { parseQtyNumber } from '../../../order/order-register/utils/salesOrder';
+import type {
+  ShipmentRecord,
+  LotLabel,
+  ShipmentRow,
+  LotAllocation,
+  ProductLot,
+  PendingOrder,
+  LotPick,
+  ShipmentSaveBody,
+  PlannedItem,
+} from '../types/shipment.types';
 
 // 영업관리 > 출하등록 (송연 SA0005)
 
-// 서버 출하 한 줄. source = manual(출하등록에서 넣은 줄) | production(물류출고일이 있는 생산확정 줄)
-export type ShipmentRecord = {
-  id: number;
-  source: 'manual' | 'production';
-  scheduleDate?: string | null;
-  clientName?: string | null;
-  productName?: string | null;
-  orderQty?: string | null; // 실출하량이 있으면 실출하량, 없으면 예정량
-  note?: string | null;
-  lotId?: number | null;
-  lotNo?: string | null;
-  lotDate?: string | null;
-  shipConfirmed?: number | null;
-  lotAllocations?: LotAllocation[];
-};
-
-// 로트 칸 글자와 모양. tone: teal = 고른 로트, muted = 미선택·예정
-export type LotLabel = { text: string; tone: 'teal' | 'muted'; bold: boolean };
-
-// 화면 한 줄. key 는 화면에서만 쓰는 줄 구분값, record 가 없으면 아직 저장 전인 새 줄
-export type ShipmentRow = {
-  key: number;
-  record: ShipmentRecord | null;
-  clientName: string;
-  productName: string;
-  scheduleDate: string;
-  orderQty: string | number; // 출하량(숫자 칸: 표에서 고치면 숫자가 들어온다)
-  note: string;
-  lotId: number | null;
-  sourceOrderId: number | null;
-  lotLabel: LotLabel;
-};
-
-export type LotAllocation = { lotId: number; qty: number | string; lotNo?: string | null; lotDate?: string | null };
-
-// 로트 선택의 로트 한 건. status = produced(생산입고 끝) | planned(생산확정만 됨)
-export type ProductLot = {
-  lotId: number;
-  lotDate: string;
-  lotNo: string;
-  status: 'produced' | 'planned';
-  producedQty: number;
-  shippedQty: number;
-  remainingQty: number;
-  clientName: string;
-  orderQty: string;
-};
-
-// 수주 한 줄(로트 선택의 생산예정 수주, 수주등록 가져오기 목록)
-export type PendingOrder = {
-  id: number;
-  orderDate?: string | null;
-  productionDate?: string | null;
-  logisticsDate?: string | null;
-  clientName?: string | null;
-  productName?: string | null;
-  orderQty?: string | null;
-  note?: string | null;
-};
-
-// 로트 선택에서 고른 것
-export type LotPick = {
-  lotId: number | null;
-  lotDate: string | null;
-  lotNo?: string;
-  remainingQty: number;
-  clientName: string | null;
-  orderQty: string | null;
-  beforeStockIn?: boolean;
-  fromSalesOrder?: boolean;
-  sourceOrderId?: number;
-};
-
-// 저장된 줄을 로트 여러 개로 나눠 적을 때
-export type AllocationMode = { shipmentId: number; targetQty: number; existing: LotAllocation[] };
-
-export type ShipmentSaveBody = {
-  scheduleDate: string;
-  clientName: string;
-  productName: string;
-  orderQty: string;
-  note: string;
-  lotId: number | null;
-  sourceOrderId: number | null;
-};
+// 타입은 types/shipment.types.ts(2026-10-29 표준 구조로 옮김). 예전 경로로 가져다 쓰는 곳을 위해 다시 내보낸다
+export type {
+  ShipmentRecord,
+  LotLabel,
+  ShipmentRow,
+  LotAllocation,
+  ProductLot,
+  PendingOrder,
+  LotPick,
+  AllocationMode,
+  ShipmentSaveBody,
+  PlannedItem,
+} from '../types/shipment.types';
 
 // 송연 lotText: 로트번호, 없으면 생산일
 export const lotText = (lotNo?: string | null, lotDate?: string | null): string => lotNo || lotDate || '';
@@ -121,7 +60,9 @@ export function toShipmentRow(key: number, record: ShipmentRecord | null, date: 
   return {
     key,
     record,
+    clientCode: record?.clientCode || '',
     clientName: record?.clientName || '',
+    productCode: record?.productCode || '',
     productName: record?.productName || '',
     scheduleDate: record?.scheduleDate || date,
     orderQty: record?.orderQty || '',
@@ -136,7 +77,9 @@ export function toShipmentRow(key: number, record: ShipmentRecord | null, date: 
 export function rowFromOrder(key: number, order: PendingOrder, date: string): ShipmentRow {
   return {
     ...toShipmentRow(key, null, date),
+    clientCode: order.clientCode || '',
     clientName: order.clientName || '',
+    productCode: order.productCode || '',
     productName: order.productName || '',
     orderQty: order.orderQty || '',
     note: order.note || '',
@@ -154,7 +97,10 @@ export function applyLotPick(row: ShipmentRow, pick: LotPick): ShipmentRow {
   };
   if (pick.fromSalesOrder && pick.sourceOrderId !== undefined) next.sourceOrderId = pick.sourceOrderId;
   if (!row.record) {
-    if (!row.clientName.trim()) next.clientName = pick.clientName || '';
+    if (!row.clientName.trim()) {
+      next.clientName = pick.clientName || '';
+      next.clientCode = pick.clientCode || '';
+    }
     if (!qtyText(row.orderQty)) next.orderQty = pick.orderQty || '';
   }
   return next;
@@ -163,7 +109,9 @@ export function applyLotPick(row: ShipmentRow, pick: LotPick): ShipmentRow {
 export function saveBodyOf(row: ShipmentRow): ShipmentSaveBody {
   return {
     scheduleDate: row.scheduleDate,
+    clientCode: row.clientCode.trim(),
     clientName: row.clientName.trim(),
+    productCode: row.productCode.trim(),
     productName: row.productName.trim(),
     orderQty: qtyText(row.orderQty),
     note: row.note.trim(),
@@ -214,17 +162,6 @@ export function mineByLot(existing: LotAllocation[]): Record<number, number> {
   return mine;
 }
 
-export type PlannedItem = {
-  id: string;
-  kind: '생산확정' | '수주등록';
-  date: string | null;
-  label: string;
-  planned: number;
-  shipped: number;
-  remaining: number;
-  pick: LotPick;
-};
-
 // 생산예정 품목: ① 생산확정됐지만 생산입고 전인 로트 ② 아직 생산확정 전인 수주등록 건. 날짜순.
 export function plannedItems(lots: ProductLot[], orders: PendingOrder[], mine: Record<number, number>): PlannedItem[] {
   const avail = (lot: ProductLot) => lot.remainingQty + (mine[lot.lotId] || 0);
@@ -240,7 +177,7 @@ export function plannedItems(lots: ProductLot[], orders: PendingOrder[], mine: R
       remaining: avail(lot),
       pick: {
         lotId: lot.lotId, lotDate: lot.lotDate, lotNo: lot.lotNo, remainingQty: lot.remainingQty,
-        beforeStockIn: true, clientName: lot.clientName, orderQty: lot.orderQty,
+        beforeStockIn: true, clientCode: lot.clientCode, clientName: lot.clientName, orderQty: lot.orderQty,
       },
     }));
   const fromOrders: PlannedItem[] = orders.map((order) => {
@@ -256,7 +193,7 @@ export function plannedItems(lots: ProductLot[], orders: PendingOrder[], mine: R
       remaining: qty,
       pick: {
         lotId: null, lotDate: date, remainingQty: qty, fromSalesOrder: true, sourceOrderId: order.id,
-        clientName: order.clientName ?? null, orderQty: order.orderQty ?? null,
+        clientCode: order.clientCode ?? null, clientName: order.clientName ?? null, orderQty: order.orderQty ?? null,
       },
     };
   });

@@ -60,7 +60,13 @@ export function PartnerItemManagementPage({ selectedModule, currentMenuName, con
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading, onClick: () => void management.reload() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading,
+          onClick: () => void management.reload()
+        },
       ],
     },
   ];

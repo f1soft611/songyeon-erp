@@ -14,9 +14,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
 import type { PendingOrder } from '../utils/shipment';
 
-// 수주등록 가져오기 창(송연 SA0005OrderImportModal)
-// 물류출고일 기간의 아직 안 가져간 수주를 출하등록 줄로 담는다(저장은 줄마다 따로).
-// 창을 열면 바로 조회하고, 기간이 비어 있으면 서버에 묻지 않는다.
 export function OrderImportDialog({
   start,
   end,
@@ -80,14 +77,52 @@ export function OrderImportDialog({
     : hasRange ? '이 기간에 가져올 수주내역이 없습니다 — 물류출고일을 안 정한 건은 여기 안 나와요' : '조회 기간을 선택해주세요';
 
   const columns = useMemo<F1GridColumn<PendingOrder>[]>(() => [
-    { field: 'id', type: 'rownumber', width: 56, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
-    { field: 'logisticsDate', headerName: '물류출고일', width: 110, headerAlign: 'center', align: 'center', getValue: (row) => row.logisticsDate || '' },
-    { field: 'clientName', headerName: '거래처', flex: 1, width: 140, headerAlign: 'center', align: 'left' },
-    { field: 'productName', headerName: '품목명(규격)', flex: 1.4, width: 180, headerAlign: 'center', align: 'left' },
-    { field: 'orderQty', headerName: '수량', type: 'number', decimalPlaces: 2, headerAlign: 'center', align: 'right' },
+    {
+      field: 'id',
+      headerName: 'No',
+      type: 'rownumber',
+      width: 56,
+      align: 'center',
+      pinned: 'left',
+      form: { hidden: true },
+      search: { hidden: true },
+    },
+    {
+      field: 'logisticsDate',
+      headerName: '물류출고일',
+      type: 'date',
+      width: 110,
+      align: 'center',
+      getValue: (row) => row.logisticsDate || ''
+    },
+    {
+      field: 'clientName',
+      headerName: '거래처',
+      flex: 1,
+      width: 140,
+      align: 'left'
+    },
+    {
+      field: 'productName',
+      headerName: '품목명(규격)',
+      flex: 1.4,
+      width: 180,
+      align: 'left'
+    },
+    {
+      field: 'orderQty',
+      headerName: '수량',
+      type: 'decimal',
+      decimalPlaces: 2,
+      align: 'right'
+    },
     {
       // 늘어나는 칸이 세로 스크롤바 자리까지 넓어져도 단추가 가려지지 않게 오른쪽에 고정
-      field: 'note', headerName: '가져오기', width: 100, headerAlign: 'center', align: 'center', pinned: 'right',
+      field: 'note',
+      headerName: '가져오기',
+      width: 100,
+      align: 'center',
+      pinned: 'right',
       renderCell: ({ row }) => {
         const done = pulled.includes(row.id);
         return (

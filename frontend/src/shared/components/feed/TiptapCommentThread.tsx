@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Box,
   Button,
@@ -101,6 +101,7 @@ export type CommentThreadProps = {
   composerLabel?: string;
   submitLabel?: string;
   expandReplies?: boolean;
+  renderContentPreview?: (html: string) => ReactNode;
 };
 
 export const sanitizeCommentHtml = sanitizeHtml;
@@ -129,6 +130,7 @@ type EditorProps = {
   isDark: boolean;
   onSubmit: (content: string, files: File[]) => Promise<void> | void;
   onCancel?: () => void;
+  renderContentPreview?: (html: string) => ReactNode;
 };
 function CommentEditor({
   initialContent = '<p></p>',
@@ -139,14 +141,19 @@ function CommentEditor({
   isDark,
   onSubmit,
   onCancel,
+  renderContentPreview,
 }: EditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const submitRef = useRef<() => void>(() => undefined);
   const [files, setFiles] = useState<File[]>([]);
+  const [previewHtml, setPreviewHtml] = useState(initialContent);
   const editor = useEditor({
     extensions: [StarterKit, Placeholder.configure({ placeholder })],
     content: initialContent || '<p></p>',
     immediatelyRender: false,
+    onUpdate: ({ editor: updatedEditor }) => {
+      if (renderContentPreview) setPreviewHtml(updatedEditor.getHTML());
+    },
     editorProps: {
       attributes: {
         role: 'textbox',
@@ -230,6 +237,7 @@ function CommentEditor({
         }}
       >
         <EditorContent editor={editor} />
+        {renderContentPreview?.(previewHtml)}
       </Box>
       {files.length > 0 && (
         <Box sx={{ px: 1, pb: 0.75, display: 'grid', gap: 0.75 }}>
@@ -576,6 +584,7 @@ function CommentItem({
                   __html: sanitizeCommentHtml(comment.content),
                 }}
               />
+              {props.renderContentPreview?.(comment.content)}
               {imageAttachments.length > 0 && (
                 <Box
                   data-testid={`comment-image-previews-${comment.id}`}
@@ -784,6 +793,7 @@ function CommentItem({
               )}
               <CommentEditor
                 initialContent={comment.content}
+                renderContentPreview={props.renderContentPreview}
                 label="댓글 수정 입력"
                 fileInputLabel="댓글 수정 첨부파일 선택"
                 placeholder="줄바꿈 Shift+Enter, 입력 Enter"
@@ -799,6 +809,7 @@ function CommentItem({
           )}
           {isReplying && !isDeleted && !isSystemEvent && (
             <CommentEditor
+              renderContentPreview={props.renderContentPreview}
               label="답글 입력"
               fileInputLabel="답글 첨부파일 선택"
               placeholder="줄바꿈 Shift+Enter, 입력 Enter"
@@ -879,6 +890,7 @@ export function TiptapCommentThread({
   composerLabel = '댓글 입력',
   submitLabel = '등록',
   expandReplies = false,
+  renderContentPreview,
 }: CommentThreadProps) {
   const theme = useTheme();
   const isDark = isDarkProp ?? theme.palette.mode === 'dark';
@@ -904,6 +916,7 @@ export function TiptapCommentThread({
     composerLabel,
     submitLabel,
     expandReplies,
+    renderContentPreview,
   };
   return (
     <Box sx={{ minWidth: 0 }}>
@@ -963,6 +976,7 @@ export function TiptapCommentThread({
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <CommentEditor
+              renderContentPreview={renderContentPreview}
               label={composerLabel}
               fileInputLabel="댓글 첨부파일 선택"
               placeholder={placeholder}

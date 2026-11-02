@@ -10,8 +10,20 @@ import { diffOf } from '../utils/pricing';
 const STORAGE_KEY = 'sa-pricing-grid';
 // 저장된 칸 순서에 지금 칸이 하나라도 없으면 처음 순서로 다시 시작한다
 const GRID_FIELDS = [
-  'id', 'productCode', 'productName', 'spec', 'materialCost', 'laborCost', 'packagingCost', 'logisticsCost',
-  'margin', 'totalPrice', 'currentPrice', 'clientName', 'diff', 'detailAction',
+  'id',
+  'productCode',
+  'productName',
+  'spec',
+  'materialCost',
+  'laborCost',
+  'packagingCost',
+  'logisticsCost',
+  'margin',
+  'totalPrice',
+  'currentPrice',
+  'clientName',
+  'diff',
+  'detailAction',
 ];
 
 // 보기 전용 칸. 원가 항목은 [상세] 칸 연필 → 단가상세 창에서 고친다(제품마스터 · 견적 상세 칸과 같은 모양)
@@ -35,6 +47,7 @@ export function createPricingColumns(onOpenDetail: (row: PricingRow) => void): F
       width: 90,
       align: 'center',
       editable: false,
+      pinned: 'left',
       search: { hidden: true }
     },
     {
@@ -44,6 +57,7 @@ export function createPricingColumns(onOpenDetail: (row: PricingRow) => void): F
       width: 160,
       align: 'left',
       editable: false,
+      pinned: 'left',
       search: { hidden: true }
     },
     {

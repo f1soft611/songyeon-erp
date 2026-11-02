@@ -88,7 +88,8 @@ public class ShipmentServiceImpl extends EgovAbstractServiceImpl implements Ship
         if (date.isEmpty()) {
             throw new IllegalArgumentException(DATE_REQUIRED_MESSAGE);
         }
-        String clientName = salesOrderService.resolveSalesClient(request.getClientName());
+        // 2026-10-29 화면은 거래처코드 · 제품코드를 보낸다(코드가 없으면 예전처럼 이름으로 찾는다)
+        String clientCode = salesOrderService.resolveSalesClientCode(request.getClientCode(), request.getClientName());
         Integer max = shipmentDAO.selectMaxSortOrder(date);
         Long sourceOrderId = request.getSourceOrderId();
         Long lotId = request.getLotId();
@@ -100,9 +101,8 @@ public class ShipmentServiceImpl extends EgovAbstractServiceImpl implements Ship
         }
         ShipmentVO record = new ShipmentVO();
         record.setScheduleDate(date);
-        record.setClientName(clientName);
         // 2026-10-26 logistics_schedule 에는 거래처코드 · 제품코드만 남는다(못 바꾸면 막는다)
-        record.setClientCode(salesOrderService.requireClientCode(clientName));
+        record.setClientCode(clientCode);
         record.setProductName(request.getProductName());
         record.setProductCode(salesOrderService.requireProductCode(request.getProductName(), request.getSpec(), request.getProductCode()));
         record.setOrderQty(request.getOrderQty());
@@ -261,6 +261,7 @@ public class ShipmentServiceImpl extends EgovAbstractServiceImpl implements Ship
             lot.setShippedQty(shippedQty);
             lot.setRemainingQty(base - shippedQty);
             lot.setClientName(row.getClientName() == null ? "" : row.getClientName());
+            lot.setClientCode(row.getClientCode() == null ? "" : row.getClientCode());
             lot.setOrderQty(row.getOrderQty() == null ? "" : row.getOrderQty());
             result.getLots().add(lot);
         }

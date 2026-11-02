@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,6 +19,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
@@ -61,12 +64,14 @@ import egovframework.let.groupware.approval.common.service.impl.DocumentApproval
 import egovframework.let.groupware.approval.common.service.impl.DocumentApprovalDraftSupportServiceImpl;
 import egovframework.let.groupware.approval.write.service.impl.DocumentApprovalWriteServiceImpl;
 import egovframework.let.groupware.approval.shared.service.impl.DocumentApprovalInteractionServiceImpl;
+import egovframework.let.common.idsequence.service.IdSequenceService;
 
 class DocumentApprovalWriteServiceImplTest {
 
     private final CommonCommentDAO commentDAO = mock(CommonCommentDAO.class);
     private final CommonFileService fileService = mock(CommonFileService.class);
     private final DocumentApprovalDAO approvalDAO = mock(DocumentApprovalDAO.class);
+    private final IdSequenceService idSequenceService = mock(IdSequenceService.class, invocation -> 1L);
     private final EmbeddedImageStorageService imageStorageService = mock(EmbeddedImageStorageService.class);
     private final LoginVO author = author();
     private final RichTextDocumentSanitizer documentSanitizer = new RichTextDocumentSanitizer();
@@ -89,10 +94,12 @@ class DocumentApprovalWriteServiceImplTest {
     void feedListHydratesDocumentWithoutRecordingView() throws Exception {
         DocumentApprovalListItemVO firstItem = new DocumentApprovalListItemVO();
         firstItem.setElectronicApprovalId(77L);
+        firstItem.setDocumentNo("EA-20261028-0077");
         firstItem.setTitle("첫 피드 문서");
         firstItem.setSummary("첫 요약");
         DocumentApprovalListItemVO secondItem = new DocumentApprovalListItemVO();
         secondItem.setElectronicApprovalId(78L);
+        secondItem.setDocumentNo("EA-20261028-0078");
         secondItem.setTitle("둘째 피드 문서");
         secondItem.setSummary("둘째 요약");
         when(approvalDAO.selectRelatedDocumentList(anyMap())).thenReturn(Arrays.asList(firstItem, secondItem));
@@ -169,6 +176,8 @@ class DocumentApprovalWriteServiceImplTest {
 
         assertThat(result).hasSize(2);
         assertThat(result.get(0).getElectronicApprovalId()).isEqualTo(77L);
+        assertThat(result).extracting(DocumentApprovalFeedItemVO::getDocumentNo)
+            .containsExactly("EA-20261028-0077", "EA-20261028-0078");
         assertThat(result.get(0).getSummary()).isEqualTo("첫 요약");
         assertThat(result.get(0).getDrafterProfileImage()).isEqualTo("profile-image");
         assertThat(result.get(0).getContentsHtml()).isEqualTo("<p>첫 본문</p>");
@@ -214,6 +223,11 @@ class DocumentApprovalWriteServiceImplTest {
         verify(commentDAO, never()).countApprovalUserComments(anyMap());
         verify(fileService, never()).listFiles(eq(4L), eq("APPROVAL"), eq(77L));
         verify(fileService, never()).listFiles(eq(4L), eq("APPROVAL_COMMENT"), eq(55L));
+
+        when(approvalDAO.selectPinnedRelatedDocumentList(anyMap())).thenReturn(Arrays.asList(firstItem, secondItem));
+        assertThat(writeService().listPinnedFeedDocuments(author, "ALL", null, null))
+            .extracting(DocumentApprovalFeedItemVO::getDocumentNo)
+            .containsExactly("EA-20261028-0077", "EA-20261028-0078");
     }
 
     @Test
@@ -349,7 +363,12 @@ class DocumentApprovalWriteServiceImplTest {
         DocumentApprovalDraftVO saved = writeService().saveDraft(author, request());
 
         assertThat(saved.getElectronicApprovalId()).isEqualTo(77L);
+        assertThat(saved.getDocumentNo()).matches("EA-\\d{8}-0001");
         assertThat(saved.getDocumentStatus()).isEqualTo("DRAFT");
+        verify(idSequenceService).nextValue(
+            eq("ELECTRONIC_APPROVAL_NO"),
+            eq("4"),
+            eq(LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)));
 
         ArgumentCaptor<Map<String, Object>> documentParams = mapCaptor();
         verify(approvalDAO).insertDocumentApprovalMain(documentParams.capture());
@@ -359,6 +378,7 @@ class DocumentApprovalWriteServiceImplTest {
             .containsEntry("drafterName", "작성자")
             .containsEntry("drafterDepartmentName", "기획팀")
             .containsEntry("documentStatus", "DRAFT")
+            .containsEntry("documentNo", saved.getDocumentNo())
             .containsEntry("documentType", "DRAFTING")
             .containsEntry("eabusNo", "001")
             .containsEntry("title", "기안 요청")
@@ -384,6 +404,37 @@ class DocumentApprovalWriteServiceImplTest {
             .containsEntry("eventType", "DRAFT_SAVED")
             .containsEntry("writerId", "login-author")
             .containsEntry("writerName", "작성자");
+    }
+
+    @Test
+    void saveDraftKeepsSequenceValuesWiderThanFourDigits() throws Exception {
+        when(idSequenceService.nextValue(eq("ELECTRONIC_APPROVAL_NO"), eq("4"), anyString()))
+            .thenReturn(10_000L);
+        when(approvalDAO.selectActiveParticipants(anyMap())).thenReturn(Arrays.asList(
+            participant("101", "작성자", "기획팀"),
+            participant("202", "결재자", "재무팀")));
+        when(approvalDAO.insertDocumentApprovalMain(anyMap())).thenReturn(77L);
+        when(approvalDAO.updateDocumentApprovalMain(anyMap())).thenReturn(1);
+        when(approvalDAO.insertDocumentApprovalLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(91L);
+
+        DocumentApprovalDraftVO saved = writeService().saveDraft(author, request());
+
+        assertThat(saved.getDocumentNo()).matches("EA-\\d{8}-10000");
+    }
+
+    @Test
+    void saveDraftStopsWhenDocumentNumberCannotBeGenerated() throws Exception {
+        when(idSequenceService.nextValue(eq("ELECTRONIC_APPROVAL_NO"), eq("4"), anyString()))
+            .thenThrow(new IllegalStateException("sequence unavailable"));
+        when(approvalDAO.selectActiveParticipants(anyMap())).thenReturn(Arrays.asList(
+            participant("101", "작성자", "기획팀"),
+            participant("202", "결재자", "재무팀")));
+
+        assertThatThrownBy(() -> writeService().saveDraft(author, request()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("sequence unavailable");
+        verify(approvalDAO, never()).insertDocumentApprovalMain(anyMap());
     }
 
     @Test
@@ -416,7 +467,9 @@ class DocumentApprovalWriteServiceImplTest {
         DocumentApprovalDraftVO saved = writeService().saveDraft(author, 77L, request());
 
         assertThat(saved.getElectronicApprovalId()).isEqualTo(77L);
+        assertThat(saved.getDocumentNo()).isEqualTo("EA-20261010-0001");
         verify(approvalDAO, never()).insertDocumentApprovalMain(anyMap());
+        verifyNoInteractions(idSequenceService);
         verify(approvalDAO).updateDocumentApprovalMain(org.mockito.ArgumentMatchers.argThat(
             params -> params.get("tenantId").equals(4L)
                 && params.get("drafterId").equals("login-author")
@@ -630,7 +683,7 @@ class DocumentApprovalWriteServiceImplTest {
     private DocumentApprovalWriteServiceImpl writeService(EmbeddedImageStorageService storage) {
         DocumentApprovalAccessServiceImpl access = accessService();
         return new DocumentApprovalWriteServiceImpl(approvalDAO, fileService, storage, access,
-                draftSupportService(storage, access), commentSupportService());
+                draftSupportService(storage, access), commentSupportService(), idSequenceService);
     }
 
     private DocumentApprovalInteractionServiceImpl sharedService() { return sharedService(imageStorageService); }
@@ -738,6 +791,7 @@ class DocumentApprovalWriteServiceImplTest {
     private DocumentApprovalDraftVO draftResponse(String status) {
         DocumentApprovalDraftVO response = new DocumentApprovalDraftVO();
         response.setElectronicApprovalId(77L);
+        response.setDocumentNo("EA-20261010-0001");
         response.setEabusNo("001");
         response.setDocumentStatus(status);
         return response;

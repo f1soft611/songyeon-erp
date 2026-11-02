@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   MATERIAL_HISTORY_EXCEL_COLUMNS, PRODUCT_HISTORY_EXCEL_COLUMNS, confirmQuestion, confirmedMessage, diffColor, diffText, filterByProduct,
   finalQty, historyTree, kindColor, materialUploadMessage, movedMessage, productUploadMessage, toUploadRows, warehouseTotals, whmNum,
-  type StockSchedule,
-} from '../src/pages/pu/stockadjust/utils/stockAdjust';
+} from '../src/pages/pu/stock/stock-adjust/utils/stockAdjust';
+import type { StockSchedule } from '../src/pages/pu/stock/stock-adjust/types/stockAdjust.types';
 
 const row = (id: number, extra: Partial<StockSchedule> = {}): StockSchedule => ({ id, code: `M${id}`, name: `원재료${id}`, newStockQty: 10, currentStockQty: 8, ...extra });
 

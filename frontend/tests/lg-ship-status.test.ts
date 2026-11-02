@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SHIP_STATUS_EXCEL_COLUMNS, carryoverText, dash, qtyText, statusExcelName, statusQueryString, toStatusRow,
-} from '../src/pages/lg/status/utils/shipStatus';
+} from '../src/pages/lg/outbound/ship-status/utils/shipStatus';
 
 describe('출하현황 utils(송연 LG0003)', () => {
   it('조회 조건: 빈 품목명·거래처명은 보내지 않는다, 엑셀 이름', () => {

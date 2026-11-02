@@ -4,6 +4,7 @@ public class DocumentApprovalListQueryVO {
 
     private String keyword;
     private Long electronicApprovalId;
+    private String documentNo;
     private String eabusNo;
     private String title;
     private String documentType;
@@ -29,6 +30,8 @@ public class DocumentApprovalListQueryVO {
     public void setElectronicApprovalId(Long electronicApprovalId) {
         this.electronicApprovalId = electronicApprovalId;
     }
+    public String getDocumentNo() { return documentNo; }
+    public void setDocumentNo(String documentNo) { this.documentNo = documentNo; }
     public String getEabusNo() { return eabusNo; }
     public void setEabusNo(String eabusNo) { this.eabusNo = eabusNo; }
     public String getTitle() { return title; }
@@ -72,7 +75,8 @@ public class DocumentApprovalListQueryVO {
 
     public boolean isPageRequest() {
         return offset != null || limit != null || sortField != null || sortDirection != null
-                || hasText(keyword) || electronicApprovalId != null || hasText(eabusNo) || hasText(title)
+                || hasText(keyword) || electronicApprovalId != null || hasText(documentNo)
+                || hasText(eabusNo) || hasText(title)
                 || hasText(documentType)
                 || hasText(documentStatus) || hasText(submittedAtFrom) || hasText(submittedAtTo)
                 || hasText(drafterName) || hasText(drafterDepartmentName)

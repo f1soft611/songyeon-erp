@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import {
   Box,
   Button,
-  CircularProgress,
   Checkbox,
   FormControlLabel,
   IconButton,
@@ -20,6 +19,7 @@ import {
   richTextEditorIconButtonSx,
 } from '../../../../../shared/components/rich-text-editor/RichTextEditor';
 import { useRichTextEditorSaveLifecycle } from '../../../../../shared/components/rich-text-editor/useRichTextEditorSaveLifecycle';
+import { AppSaveButton } from '../../../../../shared/components/AppSaveButton';
 import { apiGetBlob } from '../../../../../shared/services/apiClient';
 import {
   deleteNoticeEmbeddedImage,
@@ -450,24 +450,18 @@ export function NoticeComposerDialog({
 
   const actions = (
     <>
-      <Button
+      <AppSaveButton
         variant="contained"
         color="primary"
+        saving={saving}
+        savingLabel="저장 중…"
+        progressLabel="공지 저장 중"
         onClick={handleSubmit}
         disabled={
           saving ||
           closing ||
           editorSaveLifecycle.uploadingCount > 0 ||
           (title.trim().length === 0 && editorIsEmpty)
-        }
-        startIcon={
-          saving ? (
-            <CircularProgress
-              size={16}
-              color="inherit"
-              aria-label="공지 저장 중"
-            />
-          ) : undefined
         }
         sx={{
           borderRadius: 1.5,
@@ -480,8 +474,8 @@ export function NoticeComposerDialog({
           },
         }}
       >
-        {saving ? '저장 중…' : '저장'}
-      </Button>
+        저장
+      </AppSaveButton>
       <Button
         variant="text"
         color="primary"

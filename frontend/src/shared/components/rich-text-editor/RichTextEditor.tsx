@@ -212,7 +212,9 @@ export function RichTextEditor({
   onOrphanedImageUpload,
   onUploadingChange,
   onImageUploadError,
+  renderContentPreview,
 }: RichTextEditorProps) {
+  const [previewHtml, setPreviewHtml] = useState(typeof content === 'string' ? content : '');
   const uploadImageRef = useRef(uploadImage);
   const orphanUploadRef = useRef(onOrphanedImageUpload);
   const uploadingChangeRef = useRef(onUploadingChange);
@@ -425,6 +427,12 @@ export function RichTextEditor({
       onUpdate: ({ editor: updatedEditor }) => {
         releaseDetachedObjectUrls(updatedEditor);
         onContentChange?.(updatedEditor);
+      },
+      onTransaction: ({ editor: updatedEditor, transaction }) => {
+        if (renderContentPreview && transaction.docChanged) setPreviewHtml(updatedEditor.getHTML());
+      },
+      onCreate: ({ editor: createdEditor }) => {
+        if (renderContentPreview) setPreviewHtml(createdEditor.getHTML());
       },
     },
     [],
@@ -658,6 +666,7 @@ export function RichTextEditor({
       ]}
     >
       <EditorContent editor={editor} className="rich-text-editor-content" />
+      {renderContentPreview?.(previewHtml)}
     </Box>
   );
 }

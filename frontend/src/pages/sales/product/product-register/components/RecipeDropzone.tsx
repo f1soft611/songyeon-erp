@@ -3,14 +3,14 @@ import { Box } from '@mui/material';
 import { readExcelValues } from '../../../../../shared/utils/excelFile';
 import type { BomEditRow, MaterialOption } from '../../../../co/master/item-master/types/itemMaster.types';
 import { newBomRowId } from './BomEditGrid';
-import { materialNamePatch } from '../../../../co/master/item-master/utils/productBom';
-import { parseRecipeRows, RECIPE_NOT_FOUND_MESSAGE, recipeLoadedMessage } from '../utils/recipeExcel';
+import { bomRowsFromRecipe, parseRecipeRows, RECIPE_NOT_FOUND_MESSAGE, recipeLoadedMessage } from '../utils/recipeExcel';
 
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 
 // 송연 bom-dropzone(handleBomFile): 레시피 엑셀을 끌어다 놓거나 눌러서 골라 배합비 표를 채운다.
-// 등록된 원재료명이면 단가·코드도 채운다. 제품등록과 견적(가견적 창)이 같이 쓴다.
+// 원재료코드가 등록된 코드면 그 원재료로, 아니면 등록된 원재료명일 때 단가·코드도 채운다(bomRowsFromRecipe).
+// 제품등록과 견적(가견적 창)이 같이 쓴다.
 export function RecipeDropzone({
   materials,
   onLoaded,
@@ -32,15 +32,7 @@ export function RecipeDropzone({
         onError(RECIPE_NOT_FOUND_MESSAGE);
         return;
       }
-      const rows: BomEditRow[] = lines.map((line) => ({
-        id: newBomRowId(),
-        materialName: line.materialName,
-        ratioPercent: line.ratioPercent,
-        unitPrice: null,
-        autoPrice: false,
-        materialCode: null,
-        ...materialNamePatch({ autoPrice: false }, line.materialName, materialsRef.current),
-      }));
+      const rows = bomRowsFromRecipe(lines, materialsRef.current, newBomRowId);
       onLoaded(rows, recipeLoadedMessage(lines.length));
     } catch (readError) {
       onError(errorText(readError, '엑셀 파일을 읽지 못했어요. .xlsx 파일인지 확인해주세요.'));

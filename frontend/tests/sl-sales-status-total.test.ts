@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { SALES_STATUS_EXCEL_COLUMNS, salesQueryString, statusSummary, todayFileTag } from '../src/pages/sl/status/utils/salesStatus';
+import { SALES_STATUS_EXCEL_COLUMNS, salesQueryString, statusSummary, todayFileTag } from '../src/pages/sl/inquiry/sales-status/utils/salesStatus';
 import {
   SALES_TOTAL_EXCEL_COLUMNS, filterDirection, noPriceWarning, shownTotals, toTotalRows, type TotalRecord,
-} from '../src/pages/sl/total/utils/salesTotal';
+} from '../src/pages/sl/inquiry/sales-total/utils/salesTotal';
 
 describe('판매현황(송연 sales.py GET /api/sales)', () => {
   it('조회 조건·요약·파일 이름·엑셀 칸', () => {

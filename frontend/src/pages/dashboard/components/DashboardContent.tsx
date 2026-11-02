@@ -36,23 +36,24 @@ import { QuoteManagementPage } from '../../sales/order/quote/QuoteManagementPage
 import { SalesOrderPage } from '../../sales/order/order-register/SalesOrderPage';
 import { ShipmentPage } from '../../sales/shipment/shipment-register/ShipmentPage';
 import { ProdCheckPage } from '../../sales/order/prod-check/ProdCheckPage';
-import { ProductionConfirmPage } from '../../pd/confirm/ProductionConfirmPage';
-import { ProductionActualPage } from '../../pd/actual/ProductionActualPage';
-import { ProductionStatusPage } from '../../pd/status/ProductionStatusPage';
-import { LabelPrintPage } from '../../pd/label/LabelPrintPage';
-import { ProductStockPage } from '../../lg/stock/ProductStockPage';
-import { ShipConfirmPage } from '../../lg/confirm/ShipConfirmPage';
-import { ShipStatusPage } from '../../lg/status/ShipStatusPage';
-import { SalesRegisterPage } from '../../sl/register/SalesRegisterPage';
-import { SalesStatusPage } from '../../sl/status/SalesStatusPage';
-import { SalesTotalPage } from '../../sl/total/SalesTotalPage';
-import { PurchaseOrderPage } from '../../pu/order/PurchaseOrderPage';
-import { ReceivingPage } from '../../pu/receiving/ReceivingPage';
-import { MaterialSubstitutionPage } from '../../pu/substitution/MaterialSubstitutionPage';
-import { StockLedgerPage } from '../../pu/ledger/StockLedgerPage';
-import { StockAdjustPage } from '../../pu/stockadjust/StockAdjustPage';
-import { StockStatusPage } from '../../pu/stockstatus/StockStatusPage';
-import { DocumentBoxPage } from '../../pu/documents/DocumentBoxPage';
+import { ProdConfirmManagementPage } from '../../pd/plan/prod-confirm/ProdConfirmManagementPage';
+import { ProdActualManagementPage } from '../../pd/result/prod-actual/ProdActualManagementPage';
+import { ProdStatusManagementPage } from '../../pd/result/prod-status/ProdStatusManagementPage';
+import { LabelPrintManagementPage } from '../../pd/label/label-print/LabelPrintManagementPage';
+import { ProductStockManagementPage } from '../../lg/stock/product-stock/ProductStockManagementPage';
+import { ShipConfirmManagementPage } from '../../lg/outbound/ship-confirm/ShipConfirmManagementPage';
+import { ShipStatusManagementPage } from '../../lg/outbound/ship-status/ShipStatusManagementPage';
+import { SalesRegisterManagementPage } from '../../sl/entry/sales-register/SalesRegisterManagementPage';
+import { SalesStatusManagementPage } from '../../sl/inquiry/sales-status/SalesStatusManagementPage';
+import { SalesTotalManagementPage } from '../../sl/inquiry/sales-total/SalesTotalManagementPage';
+import { OrderRegisterManagementPage } from '../../pu/order/order-register/OrderRegisterManagementPage';
+import { OrderStatusManagementPage } from '../../pu/order/order-status/OrderStatusManagementPage';
+import { ReceivingManagementPage } from '../../pu/inbound/receiving/ReceivingManagementPage';
+import { SubstitutionManagementPage } from '../../pu/inbound/substitution/SubstitutionManagementPage';
+import { StockLedgerManagementPage } from '../../pu/stock/stock-ledger/StockLedgerManagementPage';
+import { StockAdjustManagementPage } from '../../pu/stock/stock-adjust/StockAdjustManagementPage';
+import { StockStatusManagementPage } from '../../pu/stock/stock-status/StockStatusManagementPage';
+import { DocumentBoxManagementPage } from '../../pu/document/document-box/DocumentBoxManagementPage';
 import { TemperatureMonitorPage } from '../../qm/temperature/TemperatureMonitorPage';
 import { LabelRegisterPage } from '../../qm/labelregister/LabelRegisterPage';
 import { RecipeWritePage } from '../../rd/recipe/RecipeWritePage';
@@ -74,6 +75,7 @@ import type {
   ModuleItem,
   PageContent,
 } from '../types/dashboard';
+import type { DocumentApprovalScope } from '../../groupware/documents/write/types/documentWrite.types';
 
 type DashboardContentProps = {
   selectedModule: ModuleItem;
@@ -83,6 +85,10 @@ type DashboardContentProps = {
   content: PageContent;
   selectedMenuPermissions?: MenuPermission;
   isTenantAdmin?: boolean;
+  dashboardScope?: DocumentApprovalScope | null;
+  onDashboardScopeChange?: (scope: DocumentApprovalScope | null) => void;
+  sharedDocumentId?: number | string | null;
+  onSharedDocumentClose?: () => void;
 };
 
 export function ComingSoonPage({
@@ -183,6 +189,10 @@ export function DashboardContent({
   content,
   selectedMenuPermissions,
   isTenantAdmin = false,
+  dashboardScope = null,
+  onDashboardScopeChange,
+  sharedDocumentId,
+  onSharedDocumentClose,
 }: DashboardContentProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -208,6 +218,8 @@ export function DashboardContent({
         currentMenuName={currentMenuName}
         content={content}
         selectedMenuPermissions={selectedMenuPermissions}
+        dashboardScope={dashboardScope}
+        onDashboardScopeChange={onDashboardScopeChange}
       />
     );
   }
@@ -215,9 +227,13 @@ export function DashboardContent({
   if (selectedModule.id === 'groupware' && currentPageKey === 'write') {
     return (
       <DocumentWritePage
+        sharedDocumentId={sharedDocumentId}
+        onSharedDocumentClose={onSharedDocumentClose}
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
+        dashboardScope={dashboardScope}
+        onDashboardScopeChange={onDashboardScopeChange}
       />
     );
   }
@@ -519,10 +535,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 생산관리 > 생산확정 (송연 PD0001)
-  if (selectedModule.id === 'pd' && currentPageKey === 'prod-confirm') {
+  // 생산관리 > 생산계획 > 생산확정 (화면ID PPProdConfirmView, 송연 PD0001)
+  if (selectedModule.id === 'pd' && currentPageKey === 'PPProdConfirmView') {
     return (
-      <ProductionConfirmPage
+      <ProdConfirmManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -532,10 +548,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 생산관리 > 생산입고 (송연 PD0002)
-  if (selectedModule.id === 'pd' && currentPageKey === 'actual') {
+  // 생산관리 > 생산실적 > 생산입고 (화면ID PRProdActualView, 송연 PD0002)
+  if (selectedModule.id === 'pd' && currentPageKey === 'PRProdActualView') {
     return (
-      <ProductionActualPage
+      <ProdActualManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -545,10 +561,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 생산관리 > 생산현황 (송연 PD0003)
-  if (selectedModule.id === 'pd' && currentPageKey === 'prod-status') {
+  // 생산관리 > 생산실적 > 생산현황 (화면ID PRProdStatusView, 송연 PD0003)
+  if (selectedModule.id === 'pd' && currentPageKey === 'PRProdStatusView') {
     return (
-      <ProductionStatusPage
+      <ProdStatusManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -558,10 +574,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 생산관리 > 라벨출력 (송연 PD0004)
-  if (selectedModule.id === 'pd' && currentPageKey === 'label-print') {
+  // 생산관리 > 라벨관리 > 라벨출력 (화면ID LBLabelPrintView, 송연 PD0004)
+  if (selectedModule.id === 'pd' && currentPageKey === 'LBLabelPrintView') {
     return (
-      <LabelPrintPage
+      <LabelPrintManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -571,10 +587,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 물류관리 > 제품재고관리 (송연 LG0001)
-  if (selectedModule.id === 'lg' && currentPageKey === 'product-stock') {
+  // 물류관리 > 재고관리 > 제품재고관리 (화면ID STProductStockView, 송연 LG0001)
+  if (selectedModule.id === 'lg' && currentPageKey === 'STProductStockView') {
     return (
-      <ProductStockPage
+      <ProductStockManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -584,10 +600,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 물류관리 > 출하확정 (송연 LG0002)
-  if (selectedModule.id === 'lg' && currentPageKey === 'ship-confirm') {
+  // 물류관리 > 출고관리 > 출하확정 (화면ID OBShipConfirmView, 송연 LG0002)
+  if (selectedModule.id === 'lg' && currentPageKey === 'OBShipConfirmView') {
     return (
-      <ShipConfirmPage
+      <ShipConfirmManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -597,10 +613,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 물류관리 > 출하현황 (송연 LG0003)
-  if (selectedModule.id === 'lg' && currentPageKey === 'ship-status') {
+  // 물류관리 > 출고관리 > 출하현황 (화면ID OBShipStatusView, 송연 LG0003)
+  if (selectedModule.id === 'lg' && currentPageKey === 'OBShipStatusView') {
     return (
-      <ShipStatusPage
+      <ShipStatusManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -611,9 +627,9 @@ export function DashboardContent({
   }
 
   // 송연 판매관리 > 판매등록 (송연 sales.py · 36-sales.js)
-  if (selectedModule.id === 'sl' && currentPageKey === 'sales-register') {
+  if (selectedModule.id === 'sl' && currentPageKey === 'ENSalesRegisterView') {
     return (
-      <SalesRegisterPage
+      <SalesRegisterManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -624,9 +640,9 @@ export function DashboardContent({
   }
 
   // 송연 판매관리 > 판매현황 (송연 sales.py · 36-sales.js)
-  if (selectedModule.id === 'sl' && currentPageKey === 'sales-status') {
+  if (selectedModule.id === 'sl' && currentPageKey === 'INSalesStatusView') {
     return (
-      <SalesStatusPage
+      <SalesStatusManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -637,9 +653,9 @@ export function DashboardContent({
   }
 
   // 송연 판매관리 > 토탈집계 (송연 sales.py · 36-sales.js)
-  if (selectedModule.id === 'sl' && currentPageKey === 'sales-total') {
+  if (selectedModule.id === 'sl' && currentPageKey === 'INSalesTotalView') {
     return (
-      <SalesTotalPage
+      <SalesTotalManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -649,10 +665,10 @@ export function DashboardContent({
     );
   }
 
-  // 송연 구매관리 > 발주관리 (송연 app.py purchase-order · 19-purchase.js · 38-po-status.js)
-  if (selectedModule.id === 'pu' && currentPageKey === 'po') {
+  // 구매관리 > 발주관리 > 발주등록 (화면ID POOrderRegisterView, 송연 #screen-po · 19-purchase.js)
+  if (selectedModule.id === 'pu' && currentPageKey === 'POOrderRegisterView') {
     return (
-      <PurchaseOrderPage
+      <OrderRegisterManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -661,9 +677,22 @@ export function DashboardContent({
       />
     );
   }
-  if (selectedModule.id === 'pu' && currentPageKey === 'stock') {
+
+  // 구매관리 > 발주관리 > 발주현황 (화면ID POOrderStatusView, 송연 38-po-status.js)
+  if (selectedModule.id === 'pu' && currentPageKey === 'POOrderStatusView') {
     return (
-      <StockAdjustPage
+      <OrderStatusManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+  if (selectedModule.id === 'pu' && currentPageKey === 'STStockAdjustView') {
+    return (
+      <StockAdjustManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -830,9 +859,9 @@ export function DashboardContent({
   }
 
   // 송연 구매관리 > 문서함 (송연 28-documents.js · attachments.py)
-  if (selectedModule.id === 'pu' && currentPageKey === 'documents') {
+  if (selectedModule.id === 'pu' && currentPageKey === 'DCDocumentBoxView') {
     return (
-      <DocumentBoxPage
+      <DocumentBoxManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -843,9 +872,9 @@ export function DashboardContent({
   }
 
   // 송연 구매관리 > 재고현황 (송연 29-stock-status.js)
-  if (selectedModule.id === 'pu' && currentPageKey === 'stock-status') {
+  if (selectedModule.id === 'pu' && currentPageKey === 'STStockStatusView') {
     return (
-      <StockStatusPage
+      <StockStatusManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -855,9 +884,9 @@ export function DashboardContent({
     );
   }
 
-  if (selectedModule.id === 'pu' && currentPageKey === 'purchase') {
+  if (selectedModule.id === 'pu' && currentPageKey === 'STStockLedgerView') {
     return (
-      <StockLedgerPage
+      <StockLedgerManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -867,9 +896,9 @@ export function DashboardContent({
     );
   }
 
-  if (selectedModule.id === 'pu' && currentPageKey === 'mat-sub') {
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBSubstitutionView') {
     return (
-      <MaterialSubstitutionPage
+      <SubstitutionManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -879,9 +908,9 @@ export function DashboardContent({
     );
   }
 
-  if (selectedModule.id === 'pu' && currentPageKey === 'recv') {
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBReceivingView') {
     return (
-      <ReceivingPage
+      <ReceivingManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}

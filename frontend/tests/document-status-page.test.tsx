@@ -40,6 +40,7 @@ import { toPageSearchFields } from '../src/shared/components/page-search/searchF
 
 const row: DocumentStatusRow = {
   electronicApprovalId: 41,
+  documentNo: 'EA-20261010-0001',
   title: 'Annual plan',
   documentType: 'DRAFTING',
   documentStatus: 'COMPLETED',
@@ -87,7 +88,12 @@ const selectedModule = {
 const SYSTEM_TODAY = '2026-10-20';
 const SYSTEM_DATE_RANGE = { from: '2026-09-20', to: SYSTEM_TODAY };
 
-function renderDocumentStatusPage(currentPageKey = 'documents', read?: boolean) {
+function renderDocumentStatusPage(
+  currentPageKey = 'documents',
+  read?: boolean,
+  excel = false,
+  dashboardScope?: 'MY_PENDING' | 'DRAFT' | 'REVISION_REQUESTED',
+) {
   return render(
     <DashboardContent
       selectedModule={selectedModule}
@@ -97,8 +103,9 @@ function renderDocumentStatusPage(currentPageKey = 'documents', read?: boolean) 
       selectedMenuPermissions={
         read === undefined
           ? undefined
-          : { read, create: false, update: false, delete: false }
+          : { read, create: false, update: false, delete: false, excel }
       }
+      dashboardScope={dashboardScope}
       content={{
         title: '문서현황',
         description: '전자결재 문서를 검색하고 확인합니다.',
@@ -136,6 +143,37 @@ describe('document status page', () => {
         ? Promise.resolve({ resultList: [row], totalRowCount: 1 })
         : Promise.resolve({});
     });
+  });
+
+  it('shows all three breadcrumb levels for document status', async () => {
+    renderDocumentStatusPage('read');
+
+    expect(
+      screen.getByText('그룹웨어 > 문서관리 > 문서현황'),
+    ).toBeInTheDocument();
+    await screen.findByRole('grid', { name: '문서현황' });
+  });
+
+  it('applies and displays the requested dashboard scope on the read-only page', async () => {
+    renderDocumentStatusPage('read', true, false, 'REVISION_REQUESTED');
+
+    await waitFor(() => expect(getListRequest().get('scope')).toBe('REVISION_REQUESTED'));
+    expect(screen.getByText('#보완요청')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('CancelIcon'));
+    await waitFor(() => expect(getListRequest().get('scope')).toBe('ALL'));
+    expect(screen.queryByText('#보완요청')).not.toBeInTheDocument();
+  });
+
+  it('selects document rows without opening detail on cell clicks or keyboard navigation', async () => {
+    renderDocumentStatusPage();
+    const cell = await screen.findByRole('gridcell', { name: 'Annual plan' });
+    fireEvent.click(cell);
+    expect(cell.closest('[role="row"]')?.querySelector('[data-row-selection-overlay]')).not.toBeNull();
+    expect(getComputedStyle(cell).outline).toBe('none');
+    expect(screen.queryByTestId('page-area-overlay')).not.toBeInTheDocument();
+    fireEvent.keyDown(cell, { key: 'ArrowDown' });
+    expect(screen.queryByTestId('page-area-overlay')).not.toBeInTheDocument();
+    expect(DocumentApprovalDetailFeed).not.toHaveBeenCalled();
   });
 
   it('shows the header read action only with menu read permission', async () => {
@@ -197,6 +235,7 @@ describe('document status page', () => {
       (searchField) => searchField.field === 'submittedAt',
     );
 
+    expect(field?.required).toBe(true);
     expect(field?.defaultValue).toEqual({
       from: { type: 'systemDate', offset: { months: -1 } },
       to: { type: 'systemDate' },
@@ -209,7 +248,7 @@ describe('document status page', () => {
 
     expect(columns.map((column) => String(column.field))).toEqual([
       'rowNumber',
-      'electronicApprovalId',
+      'documentNo',
       'title',
       'documentType',
       'documentStatus',
@@ -227,7 +266,7 @@ describe('document status page', () => {
       'submittedAt',
       'documentStatus',
       'documentType',
-      'electronicApprovalId',
+      'documentNo',
       'title',
       'drafterName',
       'drafterDepartmentName',
@@ -244,7 +283,7 @@ describe('document status page', () => {
         from: { type: 'systemDate', offset: { months: -1 } },
         to: { type: 'systemDate' },
       });
-    expect(fields.find((field) => field.field === 'electronicApprovalId')?.type)
+    expect(fields.find((field) => field.field === 'documentNo')?.type)
       .toBe('text');
     expect(fields.find((field) => field.field === 'myParticipantType')?.type)
       .toBe('select');
@@ -253,7 +292,7 @@ describe('document status page', () => {
     ).toContainEqual({ value: 'DRAFTER', label: '기안' });
     expect(fields.find((field) => field.field === 'myActionStatus')?.type)
       .toBe('select');
-    expect(columns.find((column) => column.field === 'electronicApprovalId')?.headerName)
+    expect(columns.find((column) => column.field === 'documentNo')?.headerName)
       .toBe('문서번호');
     expect(columns.some((column) => column.field === 'eabusNo')).toBe(false);
     expect(
@@ -268,7 +307,7 @@ describe('document status page', () => {
       ['submittedAt', 4],
       ['documentStatus', 2],
       ['documentType', 2],
-      ['electronicApprovalId', 1],
+      ['documentNo', 1],
       ['title', 4],
       ['drafterName', 1],
       ['drafterDepartmentName', 1],
@@ -309,7 +348,7 @@ describe('document status page', () => {
 
     expect(getListRequests()).toBe(0);
     await act(async () => resolveSystemDate({ today: SYSTEM_TODAY }));
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     const request = getListRequest();
     expect(request.get('scope')).toBe('ALL');
     expect(request.has('offset')).toBe(false);
@@ -335,14 +374,14 @@ describe('document status page', () => {
 
     renderDocumentStatusPage();
 
-    expect(await screen.findByText('system date unavailable')).toBeVisible();
+    expect(await screen.findByRole('alert')).toHaveTextContent('잠시 후 다시 시도해 주세요.');
     expect(getListRequests()).toBe(0);
     expect(
       window.sessionStorage.getItem('s-erp:page:document-status'),
     ).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '문서현황 다시 조회' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색 기본값 다시 불러오기' }));
 
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
     expect(getListRequest().get('submittedAtTo')).toBe(SYSTEM_DATE_RANGE.to);
     expect(dateRequests).toBe(2);
@@ -364,7 +403,7 @@ describe('document status page', () => {
     );
     renderDocumentStatusPage();
 
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '문서현황 빠른 검색' }))
       .toHaveValue('budget');
     fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
@@ -378,7 +417,7 @@ describe('document status page', () => {
     expect(request.get('submittedAtTo')).toBe('2026-10-20');
   });
 
-  it('keeps an omitted date empty when restoring an applied session', async () => {
+  it('restores a required date for a legacy session before the first query', async () => {
     window.sessionStorage.setItem(
       's-erp:page:document-status',
       JSON.stringify({
@@ -392,26 +431,30 @@ describe('document status page', () => {
 
     renderDocumentStatusPage();
 
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     expect(getListRequest().get('keyword')).toBe('budget');
     expect(getListRequest().get('title')).toBe('Quarterly');
-    expect(getListRequest().has('submittedAtFrom')).toBe(false);
-    expect(getListRequest().has('submittedAtTo')).toBe(false);
+    expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
+    expect(getListRequest().get('submittedAtTo')).toBe(SYSTEM_DATE_RANGE.to);
 
     fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
-    expect(screen.getByLabelText('결재신청일 시작일')).toHaveValue('');
-    expect(screen.getByLabelText('결재신청일 종료일')).toHaveValue('');
+    expect(screen.getByLabelText('결재신청일 시작일'))
+      .toHaveValue(SYSTEM_DATE_RANGE.from);
+    expect(screen.getByLabelText('결재신청일 종료일'))
+      .toHaveValue(SYSTEM_DATE_RANGE.to);
+    expect(
+      screen.getByRole('button', { name: '결재신청일 검색 조건 제거' }),
+    ).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: '조회' }));
-    await waitFor(() => {
-      expect(getListRequest().has('submittedAtFrom')).toBe(false);
-      expect(getListRequest().has('submittedAtTo')).toBe(false);
-    });
+    await waitFor(() => expect(getListRequests()).toBe(2));
+    expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
+    expect(getListRequest().get('submittedAtTo')).toBe(SYSTEM_DATE_RANGE.to);
   });
 
   it('keeps the last applied search when later inputs are not submitted', async () => {
     const firstRender = renderDocumentStatusPage();
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     const searchInput = screen.getByRole('textbox', {
       name: '문서현황 빠른 검색',
     });
@@ -429,11 +472,67 @@ describe('document status page', () => {
 
     api.get.mockClear();
     renderDocumentStatusPage();
-    expect(await screen.findByText('41')).toBeInTheDocument();
+    expect(await screen.findByText('EA-20261010-0001')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: '문서현황 빠른 검색' }))
       .toHaveValue('applied');
     expect(getListRequest().get('keyword')).toBe('applied');
   });
+
+  it('keeps applied detail filters when a keyword search follows unsubmitted edits', async () => {
+    renderDocumentStatusPage('documents', true);
+    await screen.findByText('EA-20261010-0001');
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
+    const detail = screen.getByRole('dialog', { name: '상세 검색' });
+    fireEvent.change(within(detail).getByRole('textbox', { name: '제목' }), {
+      target: { value: '적용된 제목' },
+    });
+    fireEvent.click(within(detail).getByRole('button', { name: '조회' }));
+    await waitFor(() => expect(getListRequest().get('title')).toBe('적용된 제목'));
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
+    fireEvent.change(
+      within(screen.getByRole('dialog', { name: '상세 검색' })).getByRole(
+        'textbox',
+        { name: '제목' },
+      ),
+      { target: { value: '미적용 제목' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: '상세 검색 닫기' }));
+    fireEvent.change(
+      screen.getByRole('textbox', { name: '문서현황 빠른 검색' }),
+      { target: { value: 'quick' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: '조회' }));
+
+    await waitFor(() => {
+      expect(getListRequest().get('keyword')).toBe('quick');
+      expect(getListRequest().get('title')).toBe('적용된 제목');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
+    fireEvent.change(
+      within(screen.getByRole('dialog', { name: '상세 검색' })).getByRole(
+        'textbox',
+        { name: '제목' },
+      ),
+      { target: { value: '두 번째 미적용 제목' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: '상세 검색 닫기' }));
+    fireEvent.change(
+      screen.getByRole('textbox', { name: '문서현황 빠른 검색' }),
+      { target: { value: 'quick-enter' } },
+    );
+    fireEvent.keyDown(
+      screen.getByRole('textbox', { name: '문서현황 빠른 검색' }),
+      { key: 'Enter', code: 'Enter' },
+    );
+
+    await waitFor(() => {
+      expect(getListRequest().get('keyword')).toBe('quick-enter');
+      expect(getListRequest().get('title')).toBe('적용된 제목');
+    });
+  }, 15000);
 
   it('restores the default submitted date after resetting conditions', async () => {
     window.sessionStorage.setItem(
@@ -492,8 +591,20 @@ describe('document status page', () => {
       .toHaveValue(SYSTEM_DATE_RANGE.to);
   });
 
-  it('opens only the read-only context menu on right-click and still opens detail on left-click', async () => {
-    renderDocumentStatusPage();
+  it('hides Excel export when the menu does not grant Excel permission', async () => {
+    renderDocumentStatusPage('documents', false, false);
+    const grid = await screen.findByRole('grid', { name: '문서현황' });
+
+    fireEvent.contextMenu(grid);
+
+    const menu = await screen.findByRole('menu');
+    expect(
+      within(menu).queryByRole('menuitem', { name: '엑셀 내보내기' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens only the read-only context menu on right-click and detail only from the document number', async () => {
+    renderDocumentStatusPage('documents', false, true);
     const cell = await screen.findByRole('gridcell', { name: row.title });
 
     fireEvent.mouseDown(cell, { button: 2 });
@@ -529,15 +640,19 @@ describe('document status page', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     fireEvent.click(cell);
+    expect(screen.queryByTestId('page-area-overlay')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'EA-20261010-0001 상세 보기' }));
     expect(await screen.findByTestId('page-area-overlay')).toBeInTheDocument();
   });
 
-  it('opens the existing approval detail overlay for the selected document and closes it', async () => {
+  it('opens the document number detail and reopens the same document after closing', async () => {
     renderDocumentStatusPage();
-    await screen.findByText('41');
-
-    const selectedRow = screen.getByRole('row', { name: /41 행 선택/ });
-    fireEvent.click(within(selectedRow).getByRole('checkbox'));
+    const link = await screen.findByRole('button', { name: 'EA-20261010-0001 상세 보기' });
+    fireEvent.click(screen.getByRole('gridcell', { name: row.title }));
+    link.focus();
+    expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(true);
+    expect(fireEvent.keyDown(link, { key: ' ' })).toBe(true);
+    fireEvent.click(link);
 
     expect(await screen.findByTestId('page-area-overlay')).toBeInTheDocument();
     const feedCall = vi.mocked(DocumentApprovalDetailFeed).mock.calls.at(-1);
@@ -545,13 +660,14 @@ describe('document status page', () => {
 
     fireEvent.click(screen.getByTestId('page-area-overlay-backdrop'));
     expect(screen.queryByTestId('page-area-overlay')).not.toBeInTheDocument();
+    fireEvent.click(link);
+    expect(await screen.findByTestId('page-area-overlay')).toBeInTheDocument();
+    expect(vi.mocked(DocumentApprovalDetailFeed).mock.calls.at(-1)?.[0].electronicApprovalId).toBe(41);
   });
 
   it('forwards detail actions to the existing composer and refreshes the list', async () => {
     renderDocumentStatusPage();
-    await screen.findByText('41');
-    const selectedRow = screen.getByRole('row', { name: /41 행 선택/ });
-    fireEvent.click(within(selectedRow).getByRole('checkbox'));
+    fireEvent.click(await screen.findByRole('button', { name: 'EA-20261010-0001 상세 보기' }));
     await screen.findByTestId('page-area-overlay');
 
     const initialFeedCall = vi.mocked(DocumentApprovalDetailFeed).mock.calls.at(-1);
@@ -596,8 +712,7 @@ describe('document status page', () => {
 
   it('clears the editing document and refreshes the list when the composer closes', async () => {
     renderDocumentStatusPage();
-    const cell = await screen.findByRole('gridcell', { name: row.title });
-    fireEvent.click(cell);
+    fireEvent.click(await screen.findByRole('button', { name: 'EA-20261010-0001 상세 보기' }));
     await screen.findByTestId('page-area-overlay');
     const feedProps = vi.mocked(DocumentApprovalDetailFeed).mock.calls.at(-1)?.[0];
     if (!feedProps) throw new Error('Detail panel props were not captured.');
@@ -657,7 +772,7 @@ describe('document status page', () => {
 
   it('applies the detailed title filter to the next remote query', async () => {
     renderDocumentStatusPage();
-    await screen.findByText('41');
+    await screen.findByText('EA-20261010-0001');
 
     fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
     fireEvent.change(screen.getByRole('textbox', { name: '제목' }), {
@@ -670,13 +785,13 @@ describe('document status page', () => {
     });
   });
 
-  it('applies document ID and personal approval filters from detailed search', async () => {
+  it('applies document number and personal approval filters from detailed search', async () => {
     renderDocumentStatusPage();
-    await screen.findByText('41');
+    await screen.findByText('EA-20261010-0001');
 
     fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
     fireEvent.change(screen.getByRole('textbox', { name: '문서번호' }), {
-      target: { value: '41' },
+      target: { value: 'EA-20261010-0001' },
     });
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '내 결재 역할' }));
     fireEvent.click(await screen.findByRole('option', { name: '결재' }));
@@ -694,7 +809,7 @@ describe('document status page', () => {
 
     await waitFor(() => {
       const request = getListRequest();
-      expect(request.get('electronicApprovalId')).toBe('41');
+      expect(request.get('documentNo')).toBe('EA-20261010-0001');
       expect(request.get('myParticipantType')).toBe('APPROVAL');
       expect(request.get('myActionStatus')).toBe('PENDING');
       expect(request.get('currentApproverName')).toBe('Sam');
@@ -710,8 +825,36 @@ describe('document status page', () => {
     );
     renderDocumentStatusPage();
 
+    const message = (
+      await screen.findByText(/조회 결과가 없습니다.*기간을 넓히거나/)
+    ).closest('[role="status"]')!;
+    expect(message).toHaveClass('MuiAlert-colorInfo');
     expect(
-      await screen.findByText(/조회 결과가 없습니다.*기간을 넓히거나/),
-    ).toBeInTheDocument();
+      message.compareDocumentPosition(screen.getByRole('grid', { name: '문서현황' }))
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(message).getByRole('button', { name: '검색 조건 초기화' })).toBeInTheDocument();
+  });
+
+  it('hides the empty result message while refreshing and after rows arrive', async () => {
+    api.get.mockImplementation((path: string) =>
+      path.includes('/common/system-date')
+        ? Promise.resolve({ today: SYSTEM_TODAY })
+        : Promise.resolve({ resultList: [], totalRowCount: 0 }),
+    );
+    renderDocumentStatusPage('documents', true);
+    await screen.findByText(/조회 결과가 없습니다/);
+
+    let resolveList!: (value: { resultList: DocumentStatusRow[]; totalRowCount: number }) => void;
+    api.get.mockImplementation(() => new Promise((resolve) => { resolveList = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: '검색 조건 초기화' }));
+    await waitFor(() => expect(getListRequests()).toBe(2));
+    expect(screen.queryByText(/조회 결과가 없습니다/)).not.toBeInTheDocument();
+    expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
+    expect(getListRequest().get('submittedAtTo')).toBe(SYSTEM_DATE_RANGE.to);
+
+    await act(async () => resolveList({ resultList: [row], totalRowCount: 1 }));
+    await screen.findByRole('gridcell', { name: 'Annual plan' });
+    expect(screen.queryByText(/조회 결과가 없습니다/)).not.toBeInTheDocument();
   });
 });

@@ -40,12 +40,18 @@ import egovframework.let.groupware.approval.domain.repository.DocumentApprovalDA
 import egovframework.let.groupware.approval.write.service.DocumentApprovalWriteService;
 import egovframework.let.groupware.approval.common.service.DocumentApprovalDraftSupportService;
 import egovframework.let.groupware.approval.common.service.DocumentApprovalCommentSupportService;
+import egovframework.let.common.idsequence.service.IdSequenceService;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 @Service("documentApprovalWriteService")
 public class DocumentApprovalWriteServiceImpl extends EgovAbstractServiceImpl
         implements DocumentApprovalWriteService {
 
     private static final String OWNER_TYPE = "APPROVAL";
+    private static final String DOCUMENT_NO_GENERATOR_KEY = "ELECTRONIC_APPROVAL_NO";
+    private static final DateTimeFormatter DOCUMENT_NO_DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
     private static final Set<String> DOCUMENT_TYPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "DRAFTING", "BUSINESS_CONTACT", "EXPENSE_RESOLUTION", "ATTENDANCE_APPLICATION")));
     private static final Set<String> DOCUMENT_SCOPES = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
@@ -56,17 +62,20 @@ public class DocumentApprovalWriteServiceImpl extends EgovAbstractServiceImpl
     private final DocumentApprovalAccessService documentApprovalAccessService;
     private final DocumentApprovalDraftSupportService draftSupportService;
     private final DocumentApprovalCommentSupportService commentSupportService;
+    private final IdSequenceService idSequenceService;
     public DocumentApprovalWriteServiceImpl(DocumentApprovalDAO documentApprovalDAO,
             CommonFileService commonFileService, EmbeddedImageStorageService imageStorageService,
             DocumentApprovalAccessService documentApprovalAccessService,
             DocumentApprovalDraftSupportService draftSupportService,
-            DocumentApprovalCommentSupportService commentSupportService) {
+            DocumentApprovalCommentSupportService commentSupportService,
+            IdSequenceService idSequenceService) {
         this.documentApprovalDAO = documentApprovalDAO;
         this.commonFileService = commonFileService;
         this.imageStorageService = imageStorageService;
         this.documentApprovalAccessService = documentApprovalAccessService;
         this.draftSupportService = draftSupportService;
         this.commentSupportService = commentSupportService;
+        this.idSequenceService = idSequenceService;
     }
 
     @Override
@@ -79,6 +88,8 @@ public class DocumentApprovalWriteServiceImpl extends EgovAbstractServiceImpl
         Map<String, DocumentApprovalParticipantVO> participants = draftSupportService.validateParticipants(request, user);
 
         Map<String, Object> documentParams = draftSupportService.documentParams(user, request, actor);
+        String documentNo = generateDocumentNo(user.getTenantId());
+        documentParams.put("documentNo", documentNo);
         Long approvalId = documentApprovalDAO.insertDocumentApprovalMain(documentParams);
         if (approvalId == null) {
             throw new IllegalStateException("전자결재 문서 ID를 확인할 수 없습니다.");
@@ -94,7 +105,14 @@ public class DocumentApprovalWriteServiceImpl extends EgovAbstractServiceImpl
         draftSupportService.insertDraftSavedMessage(user, approvalId);
         imageStorageService.completeOwnerSave(user.getTenantId(), OWNER_TYPE, approvalId,
                 draftSupportService.toStorageUploads(request.getTemporaryImages()), imageSave.getRetainedFileIds());
-        return draftSupportService.draftResponse(approvalId);
+        return draftSupportService.draftResponse(approvalId, documentNo);
+    }
+
+    private String generateDocumentNo(Long tenantId) throws Exception {
+        String issueDate = LocalDate.now().format(DOCUMENT_NO_DATE_FORMAT);
+        Long sequence = idSequenceService.nextValue(
+                DOCUMENT_NO_GENERATOR_KEY, tenantId.toString(), issueDate);
+        return String.format(Locale.ROOT, "EA-%s-%04d", issueDate, sequence);
     }
 
     @Override
@@ -350,6 +368,7 @@ public class DocumentApprovalWriteServiceImpl extends EgovAbstractServiceImpl
 
             DocumentApprovalFeedItemVO feedItem = new DocumentApprovalFeedItemVO();
             feedItem.setElectronicApprovalId(listItem.getElectronicApprovalId());
+            feedItem.setDocumentNo(listItem.getDocumentNo());
             feedItem.setEabusNo(listItem.getEabusNo());
             feedItem.setDocumentType(listItem.getDocumentType());
             feedItem.setDocumentStatus(listItem.getDocumentStatus());

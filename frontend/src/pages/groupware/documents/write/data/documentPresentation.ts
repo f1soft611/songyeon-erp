@@ -57,6 +57,22 @@ const documentApprovalScopeLabels: Record<DocumentApprovalScope, string> = {
   REJECTED: '반려',
 };
 
+const documentApprovalScopes = [
+  'ALL',
+  'MY_PENDING',
+  'IN_PROGRESS',
+  'DRAFT',
+  'COMPLETED',
+  'REVISION_REQUESTED',
+  'REJECTED',
+] as const satisfies readonly DocumentApprovalScope[];
+
+export function parseDocumentApprovalScope(
+  value: string | null,
+): DocumentApprovalScope | null {
+  return documentApprovalScopes.find((scope) => scope === value) ?? null;
+}
+
 function isDocumentType(
   value: DocumentKind | DocumentApprovalRecord['documentType'],
 ): value is DocumentApprovalRecord['documentType'] {

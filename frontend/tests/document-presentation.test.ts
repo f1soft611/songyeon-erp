@@ -3,10 +3,26 @@ import {
   formatApprovalSystemEventContent,
   getApprovalStatusPresentation,
   getApprovalSystemEventPresentation,
+  parseDocumentApprovalScope,
   getDocumentKindPresentation,
 } from '../src/pages/groupware/documents/write/data/documentPresentation';
 
 describe('document presentation metadata', () => {
+  it.each([
+    ['MY_PENDING', 'MY_PENDING'],
+    ['DRAFT', 'DRAFT'],
+    ['REVISION_REQUESTED', 'REVISION_REQUESTED'],
+  ] as const)('accepts the dashboard scope %s', (value, scope) => {
+    expect(parseDocumentApprovalScope(value)).toBe(scope);
+  });
+
+  it.each([null, '', 'unknown', 'constructor'])(
+    'ignores unsupported approval scope %s',
+    (value) => {
+      expect(parseDocumentApprovalScope(value)).toBeNull();
+    },
+  );
+
   it('labels a completed business contact as sent instead of approved', () => {
     expect(getApprovalStatusPresentation('COMPLETED', 'BUSINESS_CONTACT')).toEqual({
       label: '발송완료',

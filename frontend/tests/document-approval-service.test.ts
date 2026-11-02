@@ -27,6 +27,8 @@ vi.mock('../src/shared/services/apiClient', () => ({
 
 import {
   getDocumentApprovalDetail,
+  createDocumentShareToken,
+  getSharedDocumentPreview,
   listApprovalComments,
   createApprovalComment,
   updateApprovalComment,
@@ -61,9 +63,26 @@ describe('document approval service', () => {
     vi.clearAllMocks();
   });
 
+  it('requests encrypted sharing tokens and permission-checked metadata', async () => {
+    const token = `v1.${'A'.repeat(59)}`;
+    api.post.mockResolvedValueOnce({ item: { token } });
+    await expect(createDocumentShareToken(41)).resolves.toBe(token);
+    expect(api.post).toHaveBeenCalledWith('/api/v1/groupware/approvals/documents/41/share-link', {});
+    const record = {
+      electronicApprovalId: 41, documentNo: 'EA-20261028-0041', eabusNo: '001',
+      documentType: 'DRAFTING', documentStatus: 'COMPLETED', title: '문서', drafterName: '기안자', summary: '',
+    };
+    api.get.mockResolvedValueOnce({ item: record });
+    await expect(getSharedDocumentPreview(token)).resolves.toEqual(record);
+    expect(api.get).toHaveBeenCalledWith(`/api/v1/groupware/approvals/shared-document?token=${token}`);
+    api.post.mockResolvedValueOnce({ item: { token: '41' } });
+    await expect(createDocumentShareToken(41)).rejects.toThrow('문서 공유 링크를 확인할 수 없습니다.');
+  });
+
   it('requests and validates an offset page of ordinary documents', async () => {
     const listItem = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       eabusNo: '001',
       documentType: 'DRAFTING',
       documentStatus: 'PENDING',
@@ -101,18 +120,28 @@ describe('document approval service', () => {
       temporaryImages: [],
     };
     api.post.mockResolvedValue({
-      item: { electronicApprovalId: 41, documentStatus: 'DRAFT' },
+      item: {
+        electronicApprovalId: 41,
+        documentNo: 'EA-20261010-0001',
+        documentStatus: 'DRAFT',
+      },
     });
     api.put.mockResolvedValue({
-      item: { electronicApprovalId: 41, documentStatus: 'DRAFT' },
+      item: {
+        electronicApprovalId: 41,
+        documentNo: 'EA-20261010-0001',
+        documentStatus: 'DRAFT',
+      },
     });
 
     await expect(saveDocumentDraft(request, null)).resolves.toEqual({
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       documentStatus: 'DRAFT',
     });
     await expect(saveDocumentDraft(request, 41)).resolves.toEqual({
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       documentStatus: 'DRAFT',
     });
 
@@ -123,6 +152,13 @@ describe('document approval service', () => {
     expect(api.put).toHaveBeenCalledWith(
       '/api/v1/groupware/approvals/drafts/41',
       request,
+    );
+
+    api.post.mockResolvedValueOnce({
+      item: { electronicApprovalId: 41, documentNo: '41', documentStatus: 'DRAFT' },
+    });
+    await expect(saveDocumentDraft(request, null)).rejects.toThrow(
+      '임시저장 응답을 확인할 수 없습니다.',
     );
   });
 
@@ -140,6 +176,7 @@ describe('document approval service', () => {
     };
     const submitted = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       eabusNo: '001',
       documentStatus: 'PENDING',
       submittedAt: '2026-10-12T09:00:00Z',
@@ -153,6 +190,10 @@ describe('document approval service', () => {
     );
 
     api.post.mockResolvedValueOnce({ item: { ...submitted, documentStatus: 'DRAFT' } });
+    await expect(submitDocumentApproval(41, request)).rejects.toThrow(
+      '결재신청 응답을 확인할 수 없습니다.',
+    );
+    api.post.mockResolvedValueOnce({ item: { ...submitted, documentNo: '41' } });
     await expect(submitDocumentApproval(41, request)).rejects.toThrow(
       '결재신청 응답을 확인할 수 없습니다.',
     );
@@ -171,7 +212,10 @@ describe('document approval service', () => {
       temporaryImages: [],
     };
     const sent = {
-      electronicApprovalId: 41, eabusNo: '008', documentStatus: 'COMPLETED',
+      electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
+      eabusNo: '008',
+      documentStatus: 'COMPLETED',
       submittedAt: '2026-10-20T09:00:00Z',
     };
     api.post.mockResolvedValueOnce({ item: sent });
@@ -183,6 +227,7 @@ describe('document approval service', () => {
   it('uses the scoped list, summary, detail, and action ResultVO contracts', async () => {
     const document = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       eabusNo: '001',
       documentType: 'DRAFTING',
       documentStatus: 'PENDING',
@@ -214,14 +259,22 @@ describe('document approval service', () => {
       .mockResolvedValueOnce({ resultList: [document] })
       .mockResolvedValueOnce({ item: summary })
       .mockResolvedValueOnce({ item: detail });
-    api.post.mockResolvedValueOnce({ item: { electronicApprovalId: 41, documentStatus: 'IN_PROGRESS' } });
+    api.post.mockResolvedValueOnce({
+      item: {
+        electronicApprovalId: 41,
+        documentStatus: 'IN_PROGRESS',
+      },
+    });
 
     await expect(listDocumentApprovals('MY_PENDING', 'DRAFTING')).resolves.toEqual([document]);
     await expect(getDocumentApprovalSummary()).resolves.toEqual(summary);
     await expect(getDocumentApprovalDetail(41)).resolves.toEqual(detail);
     await expect(
       processDocumentApprovalAction(41, { action: 'APPROVED' }),
-    ).resolves.toEqual({ electronicApprovalId: 41, documentStatus: 'IN_PROGRESS' });
+    ).resolves.toEqual({
+      electronicApprovalId: 41,
+      documentStatus: 'IN_PROGRESS',
+    });
 
     expect(api.get).toHaveBeenNthCalledWith(
       1,
@@ -276,6 +329,7 @@ describe('document approval service', () => {
     api.get.mockResolvedValue({
       item: {
         electronicApprovalId: 41,
+        documentNo: 'EA-20261010-0001',
         title: '초안',
         contentsHtml: '<p>내용</p>',
         approvalLines: [],
@@ -292,6 +346,7 @@ describe('document approval service', () => {
     api.get.mockResolvedValueOnce({
       item: {
         electronicApprovalId: 41,
+        documentNo: 'EA-20261010-0001',
         title: '초안',
         contentsHtml: '<p>내용</p>',
         approvalLines: [],
@@ -308,6 +363,7 @@ describe('document approval service', () => {
   it('requests and validates the detailed document feed payload only when requested', async () => {
     const feedItem = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       eabusNo: '001',
       documentType: 'DRAFTING',
       documentStatus: 'PENDING',
@@ -348,6 +404,7 @@ describe('document approval service', () => {
   it('uses dedicated pinned routes and validates pin state responses', async () => {
     const listItem = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       eabusNo: '001',
       documentType: 'DRAFTING',
       documentStatus: 'PENDING',
@@ -386,6 +443,7 @@ describe('document approval service', () => {
   it('requires a non-negative safe integer view count in document details', async () => {
     const validDetail = {
       electronicApprovalId: 41,
+      documentNo: 'EA-20261010-0001',
       title: '초안',
       contentsHtml: '<p>내용</p>',
       approvalLines: [],
@@ -412,6 +470,10 @@ describe('document approval service', () => {
     );
 
     api.get.mockResolvedValueOnce({ item: { ...validDetail, viewCount: 1.5 } });
+    await expect(getDocumentApprovalDetail(41)).rejects.toThrow(
+      '전자결재 상세 응답을 확인할 수 없습니다.',
+    );
+    api.get.mockResolvedValueOnce({ item: { ...validDetail, documentNo: '41' } });
     await expect(getDocumentApprovalDetail(41)).rejects.toThrow(
       '전자결재 상세 응답을 확인할 수 없습니다.',
     );

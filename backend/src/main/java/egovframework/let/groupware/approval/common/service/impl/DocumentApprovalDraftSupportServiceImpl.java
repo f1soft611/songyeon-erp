@@ -453,8 +453,9 @@ public class DocumentApprovalDraftSupportServiceImpl extends EgovAbstractService
     }
 
     @Override
-    public DocumentApprovalDraftVO draftResponse(Long approvalId) {
+    public DocumentApprovalDraftVO draftResponse(Long approvalId, String documentNo) {
         DocumentApprovalDraftVO response = workflowResponse(approvalId, "DRAFT");
+        response.setDocumentNo(documentNo);
         return response;
     }
 

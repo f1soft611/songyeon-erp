@@ -42,8 +42,8 @@ const STALE_FIELD: PageSearchField = {
   options: STALE_PERIODS.map((period) => ({ value: String(period.months), label: period.label })),
 };
 
-// 처음 값 · [초기화] 값: 사용여부 '사용'(2026-10-23 부터 기본은 사용중), 안 만든 기간 전체
-const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = { useYn: 'Y' };
+// 상세 조회 조건 처음 값 · [초기화] 값: 없음(전체, 2026-10-29 기본 조건 뺌)
+const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = {};
 
 // 상세 조회 값 → 거르기 값
 const useFilterOf = (values: Record<string, PageSearchFieldValue>): ItemMasterUseFilter =>
@@ -92,6 +92,8 @@ export function ItemMasterManagementPage({ selectedModule, currentMenuName, cont
   const gridRef = useRef<F1GridRef<ItemMasterRow>>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<ItemMasterUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [staleMonths, setStaleMonths] = useState<number | null>(staleMonthsOf(DEFAULT_DETAIL_VALUES));
   const [detailFilter, setDetailFilter] = useState<DetailFilter>(detailFilterOf(DEFAULT_DETAIL_VALUES));
@@ -140,14 +142,25 @@ export function ItemMasterManagementPage({ selectedModule, currentMenuName, cont
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading || management.saving, onClick: requestReload },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading || management.saving,
+          onClick: requestReload
+        },
       ],
     },
     {
       key: 'write',
       actions: [
-        // 새 제품은 영업관리 > 제품등록에서 만든다(송연과 같음)
-        { label: '신규 제품 등록', icon: AddIcon, visible: permissions.create, disabled: management.loading, onClick: () => navigate('/sales/product/PMProductRegisterView') },
+        {
+          label: '신규 제품 등록',
+          icon: AddIcon,
+          visible: permissions.create,
+          disabled: management.loading,
+          onClick: () => navigate('/sales/product/PMProductRegisterView')
+        },
         {
           label: '저장',
           icon: management.saving ? SaveProgressIcon : SaveIcon,
@@ -182,10 +195,12 @@ export function ItemMasterManagementPage({ selectedModule, currentMenuName, cont
         onDefaultSearch={requestReload}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         defaultValues={DEFAULT_DETAIL_VALUES}
         onDetailValuesChange={setDetailValues}
         // 상세 [조회]: 받은 목록을 화면에서 거른다(서버에서 다시 받지 않는다)
         onDetailSearch={(values) => {
+          setAppliedDetailValues(values);
           setUseFilter(useFilterOf(values));
           setStaleMonths(staleMonthsOf(values));
           setDetailFilter(detailFilterOf(values));

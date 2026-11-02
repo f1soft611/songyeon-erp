@@ -11,6 +11,7 @@ import egovframework.com.common.domain.model.CommonFileVO;
 public class DocumentApprovalDetailVO {
 
     private Long electronicApprovalId;
+    private String documentNo;
     private Long draftingWorkCategoryId;
     private String eabusNo;
     private String documentType;
@@ -31,6 +32,8 @@ public class DocumentApprovalDetailVO {
 
     public Long getElectronicApprovalId() { return electronicApprovalId; }
     public void setElectronicApprovalId(Long electronicApprovalId) { this.electronicApprovalId = electronicApprovalId; }
+    public String getDocumentNo() { return documentNo; }
+    public void setDocumentNo(String documentNo) { this.documentNo = documentNo; }
     public Long getDraftingWorkCategoryId() { return draftingWorkCategoryId; }
     public void setDraftingWorkCategoryId(Long draftingWorkCategoryId) {
         this.draftingWorkCategoryId = draftingWorkCategoryId;

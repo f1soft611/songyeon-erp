@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  HISTORY_EXCEL_COLUMNS, STATUS_EXCEL_COLUMNS, historyRows, monthStart, sortStatus, stagingError, statusCounts, toBulkBody, toStatusRows,
-  type PurchaseOrder,
-} from '../src/pages/pu/order/utils/purchaseOrder';
+import type { PurchaseOrder } from '../src/pages/pu/order/order-register/types/purchaseOrder.types';
+import { HISTORY_EXCEL_COLUMNS, historyRows, stagingError, toBulkBody } from '../src/pages/pu/order/order-register/utils/purchaseOrder';
+import { STATUS_EXCEL_COLUMNS, monthStart, sortStatus, statusCounts, toStatusRows } from '../src/pages/pu/order/order-status/utils/orderStatus';
 
 const po = (id: number, extra: Partial<PurchaseOrder> = {}): PurchaseOrder => ({ id, materialCode: `M${id}`, materialName: `원재료${id}`, qty: 10, orderDate: '2026-10-07', clientName: '대한상사', received: false, ...extra });
 

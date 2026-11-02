@@ -13,8 +13,9 @@ import { validatePageResponse } from './documentStatusResponse';
 const DOCUMENTS_API = '/api/v1/groupware/approvals/documents/search';
 
 function buildFilterParams(filters: DocumentStatusFilters): URLSearchParams {
-  const params = new URLSearchParams({ scope: 'ALL' });
+  const params = new URLSearchParams({ scope: filters.scope ?? 'ALL' });
   for (const [field, rawValue] of Object.entries(filters)) {
+    if (field === 'scope') continue;
     const value = rawValue?.trim();
     if (value) params.set(field, value);
   }

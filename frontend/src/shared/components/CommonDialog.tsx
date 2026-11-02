@@ -26,6 +26,7 @@ export type CommonDialogProps = {
   description?: ReactNode;
   titleAside?: ReactNode;
   children: ReactNode;
+  overlay?: ReactNode;
   footerStart?: ReactNode;
   actions?: ReactNode;
   size?: CommonDialogSize;
@@ -46,6 +47,7 @@ export function CommonDialog({
   description,
   titleAside,
   children,
+  overlay,
   footerStart,
   actions,
   size = 'md',
@@ -234,6 +236,7 @@ export function CommonDialog({
           )}
         </DialogActions>
       )}
+      {overlay}
     </Dialog>
   );
 }

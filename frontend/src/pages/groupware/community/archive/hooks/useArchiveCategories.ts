@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import {
   fetchCommonCodeGroups,
   fetchCommonCodeItems,
@@ -17,9 +18,11 @@ export function useArchiveCategories() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const requestSequence = useRef(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   const loadCategories = useCallback(async () => {
     const currentRequest = ++requestSequence.current;
+    start();
     setIsLoading(true);
     setError(null);
     try {
@@ -47,9 +50,11 @@ export function useArchiveCategories() {
           name: item.itemNm,
           active: item.useAt === 'Y',
         })));
+        succeed();
       }
     } catch (cause) {
       if (currentRequest === requestSequence.current) {
+        fail(cause);
         setError(asError(cause));
       }
     } finally {
@@ -57,7 +62,7 @@ export function useArchiveCategories() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [start, succeed, fail]);
 
   useEffect(() => {
     void loadCategories();
@@ -66,5 +71,5 @@ export function useArchiveCategories() {
     };
   }, [loadCategories]);
 
-  return { categories, groupId, items, isLoading, error, loadCategories };
+  return { initialLoad, categories, groupId, items, isLoading, error, loadCategories };
 }

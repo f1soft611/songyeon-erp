@@ -37,8 +37,26 @@ export function ProductInfoForm({ form, onChange, packagingTypes, storageOptions
         slotProps={{ ...shrink, htmlInput: { readOnly: true } }}
         sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'action.hover' } }}
       />
-      <TextField size="small" margin="none" required disabled={readOnly} label="제품명" placeholder="예: 떡볶이소스 2kg" value={form.name} onChange={(event) => onChange({ name: event.target.value })} slotProps={shrink} />
-      <TextField size="small" margin="none" disabled={readOnly} label="규격/단위" placeholder="예: 2kg*6ea" value={form.spec} onChange={(event) => onChange({ spec: event.target.value })} slotProps={shrink} />
+      <TextField
+        size="small"
+        margin="none"
+        required disabled={readOnly}
+        label="제품명"
+        placeholder="예: 떡볶이소스 2kg"
+        value={form.name}
+        onChange={(event) => onChange({ name: event.target.value })}
+        slotProps={shrink}
+      />
+      <TextField
+        size="small"
+        margin="none"
+        disabled={readOnly}
+        label="규격/단위"
+        placeholder="예: 2kg*6ea"
+        value={form.spec}
+        onChange={(event) => onChange({ spec: event.target.value })}
+        slotProps={shrink}
+      />
       <TextField
         select
         size="small"
@@ -70,8 +88,6 @@ export function ProductInfoForm({ form, onChange, packagingTypes, storageOptions
           <MenuItem key={option.code} value={option.code}>{option.name}</MenuItem>
         ))}
       </TextField>
-      {/* 거래처명: [선택] → 거래처 팝업에서 고른다(2026-10-28, S_ERP 수주등록 거래처 칸과 같은 칸 + 선택 단추). 저장은 거래처코드 */}
-      {/* MasterPicker 는 S_ERP 화면(입력칸 위 여백 있음)에 맞춰 위 여백(mt: 2)이 있다. 이 화면 칸들은 여백이 없어 줄을 맞춘다 */}
       <Box sx={{ '& > .MuiStack-root': { mt: 0 } }}>
         <MasterPicker
           label="거래처명"

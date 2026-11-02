@@ -17,6 +17,7 @@ type DocumentFeedItemProps = {
   ) => void;
   onActionComplete: () => void;
   onEditDocument: (detail: DocumentApprovalDetail) => void;
+  onOpenDocument?: (documentId: number) => void;
 };
 
 export function DocumentFeedItem({
@@ -27,6 +28,7 @@ export function DocumentFeedItem({
   onTogglePin,
   onActionComplete,
   onEditDocument,
+  onOpenDocument,
 }: DocumentFeedItemProps) {
   return (
     <Stack spacing={1}>
@@ -39,6 +41,7 @@ export function DocumentFeedItem({
         electronicApprovalId={item.id}
         onActionComplete={onActionComplete}
         onEditDocument={onEditDocument}
+        onOpenDocument={onOpenDocument}
         detailRefreshToken={detailRefreshToken}
         pinPending={pinPending}
         onTogglePin={onTogglePin}

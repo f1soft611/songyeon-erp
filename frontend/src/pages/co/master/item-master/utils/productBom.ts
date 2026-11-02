@@ -1,5 +1,6 @@
 import type { BomEditRow, BomLine, MaterialOption, ProductBomRow } from '../types/itemMaster.types';
 import { formatQty, percentText } from '../../../../../shared/utils/numberFormat';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
 
 // 송연 기초정보 제품BOM 화면 규칙(CM0001Tab05·CM0001Tab05Modal·BomRowsTable 에서 옮김). 2026-10-27 co/basic-info 에서 옮김
 
@@ -22,6 +23,14 @@ export function materialNamePatch(
   }
   const clearAuto = row.autoPrice ? { unitPrice: null, autoPrice: false } : {};
   return { materialName: name, materialCode: match ? match.code : null, ...clearAuto };
+}
+
+// 2026-10-30 배합비 원재료명 고르기 팝업 후보: 원재료코드 · 이름 일부로 찾는다
+export function materialPickerOptions(materials: MaterialOption[], keyword: string): MasterPickerOption[] {
+  const text = keyword.trim().toLowerCase();
+  return materials
+    .filter((material) => !text || material.name.toLowerCase().includes(text) || material.code.toLowerCase().includes(text))
+    .map((material, index) => ({ id: index + 1, code: material.code, name: material.name }));
 }
 
 // 송연 diffBomSummary: 바뀌기 전·후를 견줘 추가·바뀜·삭제만 적는다

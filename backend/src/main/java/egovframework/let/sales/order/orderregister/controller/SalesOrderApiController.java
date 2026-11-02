@@ -61,6 +61,15 @@ public class SalesOrderApiController {
         return resultVoHelper.buildFromMap(resultMap, ResponseCode.SUCCESS);
     }
 
+    @Operation(summary = "수주 거래처 고르기 팝업(분류에 매출, 코드 · 이름)", security = { @SecurityRequirement(name = "Authorization") }, tags = { TAG })
+    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "조회 성공") })
+    @GetMapping("/client-options")
+    public ResultVO listClientOptions() throws Exception {
+        Map<String, Object> resultMap = new HashMap<>();
+        resultMap.put("resultList", salesOrderService.listSalesClientOptions());
+        return resultVoHelper.buildFromMap(resultMap, ResponseCode.SUCCESS);
+    }
+
     @Operation(summary = "수주 품목 후보(사용 중인 제품)", security = { @SecurityRequirement(name = "Authorization") }, tags = { TAG })
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "조회 성공") })
     @GetMapping("/products")

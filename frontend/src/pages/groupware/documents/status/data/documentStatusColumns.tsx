@@ -1,4 +1,4 @@
-import { Chip } from '@mui/material';
+import { Chip, Link } from '@mui/material';
 import type { F1GridColumn } from '../../../../../shared/components/f1-grid/types/grid.types';
 import type { DocumentStatusRow } from '../types/documentStatus.types';
 import {
@@ -20,7 +20,13 @@ function renderTokenLabels(value: string, labels: Record<string, string>) {
     .join(', ');
 }
 
-export function createDocumentStatusColumns(): F1GridColumn<DocumentStatusRow>[] {
+type DocumentStatusColumnOptions = {
+  onOpenDocument?: (row: DocumentStatusRow) => void;
+};
+
+export function createDocumentStatusColumns({
+  onOpenDocument,
+}: DocumentStatusColumnOptions = {}): F1GridColumn<DocumentStatusRow>[] {
   return [
     {
       field: 'rowNumber',
@@ -28,15 +34,16 @@ export function createDocumentStatusColumns(): F1GridColumn<DocumentStatusRow>[]
       type: 'rownumber',
       width: 56,
       align: 'center',
+      pinned: 'left',
       editable: false,
       search: { hidden: true },
     },
     {
-      field: 'electronicApprovalId',
+      field: 'documentNo',
       headerName: '문서번호',
-      // type: 'number',
-      width: 80,
+      width: 130,
       align: 'center',
+      pinned: 'left',
       editable: false,
       search: {
         label: '문서번호',
@@ -44,6 +51,36 @@ export function createDocumentStatusColumns(): F1GridColumn<DocumentStatusRow>[]
         span: 1,
         group: '문서정보',
       },
+      renderCell: onOpenDocument
+        ? ({ row }) => (
+            <Link
+              component="button"
+              type="button"
+              underline="hover"
+              aria-label={`${row.documentNo} 상세 보기`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenDocument(row);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.stopPropagation();
+                }
+              }}
+              sx={{
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontWeight: 600,
+                fontSize: 'inherit',
+                verticalAlign: 'baseline',
+              }}
+            >
+              {row.documentNo}
+            </Link>
+          )
+        : undefined,
     },
     {
       field: 'title',
@@ -96,6 +133,7 @@ export function createDocumentStatusColumns(): F1GridColumn<DocumentStatusRow>[]
         order: 1,
         span: 4,
         group: '결재신청일',
+        required: true,
         defaultValue: {
           from: { type: 'systemDate', offset: { months: -1 } },
           to: { type: 'systemDate' },

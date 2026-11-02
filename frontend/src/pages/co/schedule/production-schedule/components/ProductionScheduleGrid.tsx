@@ -35,7 +35,7 @@ export function createProductionScheduleColumns(): F1GridColumn<ProductionSchedu
       width: 120,
       align: 'right',
       type: 'decimal',
-      decimalPlaces: 2,
+      decimalPlaces: 4,
       editable: false
     },
     {

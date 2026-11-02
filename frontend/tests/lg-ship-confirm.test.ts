@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import * as shipConfirmUtils from '../src/pages/lg/confirm/utils/shipConfirm';
+import * as shipConfirmUtils from '../src/pages/lg/outbound/ship-confirm/utils/shipConfirm';
 
 import {
   SHIP_EXCEL_COLUMNS, buildShipmentLogHtml, buildWorkOrderHtml, negativeStockMessage, onlyDecimal, onlyDigits, onlyQty,
-  shipLotText, sortByVehicle, suggestShipQty, toConfirmBody, toShipRow, type ShipRecord,
-} from '../src/pages/lg/confirm/utils/shipConfirm';
+  shipLotText, sortByVehicle, suggestShipQty, toConfirmBody, toShipRow,
+} from '../src/pages/lg/outbound/ship-confirm/utils/shipConfirm';
+import type { ShipRecord } from '../src/pages/lg/outbound/ship-confirm/types/shipConfirm.types';
 
 const rec = (extra: Partial<ShipRecord> = {}): ShipRecord => ({ id: 7, source: 'manual', productName: '로제파스타소스(5kg*4ea)', clientName: '달구지', ...extra });
 
@@ -28,7 +29,7 @@ describe('출하확정 utils(송연 LG0002)', () => {
     expect(onlyDecimal('5만0.5원')).toBe('50.5');
     const row = { ...toShipRow(rec({ plannedQty: '135' })), inputVehicle: '없는차', inputPacking: '박스', inputOrder: '', inputBox: ' 4 ' };
     expect(toConfirmBody(row, ['박스'], ['1톤'])).toEqual({
-      actualQty: '135', boxQty: '4', vehicle: '', driverName: '', packingMethod: '박스', note: '', visitOrder: null, charterInfo: '', charterAmount: null,
+      actualQty: '135', boxQty: '4', vehicle: '', driverName: '', driverId: null, packingMethod: '박스', note: '', visitOrder: null, charterInfo: '', charterAmount: null,
     });
     // 표에 친 그대로 들어와도 보낼 때 거른다
     const typed = { ...row, inputActual: '135 kg', inputBox: '4박스', inputOrder: '2번', inputCharterAmount: '5만0원', inputVehicle: '1톤' };

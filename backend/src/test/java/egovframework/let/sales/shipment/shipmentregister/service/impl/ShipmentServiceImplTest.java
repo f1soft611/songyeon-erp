@@ -43,6 +43,7 @@ class ShipmentServiceImplTest {
 		when(orders.resolveProductCode(eq(PRODUCT), any(), any())).thenReturn("000001");
 		when(orders.requireProductCode(eq(PRODUCT), any(), any())).thenReturn("000001");
 		when(orders.requireClientCode(CLIENT)).thenReturn("000005");
+		when(orders.resolveSalesClientCode(any(), eq(CLIENT))).thenReturn("000005");
 		OrderProductVO product = new OrderProductVO();
 		product.setCode("000001");
 		product.setName("국물두루치기분말");
@@ -150,7 +151,7 @@ class ShipmentServiceImplTest {
 	void clientRejectedBeforeInsert() throws Exception {
 		ShipmentDAO dao = mock(ShipmentDAO.class);
 		SalesOrderService orders = orders();
-		when(orders.resolveSalesClient("다온")).thenThrow(new IllegalArgumentException("'다온' 은 매입거래처로 등록되어 있어 수주를 받을 수 없습니다."));
+		when(orders.resolveSalesClientCode(any(), eq("다온"))).thenThrow(new IllegalArgumentException("'다온' 은 매입거래처로 등록되어 있어 수주를 받을 수 없습니다."));
 		ShipmentServiceImpl service = new ShipmentServiceImpl(dao, orders);
 		ShipmentVO r = request();
 		r.setClientName("다온");

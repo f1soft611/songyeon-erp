@@ -68,8 +68,8 @@ describe('출하등록 utils', () => {
   });
 
   it('저장 본문은 글자를 다듬고 로트·수주 번호를 함께 보낸다', () => {
-    const row = { ...toShipmentRow(1, null, '2026-10-06'), clientName: ' A ', productName: ' P ', orderQty: ' 10 ', sourceOrderId: 2 };
-    expect(saveBodyOf(row)).toEqual({ scheduleDate: '2026-10-06', clientName: 'A', productName: 'P', orderQty: '10', note: '', lotId: null, sourceOrderId: 2 });
+    const row = { ...toShipmentRow(1, null, '2026-10-06'), clientCode: '900005', clientName: ' A ', productCode: '900001', productName: ' P ', orderQty: ' 10 ', sourceOrderId: 2 };
+    expect(saveBodyOf(row)).toEqual({ scheduleDate: '2026-10-06', clientCode: '900005', clientName: 'A', productCode: '900001', productName: 'P', orderQty: '10', note: '', lotId: null, sourceOrderId: 2 });
   });
 
   it('생산예정: 입고 전 로트(내 배분은 잔량에 도로 더함)와 생산확정 전 수주를 날짜순으로', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  formatMoney, formatQty, monthStart, pullItems, pullMessage, statusOf, summaryText, toManualBody, toShippableRow, type ShippableRecord,
-} from '../src/pages/sl/register/utils/salesRegister';
+  formatMoney, formatQty, monthStart, pullItems, pullMessage, statusOf, summaryText, toManualBody, toShippableRow, type ShippableRecord, type ShippableRow,
+} from '../src/pages/sl/entry/sales-register/utils/salesRegister';
 
 const rec = (extra: Partial<ShippableRecord> = {}): ShippableRecord => ({ sourceType: 'logistics', sourceId: 7, qty: 135, unitPrice: 4960, amount: 669600, ...extra });
 
@@ -28,7 +28,7 @@ describe('판매등록 utils(송연 sales.py · 36-sales.js)', () => {
     expect(formatMoney(1148635.068)).toBe('1,148,635.068');
     expect(formatMoney(null)).toBe('');
     expect(monthStart(new Date(2026, 9, 7))).toBe('2026-10-01');
-    expect(toManualBody({ saleDate: '2026-10-07', clientName: ' 달구지 ', productName: ' 로제 ', qty: ' 10 ', unitPrice: '', note: ' ' }))
+    expect(toManualBody({ ...rec(), key: 'k', saleDate: '2026-10-07', clientName: ' 달구지 ', productName: ' 로제 ', qty: 10, unitPrice: null, note: ' ' } as ShippableRow))
       .toEqual({ saleDate: '2026-10-07', clientName: '달구지', productName: '로제', qtyText: '10', unitPriceText: '', note: '' });
   });
 });

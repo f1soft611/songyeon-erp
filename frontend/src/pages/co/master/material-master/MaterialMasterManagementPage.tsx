@@ -36,15 +36,24 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
   },
 });
 
-// 상세 조회 조건(검색칸 오른쪽 ⌄): 납품업체 · 사용여부(열의 search 설정) + 안 쓴 기간(숫자 · 단위).
-// 안 쓴 기간은 표의 칸이 아니라서 따로 더한다. 정해진 기간만으로는 '45일' 같은 기간을 볼 수 없어 숫자를 직접 적는다(송연과 같음)
 const STALE_FIELDS: PageSearchField[] = [
-  { field: 'staleValue', label: '안 쓴 기간', type: 'number', searchSpan: 1 },
-  { field: 'staleUnit', label: '기간 단위', type: 'select', searchSpan: 1, options: STALE_UNITS },
+  {
+    field: 'staleValue',
+    label: '안 쓴 기간',
+    type: 'number'
+    , searchSpan: 1
+  },
+  {
+    field: 'staleUnit',
+    label: '기간 단위',
+    type: 'select',
+    searchSpan: 1,
+    options: STALE_UNITS
+  },
 ];
 
-// 처음 값 · [초기화] 값: 사용여부 '사용', 안 쓴 기간 단위 '월'
-const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = { useYn: 'Y', staleUnit: 'month' };
+// 상세 조회 조건 처음 값 · [초기화] 값: 없음(전체, 2026-10-29 기본 조건 뺌)
+const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = {};
 
 const useFilterOf = (values: Record<string, PageSearchFieldValue>): MaterialUseFilter =>
   values.useYn === 'Y' || values.useYn === 'N' ? values.useYn : 'ALL';
@@ -74,6 +83,8 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
   const gridRef = useRef<F1GridRef<MaterialMasterRow>>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<MaterialUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [stale, setStale] = useState(staleOf(DEFAULT_DETAIL_VALUES));
   // 상세 조회 납품업체(이름 · 거래처코드 일부, 열의 search 설정)
@@ -154,8 +165,20 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading || management.saving, onClick: requestReload },
-        { label: '엑셀 다운로드', icon: FileDownloadIcon, visible: permissions.excel, disabled: management.loading, onClick: () => void exportExcel() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading || management.saving,
+          onClick: requestReload
+        },
+        {
+          label: '엑셀 다운로드',
+          icon: FileDownloadIcon,
+          visible: permissions.excel,
+          disabled: management.loading,
+          onClick: () => void exportExcel()
+        },
       ],
     },
     {
@@ -203,10 +226,12 @@ export function MaterialMasterManagementPage({ selectedModule, currentMenuName, 
         onDefaultSearch={requestReload}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         defaultValues={DEFAULT_DETAIL_VALUES}
         onDetailValuesChange={setDetailValues}
         // 상세 [조회]: 받은 목록을 화면에서 거른다(서버에서 다시 받지 않는다)
         onDetailSearch={(values) => {
+          setAppliedDetailValues(values);
           setUseFilter(useFilterOf(values));
           setStale(staleOf(values));
           setSupplierKeyword(typeof values.supplierCodes === 'string' ? values.supplierCodes.trim() : '');

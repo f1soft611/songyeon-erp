@@ -106,7 +106,7 @@ export function toDocumentStatusFilters(
   const normalizedKeyword = keyword.trim();
   if (normalizedKeyword) filters.keyword = normalizedKeyword;
 
-  const electronicApprovalId = readTextValue(values, 'electronicApprovalId');
+  const documentNo = readTextValue(values, 'documentNo');
   const title = readTextValue(values, 'title');
   const documentType = readTextValue(values, 'documentType');
   const documentStatus = readTextValue(values, 'documentStatus');
@@ -119,7 +119,7 @@ export function toDocumentStatusFilters(
   const submittedAt = readDateRange(values, 'submittedAt');
   const updatedAt = readDateRange(values, 'updatedAt');
 
-  if (electronicApprovalId) filters.electronicApprovalId = electronicApprovalId;
+  if (documentNo) filters.documentNo = documentNo;
   if (title) filters.title = title;
   if (documentType && isDocumentType(documentType)) {
     filters.documentType = documentType;

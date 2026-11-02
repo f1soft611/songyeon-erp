@@ -7,6 +7,7 @@ import java.util.Map;
 import org.egovframe.rte.psl.dataaccess.EgovAbstractMapper;
 import org.springframework.stereotype.Repository;
 
+import egovframework.let.co.master.itemmaster.domain.model.ClientOptionVO;
 import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
 import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
 
@@ -53,6 +54,14 @@ public class SalesOrderDAO extends EgovAbstractMapper {
     }
 
     /** 거래처 분류. 없으면 null. */
+    public String selectSalesClientNameByCode(String clientCode) throws Exception {
+        return selectOne("SalesOrderDAO.selectSalesClientNameByCode", clientCode);
+    }
+
+    public List<ClientOptionVO> selectSalesClientOptions() throws Exception {
+        return selectList("SalesOrderDAO.selectSalesClientOptions");
+    }
+
     public String selectClientType(String name) throws Exception {
         return selectOne("SalesOrderDAO.selectClientType", name);
     }

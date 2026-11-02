@@ -28,8 +28,14 @@ public class PendingOrderVO implements Serializable {
     @Schema(description = "거래처")
     private String clientName;
 
+    @Schema(description = "거래처코드")
+    private String clientCode;
+
     @Schema(description = "품목명")
     private String productName;
+
+    @Schema(description = "제품코드")
+    private String productCode;
 
     @Schema(description = "수량")
     private String orderQty;

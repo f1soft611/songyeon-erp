@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import type { CommonViewMode } from '../../../../../shared/components/view-mode/commonViewTypes';
 import { fetchMyProfile } from '../../../../dashboard/services/profileSettings.service';
 import {
@@ -84,10 +85,13 @@ function mapFeedDocument(
   };
 }
 
-export function useDocumentWritePage() {
+export function useDocumentWritePage(
+  initialScope: DocumentApprovalScope = 'ALL',
+  onScopeChange?: (scope: DocumentApprovalScope | null) => void,
+) {
   const [viewMode, setViewMode] = useState<CommonViewMode>('list');
   const [selectedKind, setSelectedKind] = useState<DocumentKind | ''>('');
-  const [scope, setScope] = useState<DocumentApprovalScope>('ALL');
+  const [scope, setScope] = useState<DocumentApprovalScope>(initialScope);
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | undefined>();
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [documents, setDocuments] = useState<DocumentWriteItem[]>([]);
@@ -100,6 +104,7 @@ export function useDocumentWritePage() {
   const [summary, setSummary] = useState<DocumentApprovalSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
   const [feedEmployeeId, setFeedEmployeeId] = useState('');
   const [feedEmployeeError, setFeedEmployeeError] = useState('');
   const [feedEmployeeRetryToken, setFeedEmployeeRetryToken] = useState(0);
@@ -113,6 +118,7 @@ export function useDocumentWritePage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [pageError, setPageError] = useState('');
   const [detailDocumentId, setDetailDocumentId] = useState<number | null>(null);
+
   const openComposer = useCallback(() => setIsComposerOpen(true), []);
   const closeComposer = useCallback(() => setIsComposerOpen(false), []);
   const refresh = useCallback(({ quiet = false }: { quiet?: boolean } = {}) => {
@@ -129,6 +135,7 @@ export function useDocumentWritePage() {
 
   useEffect(() => {
     let active = true;
+    start();
     const generation = pageGeneration.current + 1;
     pageGeneration.current = generation;
     nextOffset.current = 0;
@@ -203,15 +210,12 @@ export function useDocumentWritePage() {
         nextOffset.current = nextDocuments.nextOffset;
         setHasNextPage(nextDocuments.nextOffset < nextDocuments.totalRowCount);
         setSummary(nextSummary);
+        succeed();
       })
       .catch((error: unknown) => {
         if (active) {
+          fail(error);
           setHasNextPage(false);
-          if (!isQuietReload) {
-            setDocuments([]);
-            setPinnedDocuments([]);
-            setFeedDocuments([]);
-          }
           setLoadError(
             error instanceof Error
               ? error.message
@@ -229,7 +233,7 @@ export function useDocumentWritePage() {
         pageGeneration.current += 1;
       }
     };
-  }, [reloadRequest, scope, selectedDocumentId, selectedKind, viewMode]);
+  }, [reloadRequest, scope, selectedDocumentId, selectedKind, viewMode, start, succeed, fail]);
 
   const requestNextPage = useCallback(async (isRetry = false) => {
     if (
@@ -390,10 +394,12 @@ export function useDocumentWritePage() {
   const selectScope = useCallback((nextScope: DocumentApprovalScope) => {
     setSelectedDocumentId(undefined);
     setScope(nextScope);
-  }, []);
+    onScopeChange?.(nextScope === 'ALL' ? null : nextScope);
+  }, [onScopeChange]);
   const clearScopeFilter = useCallback(() => {
     setScope('ALL');
-  }, []);
+    onScopeChange?.(null);
+  }, [onScopeChange]);
   const clearKindFilter = useCallback(() => {
     setSelectedKind('');
   }, []);
@@ -404,7 +410,8 @@ export function useDocumentWritePage() {
     setSelectedKind('');
     setScope('ALL');
     setSelectedDocumentId(documentId);
-  }, []);
+    onScopeChange?.(null);
+  }, [onScopeChange]);
   const retry = useCallback(() => refresh(), [refresh]);
   const isPinPending = useCallback(
     (electronicApprovalId: number) => pinPendingIds.includes(electronicApprovalId),
@@ -480,6 +487,7 @@ export function useDocumentWritePage() {
   ]);
 
   return {
+    initialLoad,
     files,
     viewMode,
     setViewMode,

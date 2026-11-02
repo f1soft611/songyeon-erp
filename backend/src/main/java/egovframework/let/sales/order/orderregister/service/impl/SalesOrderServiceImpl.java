@@ -10,6 +10,7 @@ import org.egovframe.rte.fdl.cmmn.EgovAbstractServiceImpl;
 import org.springframework.stereotype.Service;
 
 import egovframework.let.co.master.itemmaster.service.ItemMasterService;
+import egovframework.let.co.master.itemmaster.domain.model.ClientOptionVO;
 import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
 import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
 import egovframework.let.sales.order.orderregister.domain.repository.SalesOrderDAO;
@@ -33,6 +34,7 @@ public class SalesOrderServiceImpl extends EgovAbstractServiceImpl implements Sa
     static final String CLIENT_REQUIRED_MESSAGE = "거래처를 입력해주세요.";
     static final String CLIENT_CODE_MESSAGE = "거래처코드가 있는 거래처를 골라주세요";
     static final String PRODUCT_MESSAGE = "제품마스터에 등록된 품목을 골라주세요";
+    static final String SALES_CLIENT_CODE_MESSAGE = "수주를 받을 수 있는 매출 거래처를 골라주세요";
     static final String SHIPPING_REQUIRED_MESSAGE = "물류출고일을 정하거나 '재고생산' 에 체크해주세요. "
             + "둘 중 하나가 있어야 나중에 출하에서 이 건을 찾을 수 있어요.";
 
@@ -54,6 +56,11 @@ public class SalesOrderServiceImpl extends EgovAbstractServiceImpl implements Sa
     @Override
     public List<String> listSalesClientNames() throws Exception {
         return salesOrderDAO.selectSalesClientNames();
+    }
+
+    @Override
+    public List<ClientOptionVO> listSalesClientOptions() throws Exception {
+        return salesOrderDAO.selectSalesClientOptions();
     }
 
     @Override
@@ -113,9 +120,9 @@ public class SalesOrderServiceImpl extends EgovAbstractServiceImpl implements Sa
             }
         }
         SalesOrderVO order = new SalesOrderVO();
-        order.setClientName(resolveSalesClient(r.getClientName()));
-        // 2026-10-26 sales_order 에는 코드만 남는다. 코드로 못 바꾸는 거래처 · 품목은 저장하면 사라지므로 막는다
-        order.setClientCode(requireClientCode(order.getClientName()));
+        // 2026-10-26 sales_order 에는 코드만 남는다. 코드로 못 바꾸는 거래처 · 품목은 저장하면 사라지므로 막는다.
+        // 2026-10-29 화면은 거래처코드 · 제품코드를 보낸다(코드가 없으면 예전처럼 이름으로 찾는다)
+        order.setClientCode(resolveSalesClientCode(r.getClientCode(), r.getClientName()));
         order.setProductName(r.getProductName());
         order.setProductCode(requireProductCode(r.getProductName(), r.getSpec(), r.getProductCode()));
         order.setOrderQty(qtyOf(r.getOrderQty())); // 2026-10-23 숫자만(쉼표는 뺀다, 비우면 없음)
@@ -197,7 +204,23 @@ public class SalesOrderServiceImpl extends EgovAbstractServiceImpl implements Sa
     }
 
     @Override
+    public String resolveSalesClientCode(String clientCode, String clientName) throws Exception {
+        String code = blankToNull(clientCode);
+        if (code == null) {
+            return requireClientCode(resolveSalesClient(clientName));
+        }
+        if (salesOrderDAO.selectSalesClientNameByCode(code) == null) {
+            throw new IllegalArgumentException(SALES_CLIENT_CODE_MESSAGE);
+        }
+        return code;
+    }
+
+    @Override
     public String requireProductCode(String name, String spec, String given) throws Exception {
+        // 2026-10-29 제품코드가 왔는데 제품마스터에 없으면 이름으로 바꿔 찾지 않고 막는다
+        if (blankToNull(given) != null && salesOrderDAO.selectProductCode(given.trim()) == null) {
+            throw new IllegalArgumentException(PRODUCT_MESSAGE);
+        }
         String code = resolveProductCode(name, spec, given);
         if (code == null && name != null && !name.trim().isEmpty()) {
             throw new IllegalArgumentException(PRODUCT_MESSAGE);

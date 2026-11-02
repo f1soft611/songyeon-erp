@@ -49,15 +49,25 @@ export function LogisticsScheduleManagementPage({ selectedModule, currentMenuNam
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading, onClick: () => void management.reload(date) },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading,
+          onClick: () => void management.reload(date)
+        },
         {
           label: '엑셀 다운로드',
           icon: FileDownloadIcon,
           visible: permissions.excel,
           onClick: () => void management.exportExcel(date, LOGISTICS_EXCEL_COLUMNS, '물류스케줄'),
         },
-        // 현장 TV 화면은 로그인 없이 열리는 공개 화면이라 새 창으로 띄운다(송연과 같음)
-        { label: 'TV로 보기', icon: TvIcon, visible: permissions.read, onClick: () => { window.open('/tv/logistics', '_blank'); } },
+        {
+          label: 'TV로 보기',
+          icon: TvIcon,
+          visible: permissions.read,
+          onClick: () => { window.open('/tv/logistics', '_blank'); }
+        },
       ],
     },
   ];

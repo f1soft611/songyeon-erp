@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import { searchDocumentStatus } from '../services/documentStatus.service';
 import type {
   DocumentStatusFilters,
@@ -16,15 +17,15 @@ export function useDocumentStatusList(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [retryToken, setRetryToken] = useState(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   useEffect(() => {
     if (!enabled) return;
 
     const controller = new AbortController();
+    start();
     setHasLoaded(false);
     setError('');
-    setTotalRowCount(0);
-    setRows([]);
     onLoadStart();
     setLoading(true);
 
@@ -34,9 +35,11 @@ export function useDocumentStatusList(
         setRows(result.rows);
         setTotalRowCount(result.totalRowCount);
         setHasLoaded(true);
+        succeed();
       })
       .catch((loadError: unknown) => {
         if (controller.signal.aborted) return;
+        fail(loadError);
         setError(
           loadError instanceof Error ? loadError.message : String(loadError),
         );
@@ -46,7 +49,7 @@ export function useDocumentStatusList(
       });
 
     return () => controller.abort();
-  }, [appliedFilters, enabled, onLoadStart, retryToken]);
+  }, [appliedFilters, enabled, onLoadStart, retryToken, start, succeed, fail]);
 
   const clearError = useCallback(() => setError(''), []);
   const retry = useCallback(() => {
@@ -55,5 +58,5 @@ export function useDocumentStatusList(
     setRetryToken((current) => current + 1);
   }, []);
 
-  return { rows, totalRowCount, hasLoaded, loading, error, clearError, retry };
+  return { initialLoad, rows, totalRowCount, hasLoaded, loading, error, clearError, retry };
 }

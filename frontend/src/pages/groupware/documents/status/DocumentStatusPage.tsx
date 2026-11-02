@@ -1,24 +1,28 @@
-import { Box, Button } from '@mui/material';
+import { Box, Button, Chip } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
 import type { PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
+import { EmptySearchResultMessage } from '../../../../shared/components/EmptySearchResultMessage';
 import { DocumentStatusDetail } from './components/DocumentStatusDetail';
 import { DocumentStatusGrid } from './components/DocumentStatusGrid';
 import { DocumentStatusSearchArea } from './components/DocumentStatusSearchArea';
-import { EmptyDocumentStatus } from './components/EmptyDocumentStatus';
 import { useDocumentStatusDetail } from './hooks/useDocumentStatusDetail';
 import { useDocumentStatusList } from './hooks/useDocumentStatusList';
 import { useDocumentStatusSearch } from './hooks/useDocumentStatusSearch';
 import type { DocumentStatusPageProps } from './types/documentStatusPage.types';
+import { getDocumentApprovalScopeLabel } from '../write/data/documentPresentation';
 
 export function DocumentStatusPage({
   selectedModule,
   currentMenuName,
   content,
   selectedMenuPermissions,
+  dashboardScope = null,
+  onDashboardScopeChange,
 }: DocumentStatusPageProps) {
-  const search = useDocumentStatusSearch();
+  const search = useDocumentStatusSearch(dashboardScope, onDashboardScopeChange);
   const detail = useDocumentStatusDetail();
   const list = useDocumentStatusList(
     search.appliedFilters,
@@ -38,7 +42,7 @@ export function DocumentStatusPage({
           icon: SearchIcon,
           visible: selectedMenuPermissions?.read ?? false,
           disabled: !search.defaultsInitialized || search.defaultsLoading,
-          onClick: () => search.applySearch(),
+          onClick: () => search.applySearch(search.appliedDetailValues),
         },
       ],
     },
@@ -57,15 +61,28 @@ export function DocumentStatusPage({
       }}
     >
       <PageHeader
-        breadcrumbItems={[selectedModule.name, currentMenuName]}
+        breadcrumbItems={[selectedModule.name, '문서관리', currentMenuName]}
         description={content.description}
         actionGroups={pageActionGroups}
       />
+      <PageLoadBoundary {...search.defaultsInitialLoad} label="검색 기본값" onRetry={search.retryDefaults}>
+      <PageLoadBoundary {...list.initialLoad} label="문서현황" onRetry={list.retry}>
+      {search.dashboardScope && (
+        <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 1 }}>
+          <Chip
+            size="small"
+            label={`#${getDocumentApprovalScopeLabel(search.dashboardScope)}`}
+            onDelete={search.clearDashboardScope}
+            aria-label={`결재 범위 필터 ${getDocumentApprovalScopeLabel(search.dashboardScope)} 취소`}
+          />
+        </Box>
+      )}
       <DocumentStatusSearchArea
         keyword={search.keyword}
         onKeywordChange={search.setKeyword}
         detailFields={search.detailFields}
         detailValues={search.detailValues}
+        appliedDetailValues={search.appliedDetailValues}
         defaultValues={search.searchAreaDefaultValues}
         onDetailValuesChange={search.setDetailValues}
         onSearch={search.applySearch}
@@ -77,6 +94,10 @@ export function DocumentStatusPage({
         message={search.defaultsError ?? list.error}
         onClose={list.clearError}
       />
+      {list.hasLoaded && !list.loading && !list.initialLoad.loading
+        && list.totalRowCount === 0 && !search.defaultsError && !list.error ? (
+        <EmptySearchResultMessage onReset={search.resetSearch} />
+      ) : null}
       {search.defaultsError || list.error ? (
         <Box sx={{ px: { xs: 1.5, sm: 3 }, pb: 1 }}>
           <Button
@@ -107,14 +128,14 @@ export function DocumentStatusPage({
             <DocumentStatusGrid
               rows={list.rows}
               loading={list.loading}
-              onSelectionChange={detail.handleSelectionChange}
+              canExportExcel={selectedMenuPermissions?.excel ?? false}
+              onOpenDocument={detail.handleOpenDocument}
             />
           </Box>
         ) : null}
-        {list.hasLoaded && list.totalRowCount === 0 && !list.error ? (
-          <EmptyDocumentStatus onReset={search.resetSearch} />
-        ) : null}
       </Box>
+      </PageLoadBoundary>
+      </PageLoadBoundary>
       <DocumentStatusDetail
         selectedDocumentId={detail.selectedDocumentId}
         editingDocument={detail.editingDocument}

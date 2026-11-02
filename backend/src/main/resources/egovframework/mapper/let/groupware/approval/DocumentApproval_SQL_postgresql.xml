@@ -75,6 +75,7 @@
     <resultMap id="draftResponse"
             type="egovframework.let.groupware.approval.domain.model.DocumentApprovalDraftVO">
         <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="documentNo" column="document_no"/>
         <result property="eabusNo" column="eabus_no"/>
         <result property="documentStatus" column="document_status"/>
         <result property="submittedAt" column="submitted_at"/>
@@ -106,6 +107,7 @@
     <resultMap id="listItem"
             type="egovframework.let.groupware.approval.domain.model.DocumentApprovalListItemVO">
         <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="documentNo" column="document_no"/>
         <result property="eabusNo" column="eabus_no"/>
         <result property="documentType" column="document_type"/>
         <result property="documentStatus" column="document_status"/>
@@ -143,6 +145,7 @@
     <resultMap id="detail"
             type="egovframework.let.groupware.approval.domain.model.DocumentApprovalDetailVO">
         <id property="electronicApprovalId" column="electronic_approval_id"/>
+        <result property="documentNo" column="document_no"/>
         <result property="draftingWorkCategoryId" column="drafting_work_category_id"/>
         <result property="eabusNo" column="eabus_no"/>
         <result property="documentType" column="document_type"/>
@@ -193,11 +196,11 @@
 
     <select id="insertDocumentApprovalMain" parameterType="map" resultType="long">
         INSERT INTO public.tb_electronic_approval_main (
-            tenant_id, drafting_work_category_id, document_type, eabus_no, document_status, title,
+            tenant_id, drafting_work_category_id, document_type, eabus_no, document_no, document_status, title,
             contents_json, contents_html, contents_text, drafter_id, drafter_name,
             drafter_department_name, created_at, updated_at, updated_by
         ) VALUES (
-            #{tenantId}, #{draftingWorkCategoryId, jdbcType=BIGINT}, #{documentType}, #{eabusNo}, 'DRAFT', #{title},
+            #{tenantId}, #{draftingWorkCategoryId, jdbcType=BIGINT}, #{documentType}, #{eabusNo}, #{documentNo}, 'DRAFT', #{title},
             CAST(#{contentsJson} AS jsonb), #{contentsHtml}, #{contentsText}, #{drafterId},
             #{drafterName}, #{drafterDepartmentName}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, #{drafterId}
         )
@@ -495,6 +498,9 @@
         <if test="electronicApprovalIdFilter != null">
             AND m.electronic_approval_id = #{electronicApprovalIdFilter}
         </if>
+        <if test="documentNoFilter != null and documentNoFilter != ''">
+            AND m.document_no = #{documentNoFilter}
+        </if>
         <if test="documentType != null and documentType != ''">
             AND m.document_type = #{documentType}
         </if>
@@ -506,7 +512,7 @@
         </if>
         <if test="keyword != null and keyword != ''">
             AND (
-                CAST(m.electronic_approval_id AS varchar) ILIKE '%' || #{keyword} || '%'
+                m.document_no ILIKE '%' || #{keyword} || '%'
                 OR m.title ILIKE '%' || #{keyword} || '%'
                 OR m.drafter_name ILIKE '%' || #{keyword} || '%'
             )
@@ -593,7 +599,7 @@
     </sql>
 
     <select id="selectRelatedDocumentPage" parameterType="map" resultMap="statusListItem">
-        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+        SELECT m.electronic_approval_id, m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.title, m.drafter_name, m.drafter_department_name,
                m.created_at, m.updated_at, m.submitted_at,
                NULL::varchar AS notice_type,
@@ -653,6 +659,7 @@
         ORDER BY
         <choose>
             <when test="sortField == 'electronicApprovalId'">m.electronic_approval_id</when>
+            <when test="sortField == 'documentNo'">substring(m.document_no from 4 for 8) || lpad(split_part(m.document_no, '-', 3), 19, '0')</when>
             <when test="sortField == 'eabusNo'">m.eabus_no</when>
             <when test="sortField == 'title'">m.title</when>
             <when test="sortField == 'documentType'">m.document_type</when>
@@ -684,7 +691,7 @@
     </select>
 
     <select id="selectRelatedDocumentList" parameterType="map" resultMap="listItem">
-        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+        SELECT m.electronic_approval_id, m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
                LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
                NULL::varchar AS notice_type,
@@ -755,7 +762,7 @@
     </sql>
 
     <select id="selectRelatedDocumentWritePage" parameterType="map" resultMap="listItem">
-        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+        SELECT m.electronic_approval_id, m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
                LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
                NULL::varchar AS notice_type,
@@ -801,7 +808,7 @@
     </delete>
 
     <select id="selectPinnedRelatedDocumentList" parameterType="map" resultMap="listItem">
-        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+        SELECT m.electronic_approval_id, m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
                LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
                NULL::varchar AS notice_type
@@ -842,7 +849,7 @@
     </select>
 
     <select id="selectApprovalNotices" parameterType="map" resultMap="listItem">
-        SELECT m.electronic_approval_id, m.eabus_no, m.document_type, m.document_status,
+        SELECT m.electronic_approval_id, m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.title, m.drafter_name, m.created_at, m.updated_at, m.submitted_at,
                LEFT(COALESCE(m.contents_text, ''), 240) AS summary,
                CASE WHEN m.document_status = 'REVISION_REQUESTED'
@@ -871,7 +878,7 @@
 
     <select id="selectDocumentApprovalDetail" parameterType="map" resultMap="detail">
         SELECT m.electronic_approval_id, m.drafting_work_category_id,
-               m.eabus_no, m.document_type, m.document_status,
+               m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.drafter_name, la.profile_image AS drafter_profile_image,
                m.created_at, m.submitted_at, m.title,
                m.contents_json::text AS contents_json, m.contents_html, m.contents_text,
@@ -889,7 +896,7 @@
 
     <select id="selectDocumentApprovalDetailsByIds" parameterType="map" resultMap="detail">
         SELECT m.electronic_approval_id, m.drafting_work_category_id,
-               m.eabus_no, m.document_type, m.document_status,
+               m.document_no, m.eabus_no, m.document_type, m.document_status,
                m.drafter_name, la.profile_image AS drafter_profile_image,
                m.created_at, m.submitted_at, m.title,
                m.contents_json::text AS contents_json, m.contents_html, m.contents_text,
@@ -1011,7 +1018,7 @@
     </select>
 
     <select id="selectDraftDocumentStatus" parameterType="map" resultMap="draftResponse">
-        SELECT electronic_approval_id, eabus_no, document_status, submitted_at
+        SELECT electronic_approval_id, document_no, eabus_no, document_status, submitted_at
         FROM public.tb_electronic_approval_main
         WHERE tenant_id = #{tenantId}
           AND electronic_approval_id = #{electronicApprovalId}

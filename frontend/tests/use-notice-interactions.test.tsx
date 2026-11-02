@@ -27,6 +27,21 @@ vi.mock(
 );
 
 describe('useNoticeInteractions', () => {
+  it('opens a dashboard notice even when it is outside the loaded list', async () => {
+    apiMocks.fetchNoticePostDetail.mockResolvedValue({
+      postId: 99, title: '오래된 고정 공지', contentsHtml: '<p>본문</p>', comments: [],
+    });
+    const { result } = renderHook(() => {
+      const [noticeItems, setNoticeItems] = useState<NoticeFeedItem[]>([]);
+      const interactions = useNoticeInteractions({
+        noticeItems, setNoticeItems, showError: vi.fn(), showSuccess: vi.fn(),
+      });
+      return interactions;
+    });
+    await act(async () => { await result.current.handleSelectNotice({ id: 99, appendMissing: true }); });
+    expect(result.current.selectedNotice?.title).toBe('오래된 고정 공지');
+  });
+
   it('updates likes and bookmarks optimistically and reports both actions', () => {
     const showSuccess = vi.fn();
     const { result } = renderHook(() => {

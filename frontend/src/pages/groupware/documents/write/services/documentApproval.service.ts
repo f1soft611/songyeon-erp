@@ -34,6 +34,28 @@ import type {
 
 const APPROVAL_API = '/api/v1/groupware/approvals';
 
+export async function createDocumentShareToken(documentId: number): Promise<string> {
+  requireApprovalId(documentId, '문서 ID');
+  const response = await apiPost<{ item?: { token?: string } }>(
+    `${APPROVAL_API}/documents/${documentId}/share-link`, {},
+  );
+  const token = response.item?.token;
+  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{59}$/.test(token)) {
+    throw new Error('문서 공유 링크를 확인할 수 없습니다.');
+  }
+  return token;
+}
+
+export async function getSharedDocumentPreview(token: string): Promise<DocumentApprovalRecord> {
+  const response = await apiGet<{ item?: unknown }>(
+    `${APPROVAL_API}/shared-document?${new URLSearchParams({ token })}`,
+  );
+  if (!isDocumentApprovalRecord(response.item)) {
+    throw new Error('문서 미리보기 응답을 확인할 수 없습니다.');
+  }
+  return response.item;
+}
+
 function isDocumentFileItem(value: unknown): value is DocumentFileItem {
   return isObject(value)
     && Number.isSafeInteger(value.fileId) && Number(value.fileId) > 0
@@ -105,6 +127,10 @@ function isWorkflowStatus(value: unknown): value is ApprovalDocumentStatus {
   return typeof value === 'string' && DOCUMENT_STATUSES.has(value);
 }
 
+function isDocumentNo(value: unknown): value is string {
+  return typeof value === 'string' && /^EA-\d{8}-\d{4,}$/.test(value);
+}
+
 function requireApprovalId(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${label}가 올바르지 않습니다.`);
@@ -157,6 +183,7 @@ function isDocumentApprovalFeedRecord(value: unknown): value is DocumentApproval
     isObject(value) &&
     Number.isSafeInteger(value.electronicApprovalId) &&
     Number(value.electronicApprovalId) > 0 &&
+    isDocumentNo(value.documentNo) &&
     typeof value.title === 'string' &&
     typeof value.contentsJson === 'string' &&
     typeof value.contentsHtml === 'string' &&
@@ -189,6 +216,7 @@ function isDocumentApprovalRecord(value: unknown): value is DocumentApprovalReco
   return isObject(value)
     && Number.isSafeInteger(value.electronicApprovalId)
     && Number(value.electronicApprovalId) > 0
+    && isDocumentNo(value.documentNo)
     && typeof value.eabusNo === 'string'
     && typeof value.documentType === 'string'
     && DOCUMENT_TYPES.has(value.documentType)
@@ -218,9 +246,10 @@ export async function saveDocumentDraft(
     !item ||
     !Number.isSafeInteger(item.electronicApprovalId) ||
     item.electronicApprovalId <= 0 ||
+    !isDocumentNo(item.documentNo) ||
     (item.documentStatus !== 'DRAFT' && item.documentStatus !== 'REVISION_REQUESTED')
   ) {
-    throw new Error('임시저장 응답에 문서 ID가 없습니다.');
+    throw new Error('임시저장 응답을 확인할 수 없습니다.');
   }
   return item;
 }
@@ -238,6 +267,7 @@ export async function submitDocumentApproval(
   if (
     !item ||
     item.electronicApprovalId !== electronicApprovalId ||
+    !isDocumentNo(item.documentNo) ||
     item.documentStatus !== (isBusinessContact ? 'COMPLETED' : 'PENDING') ||
     !item.eabusNo?.trim() ||
     !item.submittedAt?.trim()
@@ -463,6 +493,7 @@ export async function getDocumentApprovalDetail(
   if (
     !isObject(item) ||
     item.electronicApprovalId !== electronicApprovalId ||
+    !isDocumentNo(item.documentNo) ||
     typeof item.title !== 'string' ||
     typeof item.contentsHtml !== 'string' ||
     !Number.isSafeInteger(item.viewCount) ||

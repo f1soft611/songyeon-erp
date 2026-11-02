@@ -36,6 +36,7 @@ class DocumentApprovalStatusServiceImplTest {
         DocumentApprovalListQueryVO query = new DocumentApprovalListQueryVO();
         query.setKeyword("annual");
         query.setElectronicApprovalId(77L);
+        query.setDocumentNo("EA-20261010-0001");
         query.setEabusNo("001");
         query.setTitle("budget");
         query.setDocumentType("DRAFTING");
@@ -65,6 +66,7 @@ class DocumentApprovalStatusServiceImplTest {
         verify(approvalDAO).selectRelatedDocumentPage(argThat(params ->
                 "annual".equals(params.get("keyword"))
                         && Long.valueOf(77L).equals(params.get("electronicApprovalIdFilter"))
+                        && "EA-20261010-0001".equals(params.get("documentNoFilter"))
                         && "001".equals(params.get("eabusNoFilter"))
                         && "budget".equals(params.get("titleFilter"))
                         && "DRAFTING".equals(params.get("documentType"))
@@ -90,6 +92,23 @@ class DocumentApprovalStatusServiceImplTest {
                         && "login-author".equals(params.get("drafterId"))
                         && "101".equals(params.get("participantUserId"))
                         && "COMPLETED".equals(params.get("documentStatus"))));
+    }
+
+    @Test
+    void acceptsDocumentNumberAsAnExactSearchAndSortField() throws Exception {
+        DocumentApprovalListQueryVO query = new DocumentApprovalListQueryVO();
+        query.setDocumentNo(" EA-20261010-0001 ");
+        query.setSortField("documentNo");
+        when(approvalDAO.selectRelatedDocumentPage(anyMap())).thenReturn(Collections.emptyList());
+        when(approvalDAO.countRelatedDocuments(anyMap())).thenReturn(0L);
+
+        service.searchDocuments(author, "ALL", query);
+
+        verify(approvalDAO).selectRelatedDocumentPage(argThat(params ->
+                "EA-20261010-0001".equals(params.get("documentNoFilter"))
+                        && "documentNo".equals(params.get("sortField"))));
+        verify(approvalDAO).countRelatedDocuments(argThat(params ->
+                "EA-20261010-0001".equals(params.get("documentNoFilter"))));
     }
 
     @Test

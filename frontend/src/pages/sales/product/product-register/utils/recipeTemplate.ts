@@ -2,6 +2,7 @@ import type { Workbook } from 'exceljs';
 
 // 제품등록 '양식 내려받기': 레시피 엑셀 불러오기(parseRecipeRows)가 읽는 "품목" 표 양식.
 // 첫 장은 화면이 읽는 표, 둘째 장은 작성 방법 안내(화면은 첫 장만 읽는다).
+// 2026-10-30 '원재료코드' 칸을 더했다(비워도 된다).
 
 export const RECIPE_TEMPLATE_FILE_NAME = '레시피_배합비_양식.xlsx';
 
@@ -17,13 +18,14 @@ const GUIDE_LINES = [
   '레시피 배합비 양식 작성 방법',
   '',
   '1. 첫 번째 시트(레시피)만 읽어요. 시트 순서를 바꾸지 마세요.',
-  '2. "품목" 칸 아래에 원재료명을 적어요. "품목" 글자와 "합계" 줄은 지우거나 고치지 마세요.',
+  '2. "품목" 칸 아래에 원재료명을 적어요. "품목" · "원재료코드" 글자와 "합계" 줄은 지우거나 고치지 마세요.',
   '3. 배합비율은 0~1 사이 소수로 적어요. 0.45 = 45% 예요(칸은 % 로 보여요).',
   '4. 배합비율 합계가 100% 근처(85%~115%)여야 그 칸을 배합비율로 알아봐요.',
   '5. 개정이 여러 번이면 오른쪽에 칸을 더 만들어 적어요(예: 2차(9/15)). 가장 오른쪽 칸을 최신으로 보고 가져와요.',
   '6. 배합비율 칸에는 숫자만 적어요. "미정" 같은 글자가 있으면 그 칸을 읽지 못해요.',
-  '7. 원재료명이 원재료관리에 등록된 이름과 같으면 단가가 자동으로 들어가요.',
-  '8. 줄이 모자라면 "합계" 줄 위에 줄을 더 넣고, 합계 수식 범위도 같이 늘려주세요.',
+  '7. 원재료코드는 비워도 돼요. 등록된 코드를 적으면 그 원재료(이름 · 단가)로 맞추고, 비었거나 없는 코드면 원재료명으로 맞춰요.',
+  '8. 원재료명이 원재료관리에 등록된 이름과 같으면 단가가 자동으로 들어가요.',
+  '9. 줄이 모자라면 "합계" 줄 위에 줄을 더 넣고, 합계 수식 범위도 같이 늘려주세요.',
   '',
   '예시 줄(양파분말·하얀설탕·구운소금)은 지우고 쓰세요.',
 ];
@@ -32,6 +34,7 @@ export function buildRecipeTemplate(workbook: Workbook): Workbook {
   const sheet = workbook.addWorksheet('레시피');
   sheet.columns = [
     { width: 6 },
+    { width: 14 },
     { width: 32 },
     { width: 14 },
     { width: 24 },
@@ -43,7 +46,7 @@ export function buildRecipeTemplate(workbook: Workbook): Workbook {
 
   const headerRow = 4;
   const header = sheet.getRow(headerRow);
-  header.values = ['No', '품목', '1차', '비고'];
+  header.values = ['No', '원재료코드', '품목', '1차', '비고'];
   header.font = { bold: true };
   header.alignment = { horizontal: 'center' };
   header.eachCell((cell) => {
@@ -59,19 +62,20 @@ export function buildRecipeTemplate(workbook: Workbook): Workbook {
     row.getCell(1).value = i + 1;
     row.getCell(1).alignment = { horizontal: 'center' };
     if (sample) {
-      row.getCell(2).value = sample[0];
-      row.getCell(3).value = sample[1];
+      row.getCell(3).value = sample[0];
+      row.getCell(4).value = sample[1];
     }
-    row.getCell(3).numFmt = '0.0##%';
+    row.getCell(2).alignment = { horizontal: 'center' };
+    row.getCell(4).numFmt = '0.0##%';
   }
   const last = first + total - 1;
   const sumRow = sheet.getRow(last + 1);
-  sumRow.getCell(2).value = '합계';
-  sumRow.getCell(3).value = {
-    formula: `SUM(C${first}:C${last})`,
+  sumRow.getCell(3).value = '합계';
+  sumRow.getCell(4).value = {
+    formula: `SUM(D${first}:D${last})`,
     result: SAMPLE_LINES.reduce((sum, line) => sum + line[1], 0),
   };
-  sumRow.getCell(3).numFmt = '0.0##%';
+  sumRow.getCell(4).numFmt = '0.0##%';
   sumRow.font = { bold: true };
   sumRow.eachCell((cell) => {
     cell.border = { top: { style: 'thin' } };

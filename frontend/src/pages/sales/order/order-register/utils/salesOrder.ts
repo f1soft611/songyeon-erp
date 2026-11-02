@@ -1,46 +1,9 @@
 import type { ExcelColumn } from '../../../../../shared/utils/excelFile';
+import type { OrderClientOption, OrderDetailFilter, OrderProduct, OrderRow, OrderSaveBody, SavedOrder } from '../types/salesOrder.types';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
 
-// 영업관리 > 수주등록 화면 한 줄. key 는 화면에서만 쓰는 줄 구분값(저장 전 줄은 id 가 없다).
-export type OrderRow = {
-  key: number;
-  id?: number;
-  clientName: string;
-  productName: string;
-  orderQty: string | number; // 2026-10-23 숫자 칸: 표에서 고치면 숫자가 들어온다(불러온 값은 글자)
-  note: string;
-  productionDate: string;
-  isStockProduction: boolean;
-  logisticsDate: string;
-  importedProduction?: boolean; // 생산확정에서 가져간 줄
-  importedShipment?: boolean; // 출하등록에서 가져간 줄
-};
-
-// 서버 SalesOrderVO 한 줄
-export type SavedOrder = {
-  id: number;
-  orderDate?: string | null;
-  clientName?: string | null;
-  productName?: string | null;
-  orderQty?: string | null;
-  note?: string | null;
-  productionDate?: string | null;
-  isStockProduction?: number | null;
-  logisticsDate?: string | null;
-  importedProduction?: number | null;
-  importedShipment?: number | null;
-};
-
-// 저장 본문(서버 SalesOrderVO)
-export type OrderSaveBody = {
-  orderDate: string;
-  clientName: string;
-  productName: string;
-  orderQty: string;
-  note: string;
-  productionDate: string | null;
-  isStockProduction: number;
-  logisticsDate: string | null;
-};
+// 타입은 types/salesOrder.types.ts(2026-10-29 표준 구조로 옮김). 예전 경로로 가져다 쓰는 곳을 위해 다시 내보낸다
+export type { OrderRow, OrderSaveBody, SavedOrder } from '../types/salesOrder.types';
 
 // 송연 parseQtyNumber: '1,000kg' 처럼 글자가 섞여도 첫 숫자를 읽는다. 숫자가 없으면 0.
 export function parseQtyNumber(value: string): number {
@@ -63,7 +26,9 @@ export function formatTotal(value: number): string {
 export function emptyOrderRow(key: number): OrderRow {
   return {
     key,
+    clientCode: '',
     clientName: '',
+    productCode: '',
     productName: '',
     orderQty: '',
     note: '',
@@ -78,7 +43,9 @@ export function fromSaved(saved: SavedOrder, key: number): OrderRow {
   return {
     key,
     id: saved.id,
+    clientCode: saved.clientCode ?? '',
     clientName: saved.clientName ?? '',
+    productCode: saved.productCode ?? '',
     productName: saved.productName ?? '',
     orderQty: saved.orderQty ?? '',
     note: saved.note ?? '',
@@ -90,11 +57,13 @@ export function fromSaved(saved: SavedOrder, key: number): OrderRow {
   };
 }
 
-// 송연 p-save 본문: 재고생산이면 물류출고일은 보내지 않는다
+// 송연 p-save 본문: 재고생산이면 물류출고일은 보내지 않는다. 2026-10-29 거래처 · 품목은 코드로 보낸다(이름은 코드가 없을 때 서버가 찾는 데 쓴다)
 export function saveBodyOf(row: OrderRow, orderDate: string): OrderSaveBody {
   return {
     orderDate,
+    clientCode: row.clientCode.trim(),
     clientName: row.clientName.trim(),
+    productCode: row.productCode.trim(),
     productName: row.productName.trim(),
     orderQty: qtyText(row.orderQty),
     note: row.note.trim(),
@@ -137,7 +106,8 @@ export function canEditOrder(row: OrderRow): boolean {
   return !importedLabel(row);
 }
 
-// 송연 attachUnknownClientGuard: 수주 거래처 목록에 없으면 막는다(목록을 못 받았으면 서버 확인에 맡긴다)
+// 송연 attachUnknownClientGuard: 수주 거래처 목록에 없으면 막는다(목록을 못 받았으면 서버 확인에 맡긴다).
+// 2026-10-29 팝업으로 고른 줄(거래처코드가 있는 줄)은 부르지 않는다
 export function isUnknownClient(typed: string, clients: string[]): boolean {
   const name = typed.trim();
   return Boolean(name) && clients.length > 0 && !clients.includes(name);
@@ -158,3 +128,30 @@ export const ORDER_EXCEL_COLUMNS: ExcelColumn<SavedOrder>[] = [
   { key: (row) => (row.isStockProduction ? '재고생산' : ''), label: '재고생산', width: 10 },
   { key: 'logisticsDate', label: '물류출고일', width: 12 },
 ];
+
+// 거래처 고르기 팝업 후보: 이름 · 거래처코드 일부로 찾는다(원재료마스터 납품업체 팝업과 같은 모양)
+export function clientPickerOptions(clients: OrderClientOption[], keyword: string): MasterPickerOption[] {
+  const text = keyword.trim().toLowerCase();
+  return clients
+    .filter((client) => !text || client.name.toLowerCase().includes(text) || client.clientCode.toLowerCase().includes(text))
+    .map((client, index) => ({ id: index + 1, code: client.clientCode, name: client.name }));
+}
+
+// 품목 고르기 팝업 후보: 제품코드 · 이름(규격) 일부로 찾는다
+export function productPickerOptions(products: OrderProduct[], keyword: string): MasterPickerOption[] {
+  const text = keyword.trim().toLowerCase();
+  return products
+    .filter((product) => product.code && (!text || product.code.toLowerCase().includes(text) || product.display.toLowerCase().includes(text)))
+    .map((product, index) => ({ id: index + 1, code: product.code, name: product.display }));
+}
+
+// 2026-10-29 상세 조회(⌄): 거래처는 이름 일부, 품목은 제품코드나 이름(규격) 일부(대소문자 무시, 빈 칸은 거르지 않음)
+// 출하등록 · 생산확정 · 생산입고도 같이 쓴다(빈 값은 빈 글자로 본다)
+type DetailFilterRow = { clientName?: string | null; productCode?: string | null; productName?: string | null };
+export function filterOrderRows<T extends DetailFilterRow>(rows: T[], filter: OrderDetailFilter): T[] {
+  const client = filter.clientName.trim().toLowerCase();
+  const product = filter.product.trim().toLowerCase();
+  const has = (value: string | null | undefined, text: string) => (value ?? '').toLowerCase().includes(text);
+  return rows.filter((row) => (!client || has(row.clientName, client))
+    && (!product || has(row.productCode, product) || has(row.productName, product)));
+}

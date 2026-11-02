@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from '../../../../../shared/services/apiClient';
-import type { ProdCheckLine, ProdCheckResult } from '../utils/prodCheck';
+import type { ProdCheckLine, ProdCheckResult } from '../types/prodCheck.types';
 
 // 영업관리 > 생산가능확인 (조회만)
 const PATH = '/api/v1/sales/order/prod-check';

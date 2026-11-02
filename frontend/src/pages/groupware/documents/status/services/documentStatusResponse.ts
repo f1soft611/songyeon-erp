@@ -29,11 +29,16 @@ function normalizeDateValue(
   return value;
 }
 
+function isDocumentNo(value: unknown): value is string {
+  return typeof value === 'string' && /^EA-\d{8}-\d{4,}$/.test(value);
+}
+
 function isDocumentStatusRow(value: unknown): value is DocumentStatusRow {
   if (!isObject(value)) return false;
   return (
     Number.isSafeInteger(value.electronicApprovalId) &&
     Number(value.electronicApprovalId) > 0 &&
+    isDocumentNo(value.documentNo) &&
     typeof value.title === 'string' &&
     typeof value.documentType === 'string' &&
     DOCUMENT_TYPES.has(value.documentType) &&

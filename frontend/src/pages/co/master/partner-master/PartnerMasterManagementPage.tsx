@@ -30,8 +30,8 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
 });
 
 // 상세 조회 조건(2026-10-27, S_ERP 거래처관리처럼 검색칸 오른쪽 ⌄): 분류 · 사용여부(열의 search 설정)
-// 처음 값 · [초기화] 값: 분류 전체, 사용여부 '사용'(2026-10-23 부터 기본은 사용중)
-const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = { useYn: 'Y' };
+// 상세 조회 조건 처음 값 · [초기화] 값: 없음(전체, 2026-10-29 기본 조건 뺌)
+const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = {};
 
 type PartnerMasterManagementPageProps = {
   selectedModule: ModuleItem;
@@ -53,6 +53,8 @@ export function PartnerMasterManagementPage({ selectedModule, currentMenuName, c
   const fileRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [confirmReload, setConfirmReload] = useState(false);
   // 엑셀 올리기(2026-10-27): 그리드에 올릴 줄. 올리는 동안만 내장 상세 창을 꺼 둔다(addRow 가 줄마다 등록 창을 열지 않게)
   const [pendingStage, setPendingStage] = useState<ClientExcelStage | null>(null);
@@ -79,6 +81,7 @@ export function PartnerMasterManagementPage({ selectedModule, currentMenuName, c
     management.applyFilters({ ...management.appliedFilters, keyword });
   };
   const handleDetailSearch = (values: Record<string, PageSearchFieldValue>) => {
+    setAppliedDetailValues(values);
     const selected = (value: PageSearchFieldValue | undefined) =>
       value == null || typeof value === 'object' ? '' : String(value).trim();
     const useYn = selected(values.useYn);
@@ -167,15 +170,33 @@ export function PartnerMasterManagementPage({ selectedModule, currentMenuName, c
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading || management.saving, onClick: requestReload },
-        { label: '엑셀 다운로드', icon: FileDownloadIcon, visible: permissions.excel, disabled: management.loading, onClick: () => void exportExcel() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading || management.saving,
+          onClick: requestReload
+        },
+        {
+          label: '엑셀 다운로드',
+          icon: FileDownloadIcon,
+          visible: permissions.excel,
+          disabled: management.loading,
+          onClick: () => void exportExcel()
+        },
       ],
     },
     {
       key: 'write',
       actions: [
         // [거래처 추가]: 내장 상세 창('거래처 등록')을 연다
-        { label: '거래처 추가', icon: AddIcon, visible: permissions.create, disabled: management.loading || management.saving, onClick: () => gridRef.current?.addRow() },
+        {
+          label: '거래처 추가',
+          icon: AddIcon,
+          visible: permissions.create,
+          disabled: management.loading || management.saving,
+          onClick: () => gridRef.current?.addRow()
+        },
         {
           label: '저장',
           icon: management.saving ? SaveProgressIcon : SaveIcon,
@@ -210,6 +231,7 @@ export function PartnerMasterManagementPage({ selectedModule, currentMenuName, c
         onDefaultSearch={requestReload}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         defaultValues={DEFAULT_DETAIL_VALUES}
         onDetailValuesChange={setDetailValues}
         // 상세 [조회]: 받은 목록을 화면에서 거른다(서버에서 다시 받지 않는다)

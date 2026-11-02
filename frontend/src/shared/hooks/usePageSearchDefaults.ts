@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useInitialLoadState } from './useInitialLoadState';
 import { resolvePageSearchDefaults } from '../components/page-search/searchDefaults';
 import type {
   PageSearchField,
@@ -18,17 +19,23 @@ export function usePageSearchDefaults(fields: PageSearchField[]) {
     error: null,
   });
   const [retryToken, setRetryToken] = useState(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   useEffect(() => {
     let active = true;
+    start();
     setState({ values: null, loading: true, error: null });
 
     resolvePageSearchDefaults(fields)
       .then((values) => {
-        if (active) setState({ values, loading: false, error: null });
+        if (active) {
+          succeed();
+          setState({ values, loading: false, error: null });
+        }
       })
       .catch((error: unknown) => {
         if (!active) return;
+        fail(error);
         const message =
           error instanceof Error && error.message
             ? error.message
@@ -39,11 +46,11 @@ export function usePageSearchDefaults(fields: PageSearchField[]) {
     return () => {
       active = false;
     };
-  }, [fields, retryToken]);
+  }, [fields, retryToken, start, succeed, fail]);
 
   const retry = useCallback(() => {
     setRetryToken((current) => current + 1);
   }, []);
 
-  return { ...state, retry };
+  return { ...state, retry, initialLoad };
 }

@@ -61,6 +61,33 @@ class SalesOrderServiceImplTest {
 		return bom;
 	}
 
+	@DisplayName("2026-10-29 화면이 보낸 거래처코드 · 제품코드로 저장한다. 매출 거래처가 아니거나 없는 제품코드면 막는다")
+	@Test
+	void createsWithGivenCodes() throws Exception {
+		SalesOrderDAO dao = salesDao();
+		when(dao.selectSalesClientNameByCode("000009")).thenReturn("예시식품");
+		when(dao.selectProductCode("000002")).thenReturn("000002");
+		SalesOrderServiceImpl service = new SalesOrderServiceImpl(dao, bomService());
+		SalesOrderVO coded = request();
+		coded.setClientName("");
+		coded.setClientCode("000009");
+		coded.setProductCode("000002");
+		service.createOrder(coded);
+		ArgumentCaptor<SalesOrderVO> saved = ArgumentCaptor.forClass(SalesOrderVO.class);
+		verify(dao).insertOrder(saved.capture());
+		assertEquals("000009", saved.getValue().getClientCode());
+		assertEquals("000002", saved.getValue().getProductCode());
+
+		SalesOrderVO purchase = request();
+		purchase.setClientCode("000099");
+		assertEquals(SalesOrderServiceImpl.SALES_CLIENT_CODE_MESSAGE,
+				assertThrows(IllegalArgumentException.class, () -> service.createOrder(purchase)).getMessage());
+		SalesOrderVO unknownProduct = request();
+		unknownProduct.setProductCode("999999");
+		assertEquals(SalesOrderServiceImpl.PRODUCT_MESSAGE,
+				assertThrows(IllegalArgumentException.class, () -> service.createOrder(unknownProduct)).getMessage());
+	}
+
 	@DisplayName("수주일이 없으면 막는다")
 	@Test
 	void dateRequired() throws Exception {
@@ -110,7 +137,7 @@ class SalesOrderServiceImplTest {
 		verify(dao, never()).insertOrder(any());
 	}
 
-	@DisplayName("추가: 같은 날 순서 +1, '이름(규격)' 으로 제품코드를 찾고 거래처는 거래처BOM 철자로 저장")
+	@DisplayName("추가: 같은 날 순서 +1, '이름(규격)' 으로 제품코드를 찾고 거래처는 거래처코드로 저장(코드가 없으면 이름으로 찾는다)")
 	@Test
 	void createsWithNextSortOrderAndProductCode() throws Exception {
 		SalesOrderDAO dao = salesDao();
@@ -126,7 +153,6 @@ class SalesOrderServiceImplTest {
 		verify(dao).insertOrder(saved.capture());
 		assertEquals(3, saved.getValue().getSortOrder());
 		assertEquals("000001", saved.getValue().getProductCode());
-		assertEquals(CLIENT, saved.getValue().getClientName());
 		assertEquals("000005", saved.getValue().getClientCode());
 		assertEquals("2026-10-08", saved.getValue().getLogisticsDate());
 		assertEquals(0, saved.getValue().getIsStockProduction());

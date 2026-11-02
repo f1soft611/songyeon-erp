@@ -49,10 +49,41 @@ export function MaterialHistoryDialog({
   const logRows = useMemo<LogGridRow[]>(() => logs.map((row, index) => ({ ...row, id: String(index) })), [logs]);
   const logColumns = useMemo<F1GridColumn<LogGridRow>[]>(
     () => [
-      { field: 'id', type: 'rownumber', width: 56, headerName: 'No', align: 'center', pinned: 'left' },
-      { field: 'changedAt', headerName: '변경일시', flex: 1.2, headerAlign: 'center', align: 'center', getValue: (row) => row.changedAt.replace('T', ' ') },
-      { field: 'oldPrice', headerName: '이전 단가', flex: 1, headerAlign: 'center', align: 'right', renderCell: ({ row }) => formatPrice(row.oldPrice) },
-      { field: 'newPrice', headerName: '변경 단가', flex: 1, headerAlign: 'center', align: 'right', renderCell: ({ row }) => formatPrice(row.newPrice) },
+      {
+        field: 'id',
+        type: 'rownumber',
+        width: 56,
+        headerName: 'No',
+        align: 'center',
+        pinned: 'left'
+      },
+      {
+        field: 'changedAt',
+        headerName: '변경일시',
+        type: 'datetime',
+        flex: 1.2,
+        align: 'center',
+        getValue: (row) => row.changedAt.replace('T', ' ')
+      },
+      {
+        field: 'oldPrice',
+        headerName: '이전 단가',
+        type: 'currency',
+        decimalPlaces: 4,
+        flex: 1,
+        align: 'right',
+        renderCell: ({ row }) => formatPrice(row.oldPrice)
+      },
+      {
+        field: 'newPrice',
+        headerName: '변경 단가',
+        type: 'currency',
+        decimalPlaces: 4,
+        flex: 1,
+        headerAlign: 'center',
+        align: 'right',
+        renderCell: ({ row }) => formatPrice(row.newPrice)
+      },
     ],
     [],
   );

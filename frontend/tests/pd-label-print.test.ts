@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { printQtyText } from '../src/pages/pd/label/utils/labelPrint';
+import { printQtyText } from '../src/pages/pd/label/label-print/utils/labelPrint';
 import {
   buildLabelHTML, LABEL_FORMAT_BASIC, labelPrintExpiryStr, labelShelfLifeText, missingLabelItems, sanitizeLabelHtml,
 } from '../src/shared/components/LabelPrintDialog/labelHtml';

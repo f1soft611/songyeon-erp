@@ -167,11 +167,27 @@ export function ProductBomDialog({
   );
   const viewColumns = useMemo<F1GridColumn<ViewRow>[]>(
     () => [
-      { field: 'id', type: 'rownumber', width: 60, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
-      { field: 'materialName', headerName: '원재료', flex: 1.6, headerAlign: 'center', align: 'left' },
+      {
+        field: 'id',
+        headerName: 'No',
+        type: 'rownumber',
+        width: 56,
+        align: 'center',
+        pinned: 'left',
+        search: { hidden: true },
+        form: { hidden: true },
+      },
+      {
+        field: 'materialName',
+        headerName: '원재료',
+        flex: 1.6,
+        align: 'left'
+      },
       {
         field: 'ratio',
         headerName: '배합비율',
+        type: 'decimal',
+        decimalPlaces: 3,
         flex: 0.8,
         headerAlign: 'center',
         align: 'right',
@@ -180,6 +196,8 @@ export function ProductBomDialog({
       {
         field: 'weight',
         headerName: '중량',
+        type: 'decimal',
+        decimalPlaces: 3,
         flex: 0.8,
         headerAlign: 'center',
         align: 'right',
@@ -328,7 +346,7 @@ export function ProductBomDialog({
               />
             </Box>
             <Typography variant="body2" sx={{ textAlign: 'right' }}>
-              배합비율 합계: <b>{(viewSum * 100).toFixed(2)}%</b>
+              배합비율 합계: <b>{(viewSum * 100).toFixed(3)}%</b>
             </Typography>
           </Stack>
         )}

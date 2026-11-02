@@ -14,15 +14,46 @@ import {
 } from '../../../../../shared/components/f1-grid';
 import type { MaterialUsageRow } from '../types/materialMaster.types';
 import { fetchMaterialUsage } from '../services/materialMaster.service';
-import { percentText } from '../../../../../shared/utils/numberFormat';
 
 // 이 원재료를 쓰는 제품 표의 칸(역전개·일괄적용이 같이 쓴다)
 export const usageColumns = (): F1GridColumn<MaterialUsageRow>[] => [
-  { field: 'id', type: 'rownumber', width: 60, headerName: '순번', headerAlign: 'center', align: 'center', pinned: 'left' },
-  { field: 'productCode', headerName: '제품코드', width: 100, headerAlign: 'center', align: 'center' },
-  { field: 'productName', headerName: '품목명', flex: 1.4, headerAlign: 'center', align: 'left' },
-  { field: 'productSpec', headerName: '규격', width: 110, headerAlign: 'center', align: 'center', getValue: (row) => row.productSpec || '' },
-  { field: 'ratio', headerName: '배합비율', width: 100, headerAlign: 'center', align: 'right', renderCell: ({ row }) => percentText(row.ratio) },
+  {
+    field: 'id',
+    headerName: 'No',
+    type: 'rownumber',
+    width: 56,
+    align: 'center',
+    pinned: 'left',
+    form: { hidden: true },
+    search: { hidden: true },
+  },
+  {
+    field: 'productCode',
+    headerName: '제품코드',
+    width: 100,
+    align: 'center'
+  },
+  {
+    field: 'productName',
+    headerName: '품목명',
+    flex: 1.4,
+    align: 'left'
+  },
+  {
+    field: 'productSpec',
+    headerName: '규격',
+    width: 110,
+    align: 'center',
+    getValue: (row) => row.productSpec || ''
+  },
+  {
+    field: 'ratio',
+    headerName: '배합비율',
+    type: 'decimal',
+    decimalPlaces: 4,
+    width: 110,
+    align: 'right',
+  },
 ];
 
 // 배합비 역전개 창(송연 CM0001Tab08UsageModal): 이 원재료가 배합비로 쓰인 제품(배합비율 높은 순)

@@ -50,14 +50,18 @@ describe('수주등록 utils', () => {
   it('저장 본문: 글자는 다듬고, 빈 날짜는 null, 재고생산이면 물류출고일을 보내지 않는다', () => {
     const row = {
       ...emptyOrderRow(1),
+      clientCode: ' 900005 ',
       clientName: ' (주) 디에이치식품 ',
+      productCode: '900001',
       productName: ' 국물두루치기분말(1kg*10ea) ',
       orderQty: ' 100 ',
       logisticsDate: '2026-10-08',
     };
     expect(saveBodyOf(row, '2026-10-06')).toEqual({
       orderDate: '2026-10-06',
+      clientCode: '900005',
       clientName: '(주) 디에이치식품',
+      productCode: '900001',
       productName: '국물두루치기분말(1kg*10ea)',
       orderQty: '100',
       note: '',

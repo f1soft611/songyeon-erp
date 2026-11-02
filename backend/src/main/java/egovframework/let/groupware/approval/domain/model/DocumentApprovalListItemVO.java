@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public class DocumentApprovalListItemVO {
 
     private Long electronicApprovalId;
+    private String documentNo;
     private String eabusNo;
     private String documentType;
     private String documentStatus;
@@ -20,6 +21,8 @@ public class DocumentApprovalListItemVO {
 
     public Long getElectronicApprovalId() { return electronicApprovalId; }
     public void setElectronicApprovalId(Long electronicApprovalId) { this.electronicApprovalId = electronicApprovalId; }
+    public String getDocumentNo() { return documentNo; }
+    public void setDocumentNo(String documentNo) { this.documentNo = documentNo; }
     public String getEabusNo() { return eabusNo; }
     public void setEabusNo(String eabusNo) { this.eabusNo = eabusNo; }
     public String getDocumentType() { return documentType; }

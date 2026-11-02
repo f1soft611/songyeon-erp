@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  STOCK_EXCEL_COLUMNS, flattenLots, formatPrice, formatQty, lotText, plannedText, stockedOnly, totalStock, type StockRow,
-} from '../src/pages/lg/stock/utils/productStock';
+  STOCK_EXCEL_COLUMNS, flattenLots, formatPrice, formatQty, lotText, plannedText, stockedOnly, totalStock,
+} from '../src/pages/lg/stock/product-stock/utils/productStock';
+import type { StockRow } from '../src/pages/lg/stock/product-stock/types/productStock.types';
 
 const row = (code: string, extra: Partial<StockRow> = {}): StockRow => ({ code, name: `품목${code}`, stockQty: 0, plannedQty: 0, plannedCount: 0, ...extra });
 const lot = (lotId: number, extra = {}) => ({ lotId, lotNo: '', lotDate: '2026-10-06', status: 'produced' as const, producedQty: 10, shippedQty: 0, remainingQty: 10, ...extra });

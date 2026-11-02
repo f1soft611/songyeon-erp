@@ -4,8 +4,8 @@ import {
   DOC_EXCEL_COLUMNS, HISTORY_EXCEL_COLUMNS, IN_STATUS_EXCEL_COLUMNS, RETURN_EXCEL_COLUMNS,
   filesOfMaterial, itemCalc, monthStart, noPriceMessage, noPriceRows, priceDiffers, priceMismatchMessage, returnQtyError,
   rowsOfMaterial, stagingTotal, sumOf, toBulkBody, toInStatusRows, unitPriceFromTotal,
-  type Receiving, type StagingItem,
-} from '../src/pages/pu/receiving/utils/receiving';
+} from '../src/pages/pu/inbound/receiving/utils/receiving';
+import type { Receiving, StagingItem } from '../src/pages/pu/inbound/receiving/types/receiving.types';
 
 const item = (key: number, extra: Partial<StagingItem> = {}): StagingItem => ({
   key, materialCode: `M${key}`, materialName: `원재료${key}`, qty: 10, unitPrice: 1000, taxType: '과세', clientName: '대한상사', checked: true, ...extra,

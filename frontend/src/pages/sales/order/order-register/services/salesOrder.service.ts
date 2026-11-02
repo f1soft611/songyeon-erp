@@ -1,14 +1,8 @@
 import { apiDelete, apiGet, apiPost, apiPut } from '../../../../../shared/services/apiClient';
-import type { OrderSaveBody, SavedOrder } from '../utils/salesOrder';
+import type { OrderClientOption, OrderProduct, OrderSaveBody, SavedOrder } from '../types/salesOrder.types';
 
 // 영업관리 > 수주등록 (송연 SA0004)
-export type OrderProduct = {
-  code: string;
-  name: string;
-  spec: string;
-  clientName: string;
-  display: string; // 규격이 있으면 '이름(규격)'
-};
+export type { OrderProduct } from '../types/salesOrder.types';
 
 const PATH = '/api/v1/sales/order/order-register';
 
@@ -22,6 +16,14 @@ export async function fetchOrders(orderDate: string): Promise<SavedOrder[]> {
 export async function fetchOrderClients(): Promise<string[]> {
   const result = await apiGet<{ resultList: string[] }>(`${PATH}/clients`);
   return result.resultList ?? [];
+}
+
+// 거래처 고르기 팝업 후보(분류에 '매출', 코드 · 이름. 2026-10-29)
+export async function fetchOrderClientOptions(): Promise<OrderClientOption[]> {
+  const result = await apiGet<{ resultList: Array<Partial<OrderClientOption>> }>(`${PATH}/client-options`);
+  return (result.resultList ?? [])
+    .map((item) => ({ clientCode: item.clientCode ?? '', name: item.name ?? '' }))
+    .filter((item) => item.clientCode && item.name);
 }
 
 // 품목 후보(사용 중인 제품)

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, Typography, useTheme } from '@mui/material';
+import { Alert, Box, Button, Checkbox, Chip, FormControlLabel, Typography, useTheme } from '@mui/material';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
 import { alpha } from '@mui/material/styles';
 import { CommonDialog } from '../../../../../shared/components/CommonDialog';
+import { AppLoadingSpinner } from '../../../../../shared/components/AppLoadingSpinner';
+import { AppSaveButton } from '../../../../../shared/components/AppSaveButton';
 import { AttachmentList } from '../../../../../shared/components/feed/AttachmentList';
 import { getStoredAuth, subscribeAuthChange } from '../../../../../shared/services/authService';
 import { ApiResponseError } from '../../../../../shared/services/apiClient';
@@ -162,12 +164,12 @@ function LoginPopupQueue({ storageKey }: { storageKey: string }) {
         ? <Button onClick={() => void advance()}>다음 공지</Button>
         : <Button disabled={saving} onClick={retry}>다시 시도</Button>}
       <Button disabled={saving} onClick={() => { persist({ ids: [], index: 0 }); setError(null); }}>이번 로그인에서 닫기</Button>
-    </> : <Button variant="contained" disabled={!post || saving} onClick={() => void advance()}>
-      {saving ? '저장 중' : '확인'}</Button>}
+    </> : <AppSaveButton variant="contained" saving={saving} savingLabel="저장 중"
+      disabled={!post || saving} onClick={() => void advance()}>확인</AppSaveButton>}
   >
     {error && <Alert severity="error" sx={{ mb: 2 }}>{error.message}</Alert>}
     {!post && !error && <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-      <CircularProgress aria-label="공지 내용 불러오는 중" /></Box>}
+      <AppLoadingSpinner size={40} aria-label="공지 내용 불러오는 중" /></Box>}
     {post && <>
       <Typography component="h3" sx={{ fontSize: '1.25rem', fontWeight: 700, overflowWrap: 'anywhere', mt: 1 }}>{post.title}</Typography>
       <NoticePopupBody post={post} />

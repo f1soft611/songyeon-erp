@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   emptyText, excelColumns, splitWarehouses, ssPrice, ssQty, visibleRows, visibleTotal, warehouseQty,
-  type StockStatusRow,
-} from '../src/pages/pu/stockstatus/utils/stockStatus';
+} from '../src/pages/pu/stock/stock-status/utils/stockStatus';
+import type { StockStatusRow } from '../src/pages/pu/stock/stock-status/types/stockStatus.types';
 
 const row = (code: string, extra: Partial<StockStatusRow> = {}): StockStatusRow => ({ code, name: `품목${code}`, stockQty: 0, ...extra });
 

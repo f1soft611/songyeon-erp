@@ -7,7 +7,6 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Divider,
   IconButton,
   MenuItem,
@@ -16,7 +15,9 @@ import {
 } from '@mui/material';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CommonDialog } from '../../../../../shared/components/CommonDialog';
+import { AppSaveButton } from '../../../../../shared/components/AppSaveButton';
 import { UnsavedChangesConfirmDialog } from '../../../../../shared/components/UnsavedChangesConfirmDialog';
+import { useUnsavedChangesBeforeUnload } from '../../../../../shared/hooks/useUnsavedChangesBeforeUnload';
 import { F1Grid } from '../../../../../shared/components/f1-grid';
 import {
   UserSelectEditor,
@@ -44,6 +45,7 @@ import type {
 
 type DocumentApprovalSettingsDialogProps = {
   open: boolean;
+  mode?: 'approval' | 'reference';
   documentCode: ApprovalLineTemplateEabusNo | null;
   userOptions: F1GridUserOption[];
   userOptionsError?: string;
@@ -167,6 +169,38 @@ function fromTemplateParticipants(
   };
 }
 
+function fromReferenceTemplate(
+  template: ApprovalLineTemplate,
+  userOptions: F1GridUserOption[],
+): string[] {
+  const optionsById = new Map(
+    userOptions.map((option) => [String(option.value), option]),
+  );
+  const seenUserIds = new Set<string>();
+  return [...template.approvalLines]
+    .sort(
+      (left, right) =>
+        left.stageOrder - right.stageOrder ||
+        left.participantOrder - right.participantOrder,
+    )
+    .map((line) => {
+      if (line.participantType !== 'REFERENCE') {
+        throw new Error(
+          '결재/합의 단계가 포함된 템플릿은 참조자로 적용할 수 없습니다.',
+        );
+      }
+      const userId = line.participantUserId;
+      if (seenUserIds.has(userId)) {
+        throw new Error('참조자 템플릿에 중복 사용자가 있습니다.');
+      }
+      if (!optionsById.has(userId)) {
+        throw new Error('현재 사용할 수 없는 참조자가 포함되어 있습니다.');
+      }
+      seenUserIds.add(userId);
+      return userId;
+    });
+}
+
 function toUserIds(value: F1GridUserValue): string[] {
   if (Array.isArray(value)) return [...new Set(value.map(String))];
   return value == null ? [] : [String(value)];
@@ -179,6 +213,7 @@ function getStageName(stage: DocumentApprovalStage, index: number): string {
 
 export function DocumentApprovalSettingsDialog({
   open,
+  mode = 'approval',
   documentCode,
   userOptions,
   userOptionsError,
@@ -187,6 +222,11 @@ export function DocumentApprovalSettingsDialog({
   onClose,
   onApply,
 }: DocumentApprovalSettingsDialogProps) {
+  const isReferenceMode = mode === 'reference';
+  const templateLabel = isReferenceMode ? '참조자' : '결재선';
+  const templateNameLabel = `${templateLabel} 템플릿`;
+  const favoriteLabel = `자주 쓰는 ${templateLabel}`;
+  const templateListLabel = `${favoriteLabel} 목록`;
   const [draftStages, setDraftStages] = useState<DocumentApprovalStage[]>(() =>
     cloneStages(approvalStages),
   );
@@ -221,6 +261,7 @@ export function DocumentApprovalSettingsDialog({
   const [templateListError, setTemplateListError] = useState('');
   const [templateGridKey, setTemplateGridKey] = useState(0);
   const [hasTemplateNameChanges, setHasTemplateNameChanges] = useState(false);
+  useUnsavedChangesBeforeUnload(open && managerOpen && hasTemplateNameChanges);
   const [pendingManagerAction, setPendingManagerAction] =
     useState<ApprovalLineTemplateManagerAction | null>(null);
   const [discardTemplateChangesOpen, setDiscardTemplateChangesOpen] =
@@ -264,13 +305,13 @@ export function DocumentApprovalSettingsDialog({
       setTemplateListError(
         error instanceof Error
           ? error.message
-          : '자주 쓰는 결재선 목록을 불러오지 못했습니다.',
+          : `${favoriteLabel} 목록을 불러오지 못했습니다.`,
       );
       return null;
     } finally {
       setTemplateListLoading(false);
     }
-  }, [documentCode]);
+  }, [documentCode, favoriteLabel]);
 
   useEffect(() => {
     if (!open) return;
@@ -286,7 +327,7 @@ export function DocumentApprovalSettingsDialog({
     const grid = templateGridRef.current;
     if (failedNames.size === 0) return;
     if (!grid) {
-      setTemplateError('저장 실패한 결재선명을 복원하지 못했습니다.');
+      setTemplateError(`저장 실패한 ${templateLabel}명을 복원하지 못했습니다.`);
       return;
     }
 
@@ -294,7 +335,7 @@ export function DocumentApprovalSettingsDialog({
       grid.setCellValue(templateId, 'name', name);
     }
     failedNames.clear();
-  }, [favoriteOperation, templateGridKey]);
+  }, [favoriteOperation, templateGridKey, templateLabel]);
 
   const assignedUserIds = useMemo(
     () =>
@@ -352,11 +393,11 @@ export function DocumentApprovalSettingsDialog({
   const saveTemplate = async () => {
     const name = saveName.trim();
     if (!name || name.length > 100) {
-      setTemplateError('결재선 템플릿 이름은 1~100자여야 합니다.');
+      setTemplateError(`${templateNameLabel} 이름은 1~100자여야 합니다.`);
       return;
     }
     if (!documentCode) {
-      setTemplateError('문서 코드가 없어 결재선을 저장할 수 없습니다.');
+      setTemplateError(`문서 코드가 없어 ${templateLabel}을 저장할 수 없습니다.`);
       return;
     }
     setFavoriteOperation('save');
@@ -364,14 +405,14 @@ export function DocumentApprovalSettingsDialog({
     try {
       const existingTemplates = await listApprovalLineTemplates(documentCode);
       if (existingTemplates.some((template) => template.name === name)) {
-        setTemplateError('같은 이름의 결재선 템플릿이 이미 있습니다.');
+        setTemplateError(`같은 이름의 ${templateNameLabel}이 이미 있습니다.`);
         return;
       }
       const created = await createApprovalLineTemplate({
         eabusNo: documentCode,
         name,
         approvalLines: toTemplateParticipants(
-          draftStages,
+          isReferenceMode ? [] : draftStages,
           draftReferenceUserIds,
         ),
       });
@@ -390,7 +431,7 @@ export function DocumentApprovalSettingsDialog({
           created,
         ]);
         setTemplateListError(
-          '결재선 저장은 완료했지만 목록 갱신에 실패했습니다. 목록을 다시 시도해 주세요.',
+          `${templateLabel} 저장은 완료했지만 목록 갱신에 실패했습니다. 목록을 다시 시도해 주세요.`,
         );
       }
       setSelectedTemplateId(created.templateId);
@@ -399,7 +440,7 @@ export function DocumentApprovalSettingsDialog({
       setTemplateError(
         error instanceof Error
           ? error.message
-          : '자주 쓰는 결재선을 저장하지 못했습니다.',
+          : `${favoriteLabel}을 저장하지 못했습니다.`,
       );
     } finally {
       setFavoriteOperation(null);
@@ -408,7 +449,7 @@ export function DocumentApprovalSettingsDialog({
 
   const openTemplateManager = async () => {
     if (!documentCode) {
-      setTemplateError('문서 코드가 없어 결재선을 불러올 수 없습니다.');
+      setTemplateError(`문서 코드가 없어 ${templateLabel}을 불러올 수 없습니다.`);
       return;
     }
     setTemplateError('');
@@ -429,7 +470,7 @@ export function DocumentApprovalSettingsDialog({
       setTemplateError(
         error instanceof Error
           ? error.message
-          : '자주 쓰는 결재선 목록을 불러오지 못했습니다.',
+          : `${favoriteLabel} 목록을 불러오지 못했습니다.`,
       );
     } finally {
       setFavoriteOperation(null);
@@ -443,7 +484,14 @@ export function DocumentApprovalSettingsDialog({
     try {
       const template = await getApprovalLineTemplate(templateId);
       if (template.eabusNo !== documentCode) {
-        throw new Error('현재 문서에서 사용할 수 없는 결재선입니다.');
+        throw new Error(`현재 문서에서 사용할 수 없는 ${templateLabel}입니다.`);
+      }
+      if (isReferenceMode) {
+        const referenceIds = fromReferenceTemplate(template, userOptions);
+        setDraftReferenceUserIds(referenceIds);
+        setPendingDeleteTemplateId(null);
+        setManagerOpen(false);
+        return;
       }
       const draft = fromTemplateParticipants(
         template,
@@ -458,7 +506,7 @@ export function DocumentApprovalSettingsDialog({
       setTemplateError(
         error instanceof Error
           ? error.message
-          : '자주 쓰는 결재선을 불러오지 못했습니다.',
+          : `${favoriteLabel}을 불러오지 못했습니다.`,
       );
     } finally {
       setFavoriteOperation(null);
@@ -469,7 +517,7 @@ export function DocumentApprovalSettingsDialog({
     const grid = templateGridRef.current;
     if (!grid) {
       setTemplateError(
-        '결재선 목록이 준비되지 않아 이름을 저장할 수 없습니다.',
+        `${templateLabel} 목록이 준비되지 않아 이름을 저장할 수 없습니다.`,
       );
       return;
     }
@@ -482,7 +530,7 @@ export function DocumentApprovalSettingsDialog({
       )
     ) {
       setTemplateError(
-        '결재선 목록이 변경되었습니다. 목록을 다시 불러온 후 저장해 주세요.',
+        `${templateLabel} 목록이 변경되었습니다. 목록을 다시 불러온 후 저장해 주세요.`,
       );
       return;
     }
@@ -490,11 +538,11 @@ export function DocumentApprovalSettingsDialog({
     const activeRows = grid.getActiveRows();
     const normalizedNames = activeRows.map((row) => row.name.trim());
     if (normalizedNames.some((name) => !name || name.length > 100)) {
-      setTemplateError('결재선 템플릿 이름은 1~100자여야 합니다.');
+      setTemplateError(`${templateNameLabel} 이름은 1~100자여야 합니다.`);
       return;
     }
     if (new Set(normalizedNames).size !== normalizedNames.length) {
-      setTemplateError('같은 이름의 결재선 템플릿이 이미 있습니다.');
+      setTemplateError(`같은 이름의 ${templateNameLabel}이 이미 있습니다.`);
       return;
     }
 
@@ -525,7 +573,7 @@ export function DocumentApprovalSettingsDialog({
             message:
               error instanceof Error
                 ? error.message
-                : '자주 쓰는 결재선 이름을 변경하지 못했습니다.',
+              : `${favoriteLabel} 이름을 변경하지 못했습니다.`,
           });
         }
       }
@@ -548,7 +596,7 @@ export function DocumentApprovalSettingsDialog({
       setTemplateGridKey((key) => key + 1);
       setTemplateError(
         failedRenames.length > 0
-          ? `일부 결재선 이름을 저장하지 못했습니다. ${failedRenames
+          ? `일부 ${templateLabel} 이름을 저장하지 못했습니다. ${failedRenames
               .map(({ name, message }) => `${name}: ${message}`)
               .join(' / ')}`
           : '',
@@ -576,7 +624,7 @@ export function DocumentApprovalSettingsDialog({
       setTemplateError(
         error instanceof Error
           ? error.message
-          : '자주 쓰는 결재선을 삭제하지 못했습니다.',
+          : `${favoriteLabel}을 삭제하지 못했습니다.`,
       );
     } finally {
       setFavoriteOperation(null);
@@ -812,7 +860,10 @@ export function DocumentApprovalSettingsDialog({
   };
 
   const handleApply = () => {
-    onApply(cloneStages(draftStages), [...draftReferenceUserIds]);
+    onApply(
+      isReferenceMode ? [] : cloneStages(draftStages),
+      [...draftReferenceUserIds],
+    );
     closeSettings();
   };
 
@@ -823,7 +874,7 @@ export function DocumentApprovalSettingsDialog({
   const favoriteColumns: F1GridColumn<ApprovalLineTemplateGridRow>[] = [
     {
       field: 'name',
-      headerName: '결재선명',
+      headerName: `${templateLabel}명`,
       flex: 1,
       editable: favoriteOperation === null,
       required: true,
@@ -832,7 +883,7 @@ export function DocumentApprovalSettingsDialog({
         const name = String(value ?? '').trim();
         return (
           (name.length > 0 && name.length <= 100) ||
-          '결재선 템플릿 이름은 1~100자여야 합니다.'
+          `${templateNameLabel} 이름은 1~100자여야 합니다.`
         );
       },
     },
@@ -855,7 +906,7 @@ export function DocumentApprovalSettingsDialog({
           <Button
             size="small"
             sx={{ minWidth: 0, px: 0.75 }}
-            aria-label={`결재선 적용 ${row.name}`}
+            aria-label={`${templateLabel} 적용 ${row.name}`}
             disabled={favoriteOperation !== null}
             onClick={(event) => {
               event.stopPropagation();
@@ -871,7 +922,7 @@ export function DocumentApprovalSettingsDialog({
             size="small"
             color="error"
             sx={{ minWidth: 0, px: 0.75 }}
-            aria-label={`결재선 삭제 ${row.name}`}
+            aria-label={`${templateLabel} 삭제 ${row.name}`}
             disabled={favoriteOperation !== null}
             onClick={(event) => {
               event.stopPropagation();
@@ -893,18 +944,22 @@ export function DocumentApprovalSettingsDialog({
       <CommonDialog
         open={open}
         onClose={closeSettings}
-        title="결재선 설정"
-        description="현재 작성 중인 결재선과 참조선을 편집합니다."
+        title={isReferenceMode ? '참조자 설정' : '결재선 설정'}
+        description={
+          isReferenceMode
+            ? '업무연락의 참조자를 편집하고 자주 쓰는 참조자를 관리합니다.'
+            : '현재 작성 중인 결재선과 참조선을 편집합니다.'
+        }
         size="md"
         fullScreenOnMobile
         footerStart={
           <Button
             variant="outlined"
             disabled={favoritesDisabled}
-            aria-label="자주 쓰는 결재선 저장"
+            aria-label={`${favoriteLabel} 저장`}
             onClick={openSaveDialog}
           >
-            자주 쓰는 결재선 저장
+            {favoriteLabel} 저장
           </Button>
         }
         actions={
@@ -925,6 +980,8 @@ export function DocumentApprovalSettingsDialog({
             <Alert severity="error">{userOptionsError}</Alert>
           )}
 
+          {!isReferenceMode && (
+            <>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               결재 단계
@@ -1138,6 +1195,8 @@ export function DocumentApprovalSettingsDialog({
           </Box>
 
           <Divider />
+            </>
+          )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -1159,7 +1218,7 @@ export function DocumentApprovalSettingsDialog({
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-              자주 쓰는 결재선
+              {favoriteLabel}
             </Typography>
             <Box
               sx={{
@@ -1192,7 +1251,7 @@ export function DocumentApprovalSettingsDialog({
                 }}
                 slotProps={{
                   select: {
-                    'aria-label': '자주 쓰는 결재선',
+                    'aria-label': favoriteLabel,
                     displayEmpty: true,
                   },
                 }}
@@ -1220,7 +1279,7 @@ export function DocumentApprovalSettingsDialog({
                       fontWeight: 600,
                     }}
                   >
-                    자주 쓰는 결재선 선택
+                    {favoriteLabel} 선택
                   </Typography>
                 </MenuItem>
                 {favoriteTemplates.map((template) => (
@@ -1243,11 +1302,13 @@ export function DocumentApprovalSettingsDialog({
             </Box>
             {templateListLoading && (
               <Typography role="status">
-                자주 쓰는 결재선 목록을 불러오는 중...
+                {favoriteLabel} 목록을 불러오는 중...
               </Typography>
             )}
             {favoriteOperation === 'load' && (
-              <Typography role="status">결재선을 불러오는 중...</Typography>
+              <Typography role="status">
+                {templateLabel}을 불러오는 중...
+              </Typography>
             )}
             {templateListError && (
               <Alert
@@ -1257,7 +1318,7 @@ export function DocumentApprovalSettingsDialog({
                     size="small"
                     onClick={() => void refreshTemplateList()}
                     disabled={templateListLoading}
-                    aria-label="결재선 목록 다시 시도"
+                    aria-label={`${templateLabel} 목록 다시 시도`}
                   >
                     다시 시도
                   </Button>
@@ -1276,25 +1337,24 @@ export function DocumentApprovalSettingsDialog({
         open={saveDialogOpen}
         size="xs"
         onClose={() => setSaveDialogOpen(false)}
-        title="결재선 템플릿 저장"
-        description="현재 결재선과 참조자를 자주 쓰는 결재선으로 저장합니다."
+        title={`${templateNameLabel} 저장`}
+        description={
+          isReferenceMode
+            ? '현재 선택한 참조자를 자주 쓰는 참조자로 저장합니다.'
+            : '현재 결재선과 참조자를 자주 쓰는 결재선으로 저장합니다.'
+        }
         fullScreenOnMobile
         actions={
           <>
-            <Button
+            <AppSaveButton
               variant="contained"
               onClick={() => void saveTemplate()}
+              saving={favoriteOperation === 'save'}
+              savingLabel="저장 중..."
               disabled={favoriteOperation !== null}
             >
-              {favoriteOperation === 'save' ? (
-                <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-                  <CircularProgress size={18} color="inherit" />
-                  저장 중...
-                </Box>
-              ) : (
-                '저장'
-              )}
-            </Button>
+              저장
+            </AppSaveButton>
             <Button
               onClick={() => setSaveDialogOpen(false)}
               disabled={favoriteOperation !== null}
@@ -1312,7 +1372,7 @@ export function DocumentApprovalSettingsDialog({
           <TextField
             autoFocus
             fullWidth
-            label="결재선 이름"
+            label={`${templateLabel} 이름`}
             value={saveName}
             onChange={(event) => setSaveName(event.target.value)}
             slotProps={{ htmlInput: { maxLength: 100 } }}
@@ -1326,25 +1386,20 @@ export function DocumentApprovalSettingsDialog({
         open={managerOpen}
         size="xs"
         onClose={() => requestManagerAction({ type: 'close' })}
-        title="자주 쓰는 결재선 불러오기"
-        description="결재선을 불러오거나 결재선명을 관리합니다."
+        title={`${favoriteLabel} 불러오기`}
+        description={`${templateLabel}을 불러오거나 ${templateLabel}명을 관리합니다.`}
         fullScreenOnMobile
         actions={
           <>
-            <Button
+            <AppSaveButton
               variant="contained"
               onClick={() => void saveTemplateRenames()}
+              saving={favoriteOperation === 'rename'}
+              savingLabel="저장 중..."
               disabled={!hasTemplateNameChanges || favoriteOperation !== null}
             >
-              {favoriteOperation === 'rename' ? (
-                <Box sx={{ alignItems: 'center', display: 'flex', gap: 1 }}>
-                  <CircularProgress size={18} color="inherit" />
-                  저장 중...
-                </Box>
-              ) : (
-                '저장'
-              )}
-            </Button>
+              저장
+            </AppSaveButton>
             <Button
               onClick={() => requestManagerAction({ type: 'close' })}
               disabled={favoriteOperation !== null}
@@ -1371,7 +1426,7 @@ export function DocumentApprovalSettingsDialog({
                   size="small"
                   onClick={() => void refreshTemplateList()}
                   disabled={templateListLoading}
-                  aria-label="결재선 목록 다시 시도"
+                  aria-label={`${templateLabel} 목록 다시 시도`}
                 >
                   다시 시도
                 </Button>
@@ -1381,14 +1436,16 @@ export function DocumentApprovalSettingsDialog({
             </Alert>
           )}
           {favoriteOperation === 'list' && (
-            <Typography role="status">결재선 목록을 불러오는 중...</Typography>
+            <Typography role="status">
+              {templateLabel} 목록을 불러오는 중...
+            </Typography>
           )}
           {favoriteOperation !== 'list' &&
             templates.length === 0 &&
             !templateError &&
             !templateListError && (
               <Typography color="text.secondary">
-                저장된 자주 쓰는 결재선이 없습니다.
+              {favoriteLabel} 목록이 비어 있습니다.
               </Typography>
             )}
           <F1Grid
@@ -1397,7 +1454,7 @@ export function DocumentApprovalSettingsDialog({
             rows={templates.map((template) => ({ ...template, actions: '' }))}
             columns={favoriteColumns}
             rowKey="templateId"
-            ariaLabel="자주 쓰는 결재선 목록"
+            ariaLabel={templateListLabel}
             height={320}
             showCheckbox={false}
             loading={favoriteOperation === 'list'}
@@ -1436,7 +1493,7 @@ export function DocumentApprovalSettingsDialog({
                 </Box>
               }
             >
-              “{pendingDeleteTemplate.name}” 결재선을 삭제하시겠습니까?
+              “{pendingDeleteTemplate.name}” {templateLabel}을 삭제하시겠습니까?
             </Alert>
           )}
         </Box>
@@ -1444,7 +1501,7 @@ export function DocumentApprovalSettingsDialog({
       <UnsavedChangesConfirmDialog
         open={discardTemplateChangesOpen}
         title="저장하지 않은 변경사항"
-        description="저장되지 않은 결재선명 변경을 버리고 요청한 작업을 계속하시겠습니까?"
+        description={`저장되지 않은 ${templateLabel}명 변경을 버리고 요청한 작업을 계속하시겠습니까?`}
         continueLabel="계속"
         cancelLabel="취소"
         onContinue={confirmDiscardTemplateChanges}

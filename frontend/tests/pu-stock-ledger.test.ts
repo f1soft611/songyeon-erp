@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   STOCK_AS_OF_EXCEL_COLUMNS, adjustTitle, dateRangeList, dayLabel, draftItems, emptyText, filterRows, groupByVendor, ledgerNum,
   orderCellValue, registeredMessage, splitBySupplier, toLedgerBulkBody, whQtyText,
-  type LedgerRow,
-} from '../src/pages/pu/ledger/utils/stockLedger';
+} from '../src/pages/pu/stock/stock-ledger/utils/stockLedger';
+import type { LedgerRow } from '../src/pages/pu/stock/stock-ledger/types/stockLedger.types';
 
 const row = (code: string, extra: Partial<LedgerRow> = {}): LedgerRow => ({ code, name: `원재료${code}`, totalUsage: 0, remainingStock: 0, suppliers: [], ...extra });
 

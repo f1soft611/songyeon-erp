@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AppSaveButton } from '../../../../../shared/components/AppSaveButton';
 import {
   Alert,
   Button,
@@ -112,11 +113,16 @@ export function ArchiveFileEditDialog({
         </FormControl>
       </DialogContent>
       <DialogActions>
+        <AppSaveButton
+          variant="contained"
+          saving={saving}
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          저장
+        </AppSaveButton>
         <Button onClick={onClose} disabled={saving}>
           취소
-        </Button>
-        <Button variant="contained" onClick={() => void handleSave()} disabled={saving}>
-          저장
         </Button>
       </DialogActions>
     </Dialog>

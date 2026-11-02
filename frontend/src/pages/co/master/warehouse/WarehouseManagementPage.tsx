@@ -28,8 +28,8 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
   },
 });
 
-// 상세 조회 조건 처음 값 · [초기화] 값: 사용여부 '사용'(2026-10-23 부터 기본은 사용중)
-const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = { useYn: 'Y' };
+// 상세 조회 조건 처음 값 · [초기화] 값: 없음(전체, 2026-10-29 기본 조건 뺌)
+const DEFAULT_DETAIL_VALUES: Record<string, PageSearchFieldValue> = {};
 
 // 상세 조회 조건의 사용여부 → 거르기 값('' 은 전체)
 const useFilterOf = (values: Record<string, PageSearchFieldValue>): WarehouseUseFilter =>
@@ -55,6 +55,8 @@ export function WarehouseManagementPage({ selectedModule, currentMenuName, conte
   const [searchQuery, setSearchQuery] = useState('');
   // 조회 조건: 사용여부는 S_ERP 거래처관리처럼 상세 조회(⌄)에서 고른다(2026-10-27, 예전 전체 · 사용중 · 사용안함 단추 대신)
   const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
+  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(DEFAULT_DETAIL_VALUES);
   const [useFilter, setUseFilter] = useState<WarehouseUseFilter>(useFilterOf(DEFAULT_DETAIL_VALUES));
   const [confirmReload, setConfirmReload] = useState(false);
 
@@ -97,14 +99,32 @@ export function WarehouseManagementPage({ selectedModule, currentMenuName, conte
     {
       key: 'read',
       actions: [
-        { label: '조회', icon: SearchIcon, visible: permissions.read, disabled: management.loading || management.saving, onClick: requestReload },
-        { label: '엑셀 다운로드', icon: FileDownloadIcon, visible: permissions.excel, disabled: management.loading, onClick: () => void exportExcel() },
+        {
+          label: '조회',
+          icon: SearchIcon,
+          visible: permissions.read,
+          disabled: management.loading || management.saving,
+          onClick: requestReload
+        },
+        {
+          label: '엑셀 다운로드',
+          icon: FileDownloadIcon,
+          visible: permissions.excel,
+          disabled: management.loading,
+          onClick: () => void exportExcel()
+        },
       ],
     },
     {
       key: 'write',
       actions: [
-        { label: '추가', icon: AddIcon, visible: permissions.create, disabled: management.loading || management.saving, onClick: () => gridRef.current?.addRow() },
+        {
+          label: '추가',
+          icon: AddIcon,
+          visible: permissions.create,
+          disabled: management.loading || management.saving,
+          onClick: () => gridRef.current?.addRow()
+        },
         {
           label: '저장',
           icon: management.saving ? SaveProgressIcon : SaveIcon,
@@ -139,10 +159,14 @@ export function WarehouseManagementPage({ selectedModule, currentMenuName, conte
         onDefaultSearch={requestReload}
         detailFields={detailFields}
         detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
         defaultValues={DEFAULT_DETAIL_VALUES}
         onDetailValuesChange={setDetailValues}
         // 상세 [조회]: 받은 목록을 화면에서 거른다(서버에서 다시 받지 않는다)
-        onDetailSearch={(values) => setUseFilter(useFilterOf(values))}
+        onDetailSearch={(values) => {
+          setAppliedDetailValues(values);
+          setUseFilter(useFilterOf(values));
+        }}
         detailLoading={management.loading}
       />
       <PageMessageArea

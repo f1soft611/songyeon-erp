@@ -2,6 +2,7 @@ package egovframework.let.sales.order.orderregister.service;
 
 import java.util.List;
 
+import egovframework.let.co.master.itemmaster.domain.model.ClientOptionVO;
 import egovframework.let.sales.order.orderregister.domain.model.OrderProductVO;
 import egovframework.let.sales.order.orderregister.domain.model.SalesOrderVO;
 
@@ -18,6 +19,8 @@ public interface SalesOrderService {
 
     /** 수주를 받을 수 있는 거래처(분류에 '매출') */
     List<String> listSalesClientNames() throws Exception;
+
+    List<ClientOptionVO> listSalesClientOptions() throws Exception;
 
     /** 수주 품목 후보(사용 중인 제품) */
     List<OrderProductVO> listProductCandidates() throws Exception;
@@ -40,6 +43,9 @@ public interface SalesOrderService {
 
     /** 2026-10-26 수주 · 출하는 거래처코드를 저장한다. 거래처명 → 코드, 코드가 없으면 막는다. */
     String requireClientCode(String clientName) throws Exception;
+
+    /** 2026-10-29 거래처코드가 오면 그 코드가 수주를 받을 수 있는 매출 거래처인지 보고 돌려준다. 코드가 없으면 이름으로 찾는다 */
+    String resolveSalesClientCode(String clientCode, String clientName) throws Exception;
 
     /** 2026-10-26 수주 · 출하는 제품코드만 저장한다. 품목명이 있는데 코드가 하나로 정해지지 않으면 막는다. */
     String requireProductCode(String name, String spec, String given) throws Exception;
