@@ -23,11 +23,12 @@
             <if test="start != null and end != null">
                 AND po.order_date BETWEEN #{start} AND #{end}
             </if>
-            <if test="clientQ != null">
-                AND (SELECT cln.name FROM clients cln WHERE cln.client_code = po.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'
+            <if test="clientQ != null"> <!-- 2026-11-03 거래처코드나 거래처명 일부 -->
+                AND ((SELECT cln.name FROM clients cln WHERE cln.client_code = po.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'
+                     OR po.client_code ILIKE '%' || #{clientQ} || '%')
             </if>
-            <if test="materialQ != null">
-                AND po.material_name ILIKE '%' || #{materialQ} || '%'
+            <if test="materialQ != null"> <!-- 2026-11-03 원재료코드나 원재료명 일부 -->
+                AND (po.material_name ILIKE '%' || #{materialQ} || '%' OR po.material_code ILIKE '%' || #{materialQ} || '%')
             </if>
             <if test='received == "0"'>
                 AND NOT EXISTS (SELECT 1 FROM material_receiving r WHERE r.po_id = po.id)

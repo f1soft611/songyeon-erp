@@ -181,8 +181,9 @@ public class DocumentApprovalDAO extends EgovAbstractMapper {
         return selectList("DocumentApprovalDAO.selectDocumentApprovalDetailsByIds", params);
     }
 
-    public Long selectLoginIdByLoginCode(Map<String, Object> params) throws Exception {
-        return (Long) selectOne("DocumentApprovalDAO.selectLoginIdByLoginCode", params);
+    /** 사번으로 사용 중인 계정 번호(= 사번, 2026-11-03)를 찾는다. 없으면 null */
+    public String selectLoginIdByLoginCode(Map<String, Object> params) throws Exception {
+        return (String) selectOne("DocumentApprovalDAO.selectLoginIdByLoginCode", params);
     }
 
     public Long insertElectronicApprovalViewHistory(Map<String, Object> params) throws Exception {

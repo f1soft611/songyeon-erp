@@ -143,6 +143,7 @@ export function BoxTypeManagementPage({ selectedModule, currentMenuName, content
         breadcrumbItems={breadcrumbItems && breadcrumbItems.length > 0 ? breadcrumbItems : [selectedModule.name, currentMenuName]}
         description={content.description}
         actionGroups={pageActionGroups}
+        screenReview={{ screenCode: 'BSBoxTypeView', screenName: currentMenuName, menuPath: (breadcrumbItems ?? [selectedModule.name]).slice(0, -1) }}
       />
       {/* 조회 조건: 포장유형명(돋보기 칸, 바로 거름) + 상세 조회(⌄)의 사용여부 */}
       <PageSearchArea

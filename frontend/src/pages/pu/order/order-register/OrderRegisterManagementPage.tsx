@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Card, Checkbox, FormControlLabel, TextField, Typography } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
@@ -7,11 +7,12 @@ import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import type { PageSearchField, PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
-import { OrderHistoryTree, createOrderHistoryColumns } from './components/OrderHistoryTree';
-import { PurchaseOrderDialog } from './components/PurchaseOrderDialog';
-import { useOrderRegisterManagement } from './hooks/useOrderRegisterManagement';
+import { OrderRegisterGrid, createOrderRegisterColumns } from './components/OrderRegisterGrid';
+import { OrderRegisterDialog } from './components/OrderRegisterDialog';
+import { useOrderRegisterManagement, type OrderPeriod } from './hooks/useOrderRegisterManagement';
 
 type OrderRegisterManagementPageProps = {
   selectedModule: ModuleItem;
@@ -30,13 +31,14 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255,255,255,0.72)',
   },
 });
-const sideFieldSx = (theme: { palette: { mode: string } }) => ({
-  ...searchFieldSx(theme),
-  '& .MuiOutlinedInput-root': { ...searchFieldSx(theme)['& .MuiOutlinedInput-root'], borderRadius: '8px' },
-});
+// 2026-11-03 상세 조회(⌄)에는 발주일 기간만 나온다
+const DETAIL_FIELDS: PageSearchField[] = [{ field: 'orderDate', label: '발주일', type: 'date', searchSpan: 2 }];
+const toPeriod = (value: PageSearchFieldValue | undefined): OrderPeriod =>
+  value && typeof value === 'object' ? { from: value.from ?? '', to: value.to ?? '' } : { from: '', to: '' };
 
 // 구매관리 > 발주관리 > 발주등록 (화면ID POOrderRegisterView, 송연 #screen-po · 19-purchase.js)
 // 발주일별 발주내역을 거래처로 묶어 보고, 발주 등록 창으로 넣는다. 2026-11-02 발주현황을 탭에서 따로 화면으로 뺐다.
+// 2026-11-03 검색줄은 거래처코드/명, 발주일은 상세 조회(⌄) 기간.
 export function OrderRegisterManagementPage({
   selectedModule,
   currentMenuName,
@@ -45,8 +47,12 @@ export function OrderRegisterManagementPage({
   selectedMenuPermissions,
 }: OrderRegisterManagementPageProps) {
   const management = useOrderRegisterManagement();
-  const { setCancelling, orders } = management;
-  const columns = useMemo(() => createOrderHistoryColumns({ onCancel: setCancelling }), [setCancelling]);
+  const { setCancelling, orders, period } = management;
+  const columns = useMemo(() => createOrderRegisterColumns({ onCancel: setCancelling }), [setCancelling]);
+  // 상세 조회(⌄) 발주일: 고치는 중인 값(detailValues)과 [조회]로 적용한 값(조건 칩). 등록 뒤 옮긴 발주일도 칩으로 보인다
+  const appliedDetailValues = useMemo<Record<string, PageSearchFieldValue>>(() => ({ orderDate: period }), [period]);
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(appliedDetailValues);
+  useEffect(() => setDetailValues(appliedDetailValues), [appliedDetailValues]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -92,41 +98,32 @@ export function OrderRegisterManagementPage({
           <TextField
             size="small"
             margin="none"
-            placeholder="거래처 검색"
+            placeholder="거래처코드/명 검색"
             value={management.client}
             onChange={(event) => management.setClient(event.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': '거래처 검색' } }}
+            slotProps={{ htmlInput: { 'aria-label': '거래처코드/명 검색' } }}
             sx={(theme) => ({ width: '100%', ...searchFieldSx(theme) })}
           />
         }
         onDefaultSearch={management.search}
-      >
-        <TextField
-          type="date"
-          size="small"
-          margin="none"
-          value={management.date}
-          onChange={(event) => management.setDate(event.target.value)}
-          title="비우면 전체 발주일"
-          slotProps={{ htmlInput: { 'aria-label': '발주일' } }}
-          sx={(theme) => ({ width: 180, ...sideFieldSx(theme) })}
-        />
-      </PageSearchArea>
+        detailFields={DETAIL_FIELDS}
+        detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
+        onDetailValuesChange={setDetailValues}
+        onDetailSearch={(values) => management.applyPeriod(toPeriod(values.orderDate))}
+        detailLoading={management.loading}
+      />
       <PageMessageArea message={management.notice} severity="success" onClose={() => management.setNotice('')} />
       <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 700 }}>발주내역</Typography>
-            {management.loaded && !management.loading && orders.length === 0 && (
-              <Typography variant="body2" color="text.secondary">발주내역이 없습니다</Typography>
-            )}
             <FormControlLabel
               sx={{ ml: 'auto', mr: 0 }}
               control={<Checkbox size="small" checked={management.expandAll} disabled={orders.length === 0} onChange={(event) => management.toggleExpandAll(event.target.checked)} />}
               label={<Typography variant="body2">모두 펼쳐보기</Typography>}
             />
           </Box>
-          <OrderHistoryTree
+          <OrderRegisterGrid
             rows={management.rows}
             columns={columns}
             loading={management.loading}
@@ -137,7 +134,7 @@ export function OrderRegisterManagementPage({
           />
         </Card>
       </Box>
-      <PurchaseOrderDialog
+      <OrderRegisterDialog
         open={management.registerOpen}
         onClose={() => management.setRegisterOpen(false)}
         onRegistered={management.afterRegistered}

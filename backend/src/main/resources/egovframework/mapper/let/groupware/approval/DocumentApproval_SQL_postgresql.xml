@@ -915,7 +915,8 @@
         <include refid="documentReadAccess"/>
     </select>
 
-    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="long">
+    <!-- 2026-11-03: 계정 번호 login_id = 사번 -->
+    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="string">
         SELECT login_id
         FROM public.tb_login_account
         WHERE tenant_id = #{tenantId}

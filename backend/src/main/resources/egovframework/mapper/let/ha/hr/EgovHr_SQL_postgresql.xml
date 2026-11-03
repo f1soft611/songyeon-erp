@@ -86,9 +86,10 @@
         WHERE la.login_code = #{id}
     </select>
 
+    <!-- 2026-11-03: 계정 번호(login_id)도 사번이다(자동 번호 없음) -->
     <insert id="upsertLoginAccount" parameterType="map">
-        INSERT INTO tb_login_account (tenant_id, login_code, password_hash, use_at)
-        SELECT t.tenant_id, e.id, e.password_hash, 'Y'
+        INSERT INTO tb_login_account (login_id, tenant_id, login_code, password_hash, use_at)
+        SELECT e.id, t.tenant_id, e.id, e.password_hash, 'Y'
         FROM employees e
         JOIN tb_tenant t ON t.tenant_code = #{tenantCode}
         WHERE e.id = #{id}
@@ -119,11 +120,13 @@
     </delete>
 
     <!-- ===== 사용자 표(S_ERP tb_user) — 2026-10-22 그룹웨어 전자결재 =====
-         로그인 uniqId = tb_user.user_id 라 계정마다 한 줄이 있어야 결재가 사람을 찾는다(DB 20261022_006 과 같은 규칙).
-         이름 = 사원 이름, 이메일 = 사원 이메일(비었거나 다른 사용자와 겹치면 NULL), 퇴사일이 있으면 사용안함 -->
+         계정마다 한 줄(사용자 번호 user_id = 사번, 2026-11-03). 결재가 이름 · 부서를 여기서 읽는다(DB 20261022_006 과 같은 규칙).
+         이름 = 사원 이름, 이메일 = 사원 이메일(비었거나 다른 사용자와 겹치면 NULL), 퇴사일이 있으면 사용안함.
+         계정을 거둔 뒤 다시 만들면 남아 있는 같은 사번 줄을 계정에 다시 잇는다(이메일은 그대로) -->
     <insert id="insertUserIfMissing" parameterType="map">
-        INSERT INTO tb_user (tenant_id, login_id, user_nm, email_addr, use_at)
-        SELECT la.tenant_id,
+        INSERT INTO tb_user (user_id, tenant_id, login_id, user_nm, email_addr, use_at)
+        SELECT la.login_id,
+               la.tenant_id,
                la.login_id,
                e.name,
                CASE
@@ -136,7 +139,11 @@
         JOIN tb_tenant t ON t.tenant_id = la.tenant_id AND t.tenant_code = #{tenantCode}
         JOIN employees e ON e.id = la.login_code
         WHERE la.login_code = #{id}
-          AND NOT EXISTS (SELECT 1 FROM tb_user u WHERE u.tenant_id = la.tenant_id AND u.login_id = la.login_id)
+        ON CONFLICT (user_id) DO UPDATE
+           SET login_id = EXCLUDED.login_id,
+               user_nm = EXCLUDED.user_nm,
+               use_at = EXCLUDED.use_at,
+               updated_at = CURRENT_TIMESTAMP
     </insert>
 
     <!-- 사원을 고치면 이름 · 사용 여부(퇴사일)를 맞춘다 -->

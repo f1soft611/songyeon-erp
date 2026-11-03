@@ -28,8 +28,8 @@
         <where>
             <if test="date != null">r.receive_date = #{date}</if>
             <if test="start != null and end != null">AND r.receive_date BETWEEN #{start} AND #{end}</if>
-            <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = r.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
-            <if test="materialQ != null">AND r.material_name ILIKE '%' || #{materialQ} || '%'</if>
+            <if test="clientQ != null">AND ((SELECT cln.name FROM clients cln WHERE cln.client_code = r.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%' OR r.client_code ILIKE '%' || #{clientQ} || '%')</if> <!-- 2026-11-03 거래처코드나 이름 일부 -->
+            <if test="materialQ != null">AND (r.material_name ILIKE '%' || #{materialQ} || '%' OR r.material_code ILIKE '%' || #{materialQ} || '%')</if> <!-- 2026-11-03 원재료코드나 이름 일부 -->
             <if test='kind == "return"'>AND COALESCE(r.is_return, 0) = 1</if>
             <if test='kind == "receiving"'>AND COALESCE(r.is_return, 0) = 0</if>
         </where>
@@ -137,8 +137,8 @@
             COUNT(*) AS "entryCount"
         FROM material_receiving
         WHERE receive_date BETWEEN #{start} AND #{end}
-        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
-        <if test="materialQ != null">AND material_name ILIKE '%' || #{materialQ} || '%'</if>
+        <if test="clientQ != null">AND ((SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%' OR material_receiving.client_code ILIKE '%' || #{clientQ} || '%')</if>
+        <if test="materialQ != null">AND (material_name ILIKE '%' || #{materialQ} || '%' OR material_code ILIKE '%' || #{materialQ} || '%')</if>
         GROUP BY material_code, material_name
         ORDER BY material_name
     </select>
@@ -148,7 +148,7 @@
         SELECT receive_date AS "date", material_name AS "materialName", qty AS "qty", (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) AS "clientName"
         FROM material_receiving
         WHERE material_code = #{code} AND receive_date BETWEEN #{start} AND #{end}
-        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+        <if test="clientQ != null">AND ((SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%' OR material_receiving.client_code ILIKE '%' || #{clientQ} || '%')</if>
         ORDER BY receive_date, id
     </select>
 
@@ -156,7 +156,7 @@
     <select id="selectDetailReceived" parameterType="map" resultType="double">
         SELECT COALESCE(SUM(qty), 0) FROM material_receiving
         WHERE material_code = #{code} AND receive_date BETWEEN #{start} AND #{end}
-        <if test="clientQ != null">AND (SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%'</if>
+        <if test="clientQ != null">AND ((SELECT cln.name FROM clients cln WHERE cln.client_code = material_receiving.client_code LIMIT 1) ILIKE '%' || #{clientQ} || '%' OR material_receiving.client_code ILIKE '%' || #{clientQ} || '%')</if>
     </select>
 
     <!-- 같은 기간 생산사용량(생산 투입 기록의 날짜는 created_at 앞 10글자) -->

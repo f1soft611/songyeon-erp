@@ -85,7 +85,7 @@ public class HrDAO extends EgovAbstractMapper {
         return delete("HrDAO.deleteLoginAccount", params("tenantCode", tenantCode, "id", id));
     }
 
-    // 사용자 표(tb_user) — 로그인 uniqId · 전자결재가 이 줄을 본다(2026-10-22)
+    // 사용자 표(tb_user, user_id = 사번) — 전자결재가 이름 · 부서를 이 줄에서 읽는다(2026-11-03)
     public int insertUserIfMissing(String tenantCode, String id) throws Exception {
         return insert("HrDAO.insertUserIfMissing", params("tenantCode", tenantCode, "id", id));
     }

@@ -61,7 +61,7 @@ public class EgovLoginApiController {
     @Resource(name = "documentUnlockStore")
     private DocumentUnlockStore documentUnlockStore;
 
-    /** 로그인 uniqId(tb_user 번호) → 사번. 문서함 잠금은 사번으로 열었다(2026-10-22) */
+    /** 로그인 사번(2026-11-03 부터 uniqId 가 사번). 문서함 잠금은 사번으로 열었다 */
     @Resource(name = "loginEmployeeResolver")
     private LoginEmployeeResolver loginEmployeeResolver;
 

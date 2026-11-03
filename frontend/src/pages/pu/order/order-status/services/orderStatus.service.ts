@@ -1,5 +1,5 @@
 import { apiGet } from '../../../../../shared/services/apiClient';
-import type { PurchaseOrder } from '../../order-register/types/purchaseOrder.types';
+import type { PurchaseOrder } from '../../order-register/types/orderRegister.types';
 import type { StatusQuery } from '../types/orderStatus.types';
 
 // 구매관리 > 발주관리 > 발주현황. 발주등록과 같은 발주 API 를 기간으로 부른다

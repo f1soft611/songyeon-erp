@@ -21,10 +21,10 @@ public class SystemRoleUserVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @Schema(description = "사용자 ID")
-    private Long userId;
+    private String userId;
 
     @Schema(description = "로그인 ID")
-    private Long loginId;
+    private String loginId;
 
     // 송연: 계정 표 login_code = 사번(employees.id). 화면 '로그인 ID' 칸에 보여 준다(2026-10-21)
     @Schema(description = "로그인 코드(사번)")

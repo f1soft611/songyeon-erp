@@ -118,11 +118,15 @@ class HrServiceImplTest {
         body.put("residentNo", "900101-123456");
         assertEquals("주민등록번호는 13자리로 적어주세요", assertThrows(IllegalArgumentException.class, () -> service.createEmployee(body)).getMessage());
         body.put("residentNo", "900101-1234567");
-        when(seq.nextValue("EMPLOYEE_ID", "ALL", "ALL")).thenReturn(7L);
-        assertEquals("00000007", service.createEmployee(body)); // 새 사번: 8자리 자동 번호
+        when(seq.nextValue("EMPLOYEE_ID", "ALL", "ALL")).thenReturn(20200001L);
+        assertEquals("20200001", service.createEmployee(body)); // 새 사번: 8자리 자동 번호, 20200001 부터(2026-11-03)
+        // 번호표를 먼저 20200000 이상으로 올려 둔 뒤 받는다
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(seq);
+        order.verify(seq).advanceToAtLeast("EMPLOYEE_ID", "ALL", "ALL", 20200000L);
+        order.verify(seq).nextValue("EMPLOYEE_ID", "ALL", "ALL");
         ArgumentCaptor<Map<String, Object>> cap = ArgumentCaptor.forClass(Map.class);
         verify(dao).insertEmployee(cap.capture());
-        assertEquals("00000007", cap.getValue().get("id"));
+        assertEquals("20200001", cap.getValue().get("id"));
         assertEquals("김연구", cap.getValue().get("name"));
         assertEquals("연구소", cap.getValue().get("department"));
         assertNull(cap.getValue().get("phone"));
@@ -132,8 +136,8 @@ class HrServiceImplTest {
         // 2026-10-21 등록하면 로그인 계정도: username = 이름, 첫 비밀번호 changeme, 계정 표 + 일반 사용자 역할
         assertEquals("김연구", cap.getValue().get("username"));
         assertTrue(hasher.matches("changeme", (String) cap.getValue().get("passwordHash")));
-        verify(dao).upsertLoginAccount("SONGYEON", "00000007");
-        verify(dao).insertDefaultRole("SONGYEON", "00000007");
+        verify(dao).upsertLoginAccount("SONGYEON", "20200001");
+        verify(dao).insertDefaultRole("SONGYEON", "20200001");
         // 같은 이름(= 같은 username)이 있으면 막고 아무것도 넣지 않는다
         when(dao.countOtherUsername("", "김연구")).thenReturn(1);
         assertEquals("같은 이름의 사원이 이미 있어요. 이름 뒤에 구분을 붙여 주세요(예: 김민수B)",

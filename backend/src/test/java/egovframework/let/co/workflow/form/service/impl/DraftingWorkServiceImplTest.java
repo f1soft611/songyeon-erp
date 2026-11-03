@@ -101,8 +101,8 @@ class DraftingWorkServiceImplTest {
     @Test
     void listUserOptionsPassesTenantScopeAndPreservesDistinctUserAndLoginIds() throws Exception {
         DraftingWorkUserOptionVO user = new DraftingWorkUserOptionVO();
-        user.setUserId(110L);
-        user.setLoginId(210L);
+        user.setUserId("00000110");
+        user.setLoginId("00000110");
         user.setUserNm("홍길동");
         user.setDepartmentNm("운영팀");
         when(draftingWorkDAO.selectUserOptions(9L))
@@ -111,8 +111,8 @@ class DraftingWorkServiceImplTest {
         java.util.List<DraftingWorkUserOptionVO> result = draftingWorkService.listUserOptions(9L);
 
         assertEquals(1, result.size());
-        assertEquals(110L, result.get(0).getUserId());
-        assertEquals(210L, result.get(0).getLoginId());
+        assertEquals("00000110", result.get(0).getUserId());
+        assertEquals("00000110", result.get(0).getLoginId());
 
         verify(draftingWorkDAO).selectUserOptions(9L);
     }
@@ -151,7 +151,7 @@ class DraftingWorkServiceImplTest {
         payload.setRegTermId(55L);
         payload.setAssigneeIds(null);
 
-        DraftingWorkVO result = draftingWorkService.createWork(9L, 101L, payload);
+        DraftingWorkVO result = draftingWorkService.createWork(9L, "00000101", payload);
 
         assertEquals(Collections.emptyList(), result.getAssigneeIds());
         verify(draftingWorkDAO, never()).insertWorkAuthorityMapping(any());
@@ -176,7 +176,7 @@ class DraftingWorkServiceImplTest {
         payload.setRegTermId(55L);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-            () -> draftingWorkService.createWork(9L, 101L, payload));
+            () -> draftingWorkService.createWork(9L, "00000101", payload));
 
         assertEquals("이미 사용 중인 구분코드입니다.", error.getMessage());
         verify(draftingWorkDAO, never()).insertWorkAuthorityMapping(any());
@@ -198,20 +198,20 @@ class DraftingWorkServiceImplTest {
                 when(commonCodeItemService.listItems(9L, 32L))
                     .thenReturn(Collections.singletonList(activeItem(55L, "MONTH", "월")));
                 when(draftingWorkDAO.selectUserOptions(9L)).thenReturn(java.util.Arrays.asList(
-                    userOption(101L, 201L), userOption(110L, 210L),
-                    userOption(111L, 211L), userOption(112L, 212L)));
+                    userOption("00000101", "00000101"), userOption("00000110", "00000110"),
+                    userOption("00000111", "00000111"), userOption("00000112", "00000112")));
                 when(draftingWorkDAO.updateWork(any())).thenReturn(1);
 
                 DraftingWorkSaveRequestVO payload = new DraftingWorkSaveRequestVO();
                 payload.setCodeName(" 수정양식 ");
                 payload.setCategoryItemId(42L);
                 payload.setRegTermId(55L);
-                payload.setReviewerId(210L);
-                payload.setApproverId(211L);
-                payload.setAssigneeIds(Collections.singletonList("112"));
+                payload.setReviewerId("00000110");
+                payload.setApproverId("00000111");
+                payload.setAssigneeIds(Collections.singletonList("00000112"));
                 payload.setUseAt("N");
 
-                DraftingWorkVO result = draftingWorkService.updateWork(9L, 101L, 77L, payload);
+                DraftingWorkVO result = draftingWorkService.updateWork(9L, "00000101", 77L, payload);
 
                 assertEquals(77L, result.getDraftingWorkCategoryId());
                 verify(draftingWorkDAO).updateWork(argThat(params ->
@@ -222,7 +222,7 @@ class DraftingWorkServiceImplTest {
                         && Long.valueOf(55L).equals(params.get("regTermId"))
                         && "월".equals(params.get("cycle"))
                         && "N".equals(params.get("useAt"))
-                        && Long.valueOf(201L).equals(params.get("updatedBy"))));
+                        && "00000101".equals(params.get("updatedBy"))));
                 verify(draftingWorkDAO).deactivateWorkAuthorityMappings(argThat(params ->
                     Long.valueOf(9L).equals(params.get("tenantId"))
                         && Long.valueOf(77L).equals(params.get("workId"))));
@@ -230,7 +230,7 @@ class DraftingWorkServiceImplTest {
                     Long.valueOf(9L).equals(params.get("tenantId"))
                         && Long.valueOf(77L).equals(params.get("workId"))
                         && "011".equals(params.get("cataTypeCode"))
-                        && "112".equals(params.get("employeeNo"))));
+                        && "00000112".equals(params.get("employeeNo"))));
                 }
 
                 @Test
@@ -259,7 +259,7 @@ class DraftingWorkServiceImplTest {
 
                 IllegalArgumentException error = assertThrows(
                     IllegalArgumentException.class,
-                    () -> draftingWorkService.createWork(9L, 101L, payload));
+                    () -> draftingWorkService.createWork(9L, "00000101", payload));
 
                 assertEquals("분류 공통코드가 현재 테넌트에서 사용 중이 아닙니다.", error.getMessage());
                 verify(draftingWorkDAO, never()).insertWork(any());
@@ -303,7 +303,7 @@ class DraftingWorkServiceImplTest {
 
                     IllegalArgumentException error = assertThrows(
                         IllegalArgumentException.class,
-                        () -> draftingWorkService.createWork(9L, 101L, payload));
+                        () -> draftingWorkService.createWork(9L, "00000101", payload));
 
                     assertEquals("등록주기 공통코드가 현재 테넌트에서 사용 중이 아닙니다.", error.getMessage());
                     verify(draftingWorkDAO, never()).insertWork(any());
@@ -322,8 +322,8 @@ class DraftingWorkServiceImplTest {
                         .thenReturn(Collections.singletonList(activeItem(55L, "MONTH", "월")));
                     when(draftingWorkDAO.selectUserOptions(9L))
                         .thenReturn(java.util.Arrays.asList(
-                            userOption(101L, 201L), userOption(110L, 210L),
-                            userOption(111L, 211L), userOption(112L, 212L)));
+                            userOption("00000101", "00000101"), userOption("00000110", "00000110"),
+                            userOption("00000111", "00000111"), userOption("00000112", "00000112")));
                     when(draftingWorkDAO.selectWorkIdByCode(9L, "011")).thenReturn(null);
                     when(draftingWorkDAO.insertWork(any())).thenReturn(77L);
 
@@ -331,19 +331,19 @@ class DraftingWorkServiceImplTest {
                     payload.setCodeName("정기점검");
                     payload.setCategoryItemId(42L);
                     payload.setRegTermId(55L);
-                    payload.setReviewerId(210L);
-                    payload.setApproverId(211L);
-                    payload.setAssigneeIds(Collections.singletonList("112"));
+                    payload.setReviewerId("00000110");
+                    payload.setApproverId("00000111");
+                    payload.setAssigneeIds(Collections.singletonList("00000112"));
 
-                    DraftingWorkVO created = draftingWorkService.createWork(9L, 101L, payload);
+                    DraftingWorkVO created = draftingWorkService.createWork(9L, "00000101", payload);
 
-                    assertEquals(Collections.singletonList("112"), created.getAssigneeIds());
+                    assertEquals(Collections.singletonList("00000112"), created.getAssigneeIds());
                     verify(draftingWorkDAO).insertWorkAuthorityMapping(argThat(params ->
                         Long.valueOf(9L).equals(params.get("tenantId"))
                             && Long.valueOf(77L).equals(params.get("workId"))
                             && "011".equals(params.get("cataTypeCode"))
-                            && "112".equals(params.get("employeeNo"))
-                            && Long.valueOf(201L).equals(params.get("createdBy"))));
+                            && "00000112".equals(params.get("employeeNo"))
+                            && "00000101".equals(params.get("createdBy"))));
                     }
 
                     @Test
@@ -381,25 +381,25 @@ class DraftingWorkServiceImplTest {
                     payload.setCodeName(" 정기점검 ");
                     payload.setCategoryItemId(42L);
                     payload.setRegTermId(55L);
-                    payload.setReviewerId(210L);
-                    payload.setApproverId(211L);
-                    payload.setAssigneeIds(Collections.singletonList("110"));
+                    payload.setReviewerId("00000110");
+                    payload.setApproverId("00000111");
+                    payload.setAssigneeIds(Collections.singletonList("00000110"));
                     payload.setUseAt("Y");
 
                     DraftingWorkUserOptionVO reviewer = new DraftingWorkUserOptionVO();
-                    reviewer.setUserId(110L);
-                    reviewer.setLoginId(210L);
+                    reviewer.setUserId("00000110");
+                    reviewer.setLoginId("00000110");
                     DraftingWorkUserOptionVO approver = new DraftingWorkUserOptionVO();
-                    approver.setUserId(111L);
-                    approver.setLoginId(211L);
+                    approver.setUserId("00000111");
+                    approver.setLoginId("00000111");
                     DraftingWorkUserOptionVO actor = new DraftingWorkUserOptionVO();
-                    actor.setUserId(101L);
-                    actor.setLoginId(201L);
+                    actor.setUserId("00000101");
+                    actor.setLoginId("00000101");
                     when(draftingWorkDAO.selectUserOptions(9L))
                         .thenReturn(java.util.Arrays.asList(actor, reviewer, approver));
                     when(draftingWorkDAO.selectWorkIdByCode(9L, "009")).thenReturn(null);
 
-                    draftingWorkService.createWork(9L, 101L, payload);
+                    draftingWorkService.createWork(9L, "00000101", payload);
 
                     verify(draftingWorkDAO).insertWork(argThat(params ->
                         Long.valueOf(9L).equals(params.get("tenantId"))
@@ -408,9 +408,9 @@ class DraftingWorkServiceImplTest {
                             && Long.valueOf(42L).equals(params.get("categoryItemId"))
                             && Long.valueOf(55L).equals(params.get("regTermId"))
                             && "월".equals(params.get("cycle"))
-                            && Long.valueOf(210L).equals(params.get("reviewerId"))
-                            && Long.valueOf(211L).equals(params.get("approverId"))
-                            && Long.valueOf(201L).equals(params.get("createdBy"))));
+                            && "00000110".equals(params.get("reviewerId"))
+                            && "00000111".equals(params.get("approverId"))
+                            && "00000101".equals(params.get("createdBy"))));
                     }
 
                     @Test
@@ -430,11 +430,11 @@ class DraftingWorkServiceImplTest {
                     payload.setCodeName("정기점검");
                     payload.setCategoryItemId(42L);
                     payload.setRegTermId(55L);
-                    payload.setReviewerId(999L);
+                    payload.setReviewerId("00000999");
 
                     IllegalArgumentException error = assertThrows(
                         IllegalArgumentException.class,
-                        () -> draftingWorkService.createWork(9L, 101L, payload));
+                        () -> draftingWorkService.createWork(9L, "00000101", payload));
 
                     assertEquals("검토자는 현재 테넌트에서 사용 가능한 사용자여야 합니다.", error.getMessage());
                     verify(draftingWorkDAO, never()).insertWork(any());
@@ -450,7 +450,7 @@ class DraftingWorkServiceImplTest {
                         when(commonCodeItemService.listItems(9L, 32L))
                             .thenReturn(Collections.singletonList(activeItem(55L, "MONTH", "월")));
                         when(draftingWorkDAO.selectUserOptions(9L))
-                            .thenReturn(Collections.singletonList(userOption(101L, 201L)));
+                            .thenReturn(Collections.singletonList(userOption("00000101", "00000101")));
                         when(draftingWorkDAO.selectWorkIdByCode(9L, "012")).thenReturn(null);
                         when(draftingWorkDAO.insertWork(any())).thenReturn(77L);
 
@@ -459,7 +459,7 @@ class DraftingWorkServiceImplTest {
                         payload.setCategoryItemId(42L);
                         payload.setRegTermId(55L);
 
-                        DraftingWorkVO result = draftingWorkService.createWork(9L, 101L, payload);
+                        DraftingWorkVO result = draftingWorkService.createWork(9L, "00000101", payload);
 
                         assertEquals(77L, result.getDraftingWorkCategoryId());
                         verify(draftingWorkDAO).insertWork(argThat(params ->
@@ -478,7 +478,7 @@ class DraftingWorkServiceImplTest {
 
                         IllegalArgumentException error = assertThrows(
                             IllegalArgumentException.class,
-                            () -> draftingWorkService.createWork(9L, 101L, payload));
+                            () -> draftingWorkService.createWork(9L, "00000101", payload));
 
                         assertEquals("사용여부는 Y 또는 N이어야 합니다.", error.getMessage());
                         verify(draftingWorkDAO, never()).insertWork(any());
@@ -501,7 +501,7 @@ class DraftingWorkServiceImplTest {
                         return item;
                     }
 
-                    private static DraftingWorkUserOptionVO userOption(Long userId, Long loginId) {
+                    private static DraftingWorkUserOptionVO userOption(String userId, String loginId) {
                         DraftingWorkUserOptionVO user = new DraftingWorkUserOptionVO();
                         user.setUserId(userId);
                         user.setLoginId(loginId);
@@ -519,11 +519,11 @@ class DraftingWorkServiceImplTest {
                     when(commonCodeItemService.listItems(9L, 32L))
                         .thenReturn(Collections.singletonList(activeItem(55L, "MONTH", "월")));
                     DraftingWorkUserOptionVO reviewer = new DraftingWorkUserOptionVO();
-                    reviewer.setUserId(110L);
-                    reviewer.setLoginId(210L);
+                    reviewer.setUserId("00000110");
+                    reviewer.setLoginId("00000110");
                     DraftingWorkUserOptionVO approver = new DraftingWorkUserOptionVO();
-                    approver.setUserId(111L);
-                    approver.setLoginId(211L);
+                    approver.setUserId("00000111");
+                    approver.setLoginId("00000111");
                     when(draftingWorkDAO.selectUserOptions(9L))
                         .thenReturn(java.util.Arrays.asList(reviewer, approver));
 
@@ -532,15 +532,15 @@ class DraftingWorkServiceImplTest {
                     payload.setCodeName("정기점검");
                     payload.setCategoryItemId(42L);
                     payload.setRegTermId(55L);
-                    payload.setReviewerId(210L);
-                    payload.setApproverId(211L);
+                    payload.setReviewerId("00000110");
+                    payload.setApproverId("00000111");
 
                     when(draftingWorkDAO.selectWorkIdByCode(9L, "007"))
                         .thenReturn(501L);
 
                     IllegalArgumentException error = assertThrows(
                         IllegalArgumentException.class,
-                        () -> draftingWorkService.createWork(9L, 101L, payload));
+                        () -> draftingWorkService.createWork(9L, "00000101", payload));
 
                     assertEquals("이미 사용 중인 구분코드입니다.", error.getMessage());
                     verify(draftingWorkDAO, never()).insertWork(any());

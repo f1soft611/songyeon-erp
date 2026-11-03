@@ -14,9 +14,9 @@ public class DraftingWorkUserOptionVO implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @Schema(description = "사용자 ID")
-    private Long userId;
+    private String userId;
     @Schema(description = "로그인 ID")
-    private Long loginId;
+    private String loginId;
     @Schema(description = "사용자명")
     private String userNm;
     @Schema(description = "부서명")

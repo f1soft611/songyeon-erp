@@ -77,7 +77,7 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
 
     @Override
     @Transactional
-    public DraftingWorkVO createWork(Long tenantId, Long actorUserId, DraftingWorkSaveRequestVO payload) throws Exception {
+    public DraftingWorkVO createWork(Long tenantId, String actorUserId, DraftingWorkSaveRequestVO payload) throws Exception {
         if (payload == null) {
             throw new IllegalArgumentException("저장 요청이 비어 있습니다.");
         }
@@ -160,11 +160,11 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
         }
         for (String rawAssigneeId : assigneeIds) {
             String assigneeId = StringUtils.hasText(rawAssigneeId) ? rawAssigneeId.trim() : "";
-            if (assigneeId.length() > 10 || !containsUserId(tenantUsers, assigneeId)) {
+            if (assigneeId.length() > 20 || !containsUserId(tenantUsers, assigneeId)) {
                 throw new IllegalArgumentException("담당자는 현재 테넌트에서 사용 가능한 사용자여야 합니다.");
             }
         }
-        Long actorLoginId = resolveLoginId(tenantUsers, actorUserId);
+        String actorLoginId = resolveLoginId(tenantUsers, actorUserId);
 
         String cataTypeCode = payload.getCataTypeCode().trim();
         if (cataTypeCode.length() > 3) {
@@ -233,7 +233,7 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
     @Transactional
     public DraftingWorkVO updateWork(
             Long tenantId,
-            Long actorUserId,
+            String actorUserId,
             Long draftingWorkCategoryId,
             DraftingWorkSaveRequestVO payload) throws Exception {
         if (payload == null) {
@@ -281,13 +281,13 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
         Set<String> uniqueAssigneeIds = new LinkedHashSet<String>();
         for (String rawAssigneeId : requestedAssigneeIds) {
             String assigneeId = StringUtils.hasText(rawAssigneeId) ? rawAssigneeId.trim() : "";
-            if (assigneeId.length() > 10 || !containsUserId(tenantUsers, assigneeId)) {
+            if (assigneeId.length() > 20 || !containsUserId(tenantUsers, assigneeId)) {
                 throw new IllegalArgumentException("담당자는 현재 테넌트에서 사용 가능한 사용자여야 합니다.");
             }
             uniqueAssigneeIds.add(assigneeId);
         }
 
-        Long actorLoginId = resolveLoginId(tenantUsers, actorUserId);
+        String actorLoginId = resolveLoginId(tenantUsers, actorUserId);
         Map<String, Object> params = new HashMap<String, Object>();
         params.put("tenantId", tenantId);
         params.put("workId", draftingWorkCategoryId);
@@ -366,7 +366,8 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
         return normalized;
     }
 
-    private boolean containsLoginId(List<DraftingWorkUserOptionVO> users, Long loginId) {
+    // 사람 번호는 모두 사번(2026-11-03, 앞자리 0 그대로 문자열로 비교)
+    private boolean containsLoginId(List<DraftingWorkUserOptionVO> users, String loginId) {
         if (loginId == null) {
             return false;
         }
@@ -378,7 +379,7 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
         return false;
     }
 
-    private Long resolveLoginId(List<DraftingWorkUserOptionVO> users, Long userId) {
+    private String resolveLoginId(List<DraftingWorkUserOptionVO> users, String userId) {
         if (userId == null) {
             return null;
         }
@@ -390,7 +391,7 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
         return null;
     }
 
-    private String findUserNameByLoginId(List<DraftingWorkUserOptionVO> users, Long loginId) {
+    private String findUserNameByLoginId(List<DraftingWorkUserOptionVO> users, String loginId) {
         if (loginId == null) {
             return "";
         }
@@ -407,7 +408,7 @@ public class DraftingWorkServiceImpl extends EgovAbstractServiceImpl implements 
             return false;
         }
         for (DraftingWorkUserOptionVO user : users) {
-            if (userId.equals(String.valueOf(user.getUserId()))) {
+            if (userId.equals(user.getUserId())) {
                 return true;
             }
         }

@@ -47,6 +47,8 @@ public class HrServiceImpl extends EgovAbstractServiceImpl implements HrService 
     static final String EMPLOYEE_ID_KEY = "EMPLOYEE_ID";
     static final String EMPLOYEE_ID_SCOPE = "ALL";
     static final int EMPLOYEE_ID_WIDTH = 8;
+    /** 자동 발급 사번은 20200001 부터(2026-11-03). 번호표를 이 값 이상으로 올려 둔 뒤 받는다 */
+    static final long EMPLOYEE_ID_FLOOR = 20200000L;
     /** 사원 등록 · 아이디를 처음 만들 때의 비밀번호(2026-10-21). 로그인한 뒤 내 정보에서 바꾼다 */
     static final String INITIAL_PASSWORD = "changeme";
 
@@ -181,13 +183,14 @@ public class HrServiceImpl extends EgovAbstractServiceImpl implements HrService 
         hrDAO.insertEmployee(values);
         hrDAO.upsertLoginAccount(songyeonTenantCode, id);
         hrDAO.insertDefaultRole(songyeonTenantCode, id);
-        // 전자결재 사용자(tb_user): 로그인 uniqId 가 이 번호다(2026-10-22)
+        // 전자결재 사용자(tb_user): 사용자 번호도 사번이다(2026-11-03)
         hrDAO.insertUserIfMissing(songyeonTenantCode, id);
         return id;
     }
 
-    // 새 사번: 8자리 번호(00000001 …, 번호표 tb_id_sequence). 이미 있는 사번(예: 0000)과 겹치면 다음 번호로 넘어간다
+    // 새 사번: 8자리 번호(20200001 …, 번호표 tb_id_sequence). 이미 있는 사번(예: 0000)과 겹치면 다음 번호로 넘어간다
     private String nextEmployeeId() throws Exception {
+        idSequenceService.advanceToAtLeast(EMPLOYEE_ID_KEY, EMPLOYEE_ID_SCOPE, EMPLOYEE_ID_SCOPE, EMPLOYEE_ID_FLOOR);
         for (int tries = 0; tries < 1000; tries++) {
             String id = formatEmployeeId(idSequenceService.nextValue(EMPLOYEE_ID_KEY, EMPLOYEE_ID_SCOPE, EMPLOYEE_ID_SCOPE));
             if (hrDAO.countEmployeeId(id) == 0) {

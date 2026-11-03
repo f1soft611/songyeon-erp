@@ -4,8 +4,9 @@ import {
   DOC_EXCEL_COLUMNS, HISTORY_EXCEL_COLUMNS, IN_STATUS_EXCEL_COLUMNS, RETURN_EXCEL_COLUMNS,
   filesOfMaterial, itemCalc, monthStart, noPriceMessage, noPriceRows, priceDiffers, priceMismatchMessage, returnQtyError,
   rowsOfMaterial, stagingTotal, sumOf, toBulkBody, toInStatusRows, unitPriceFromTotal,
-} from '../src/pages/pu/inbound/receiving/utils/receiving';
-import type { Receiving, StagingItem } from '../src/pages/pu/inbound/receiving/types/receiving.types';
+  applyDocDetail, applyInStatusDetail, docDetailValues, inStatusDetailValues, periodQuery,
+} from '../src/pages/pu/inbound/receiving-register/utils/receiving';
+import type { Receiving, StagingItem } from '../src/pages/pu/inbound/receiving-register/types/receiving.types';
 
 const item = (key: number, extra: Partial<StagingItem> = {}): StagingItem => ({
   key, materialCode: `M${key}`, materialName: `원재료${key}`, qty: 10, unitPrice: 1000, taxType: '과세', clientName: '대한상사', checked: true, ...extra,
@@ -103,5 +104,23 @@ describe('입고관리 utils(송연 19-purchase.js · 37-recv-status.js)', () =>
     expect(RETURN_EXCEL_COLUMNS.map((c) => c.label)).toEqual(['반품일', '거래처', '원재료명', '원재료코드', '수량', '과세구분', '단가', '공급가액', '부가세', '합계', '사유']);
     expect(IN_STATUS_EXCEL_COLUMNS.map((c) => c.label)).toEqual(['입고일자', '거래처', '입고품목', '품목코드', '수량', '과세구분', '단가', '공급가액', '부가세', '합계금액', '구분']);
     expect(DOC_EXCEL_COLUMNS.map((c) => c.label)).toEqual(['원재료', '입고건수', '총입고수량']);
+  });
+
+  it('조회 조건(2026-11-03 화면 분리): 기간 · 상세 값 ↔ 조회 조건', () => {
+    expect(periodQuery('2026-10-01', '2026-10-07')).toEqual({ start: '2026-10-01', end: '2026-10-07' });
+    expect(periodQuery(' 2026-10-07 ', '')).toEqual({ date: '2026-10-07' });
+    expect(periodQuery('', '2026-10-08')).toEqual({ date: '2026-10-08' });
+    expect(periodQuery('', ' ')).toEqual({});
+
+    const inQuery = { start: '2026-10-01', end: '2026-10-07', clientQ: '대한', materialQ: 'M1', kind: 'return' as const };
+    expect(inStatusDetailValues(inQuery)).toEqual({ receiveDate: { from: '2026-10-01', to: '2026-10-07' }, clientQ: '대한', kind: 'return' });
+    expect(applyInStatusDetail(inQuery, { receiveDate: { from: '2026-09-01', to: '2026-09-30' }, clientQ: ' C01 ', kind: 'receiving' }))
+      .toEqual({ start: '2026-09-01', end: '2026-09-30', clientQ: 'C01', materialQ: 'M1', kind: 'receiving' });
+    expect(applyInStatusDetail(inQuery, { kind: 'x' })).toMatchObject({ start: '', end: '', clientQ: '', kind: '' });
+
+    const docQuery = { start: '2026-10-01', end: '2026-10-07', clientQ: '대한', materialQ: 'M1' };
+    expect(docDetailValues(docQuery)).toEqual({ receiveDate: { from: '2026-10-01', to: '2026-10-07' }, clientQ: '대한' });
+    expect(applyDocDetail(docQuery, { receiveDate: { from: '2026-09-01', to: '2026-09-30' }, clientQ: ' 삼양 ' }))
+      .toEqual({ start: '2026-09-01', end: '2026-09-30', clientQ: '삼양', materialQ: 'M1' });
   });
 });

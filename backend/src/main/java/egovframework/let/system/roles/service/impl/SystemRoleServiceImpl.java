@@ -133,7 +133,7 @@ public class SystemRoleServiceImpl extends EgovAbstractServiceImpl implements Sy
             throw new IllegalArgumentException("이미 해당 역할에 연결된 사용자입니다.");
         }
 
-        Long targetLoginId = resolveLoginId(params);
+        String targetLoginId = resolveLoginId(params);
         if (targetLoginId == null) {
             throw new IllegalArgumentException("사용자를 찾을 수 없습니다.");
         }
@@ -153,8 +153,8 @@ public class SystemRoleServiceImpl extends EgovAbstractServiceImpl implements Sy
 
     @Override
     @Transactional
-    public boolean removeUserFromRole(Long tenantId, Long roleId, Long loginId) throws Exception {
-        if (loginId == null) {
+    public boolean removeUserFromRole(Long tenantId, Long roleId, String loginId) throws Exception {
+        if (!org.springframework.util.StringUtils.hasText(loginId)) {
             throw new IllegalArgumentException("로그인 ID는 필수입니다.");
         }
 
@@ -167,9 +167,10 @@ public class SystemRoleServiceImpl extends EgovAbstractServiceImpl implements Sy
         return systemRoleDAO.deleteRoleUserMapping(params) > 0;
     }
 
-    private Long resolveLoginId(Map<String, Object> params) throws Exception {
+    // 계정 번호 = 사번(2026-11-03). 문자열 그대로(앞자리 0 유지)
+    private String resolveLoginId(Map<String, Object> params) throws Exception {
         if (params.get("loginId") != null) {
-            return Long.valueOf(params.get("loginId").toString());
+            return params.get("loginId").toString().trim();
         }
         if (params.get("userId") != null) {
             return systemRoleDAO.selectLoginIdByUserId(params);

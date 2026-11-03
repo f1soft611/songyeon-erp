@@ -1,6 +1,6 @@
 export type MyProfile = {
   userId: string;
-  employeeId: number | string;
+  employeeId: string; // 사번(2026-11-03)
   name?: string | null;
   email?: string | null;
   departmentName?: string | null;

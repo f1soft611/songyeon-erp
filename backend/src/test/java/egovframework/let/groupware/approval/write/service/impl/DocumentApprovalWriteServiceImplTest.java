@@ -275,25 +275,35 @@ class DocumentApprovalWriteServiceImplTest {
 
         verify(approvalDAO).insertDocumentApprovalPin(argThat(params ->
             Long.valueOf(4L).equals(params.get("tenantId"))
-                && Long.valueOf(101L).equals(params.get("userId"))
+                && "101".equals(params.get("userId"))
                 && "login-author".equals(params.get("drafterId"))
                 && "101".equals(params.get("participantUserId"))
                 && Long.valueOf(77L).equals(params.get("electronicApprovalId"))));
         verify(approvalDAO).deleteDocumentApprovalPin(argThat(params ->
             Long.valueOf(4L).equals(params.get("tenantId"))
-                && Long.valueOf(101L).equals(params.get("userId"))
+                && "101".equals(params.get("userId"))
                 && "login-author".equals(params.get("drafterId"))
                 && "101".equals(params.get("participantUserId"))
                 && Long.valueOf(77L).equals(params.get("electronicApprovalId"))));
     }
 
     @Test
-    void pinRejectsNonNumericAuthenticatedUserId() throws Exception {
-        LoginVO malformedActor = participantUser("login-author", "not-a-number", "작성자");
+    void pinKeepsEmployeeIdLeadingZeros() throws Exception {
+        // 2026-11-03: 고정한 사람은 사번(앞자리 0 그대로)
+        LoginVO actor = participantUser("00000101", "00000101", "작성자");
+
+        writeService().pinDocument(actor, 77L);
+
+        verify(approvalDAO).insertDocumentApprovalPin(argThat(params -> "00000101".equals(params.get("userId"))));
+    }
+
+    @Test
+    void pinRejectsMissingAuthenticatedUserId() throws Exception {
+        LoginVO malformedActor = participantUser("login-author", " ", "작성자");
 
         assertThatThrownBy(() -> writeService().pinDocument(malformedActor, 77L))
             .isInstanceOfSatisfying(ResponseStatusException.class,
-                exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+                exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED));
         verify(approvalDAO, never()).insertDocumentApprovalPin(anyMap());
     }
 
@@ -308,7 +318,7 @@ class DocumentApprovalWriteServiceImplTest {
         assertThat(result).containsExactly(listItem);
         verify(approvalDAO).selectPinnedRelatedDocumentList(argThat(params ->
             Long.valueOf(4L).equals(params.get("tenantId"))
-                && Long.valueOf(101L).equals(params.get("userId"))
+                && "101".equals(params.get("userId"))
                 && "login-author".equals(params.get("drafterId"))
                 && "101".equals(params.get("participantUserId"))
                 && "MY_PENDING".equals(params.get("scope"))

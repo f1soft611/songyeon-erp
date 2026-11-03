@@ -311,7 +311,7 @@ class NoticeBoardServiceImplTest {
         when(noticeBoardDAO.selectNoticePostById(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(post);
         when(noticeBoardDAO.selectLoginIdByLoginCode(org.mockito.ArgumentMatchers.anyMap()))
-            .thenReturn(11L);
+            .thenReturn("00000011");
         when(noticeBoardDAO.insertNoticePostViewHistory(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(1L);
         when(commonFileService.listFiles(1L, "NOTICE", 7L)).thenReturn(Collections.emptyList());
@@ -351,7 +351,7 @@ class NoticeBoardServiceImplTest {
         when(noticeBoardDAO.selectNoticePostById(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(post);
         when(noticeBoardDAO.selectLoginIdByLoginCode(org.mockito.ArgumentMatchers.anyMap()))
-            .thenReturn(11L);
+            .thenReturn("00000011");
         when(noticeBoardDAO.insertNoticePostViewHistory(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(null);
         when(commonFileService.listFiles(1L, "NOTICE", 7L)).thenReturn(Collections.emptyList());
@@ -377,7 +377,7 @@ class NoticeBoardServiceImplTest {
         when(noticeBoardDAO.selectNoticePostById(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(post);
         when(noticeBoardDAO.selectLoginIdByLoginCode(org.mockito.ArgumentMatchers.anyMap()))
-            .thenReturn(12L);
+            .thenReturn("00000012");
         when(noticeBoardDAO.insertNoticePostViewHistory(org.mockito.ArgumentMatchers.anyMap()))
             .thenReturn(12L);
         when(commonFileService.listFiles(1L, "NOTICE", 7L)).thenReturn(Collections.emptyList());
@@ -393,7 +393,7 @@ class NoticeBoardServiceImplTest {
             .containsEntry("tenantId", 1L)
             .containsEntry("postId", 7L)
             .containsEntry("boardTypeCode", "NOTICE")
-            .containsEntry("loginId", 12L);
+            .containsEntry("loginId", "00000012");
         verify(noticeBoardDAO).incrementNoticePostViewCount(org.mockito.ArgumentMatchers.anyMap());
     }
 

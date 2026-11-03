@@ -45,7 +45,7 @@ public class BoxTypeApiController {
     private final BoxTypeService boxTypeService;
     private final LoginEmployeeResolver loginEmployeeResolver;
 
-    // 로그인한 사원의 사번(employees.id). 2026-10-22 부터 로그인 uniqId 는 tb_user 번호라 도우미로 사번을 찾는다
+    // 로그인한 사원의 사번(employees.id). 2026-11-03 부터 로그인 uniqId 가 사번이다(도우미가 그대로 돌려준다)
     // 등록자 · 수정자에 그대로 넣는다
     private String employeeId(LoginVO user) {
         return loginEmployeeResolver.employeeId(user);

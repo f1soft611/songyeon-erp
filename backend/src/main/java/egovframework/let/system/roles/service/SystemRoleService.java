@@ -57,5 +57,5 @@ public interface SystemRoleService {
     /**
      * 역할에서 사용자를 연결 해제한다.
      */
-    boolean removeUserFromRole(Long tenantId, Long roleId, Long loginId) throws Exception;
+    boolean removeUserFromRole(Long tenantId, Long roleId, String loginId) throws Exception;
 }

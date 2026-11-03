@@ -1,15 +1,16 @@
-import { useMemo } from 'react';
-import { Box, Card, MenuItem, TextField, Typography } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Card, TextField } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import type { PageSearchField, PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { OrderStatusGrid, createOrderStatusColumns } from './components/OrderStatusGrid';
 import { useOrderStatusManagement } from './hooks/useOrderStatusManagement';
-import type { StatusFilter } from './types/orderStatus.types';
+import { statusDetailValues } from './utils/orderStatus';
 
 type OrderStatusManagementPageProps = {
   selectedModule: ModuleItem;
@@ -28,10 +29,21 @@ const searchFieldSx = (theme: { palette: { mode: string } }) => ({
     backgroundColor: theme.palette.mode === 'dark' ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255,255,255,0.72)',
   },
 });
-const sideFieldSx = (theme: { palette: { mode: string } }) => ({
-  ...searchFieldSx(theme),
-  '& .MuiOutlinedInput-root': { ...searchFieldSx(theme)['& .MuiOutlinedInput-root'], borderRadius: '8px' },
-});
+// 2026-11-03 검색줄은 원재료코드/명, 나머지는 상세 조회(⌄). 발주일은 필수(이번 달 1일 ~ 오늘로 시작)
+const DETAIL_FIELDS: PageSearchField[] = [
+  { field: 'orderDate', label: '발주일', type: 'date', searchSpan: 2, required: true },
+  { field: 'clientQ', label: '거래처코드/명', type: 'text', searchSpan: 1 },
+  {
+    field: 'received',
+    label: '입고여부',
+    type: 'select',
+    searchSpan: 1,
+    options: [
+      { value: '0', label: '미입고' },
+      { value: '1', label: '입고완료' },
+    ],
+  },
+];
 
 // 구매관리 > 발주관리 > 발주현황 (화면ID POOrderStatusView, 송연 38-po-status.js)
 // 기간 안에 낸 발주를 한 줄씩 보고, 미입고를 찾는다. 2026-11-02 발주관리 탭에서 따로 화면으로 뺐다.
@@ -45,6 +57,14 @@ export function OrderStatusManagementPage({
   const management = useOrderStatusManagement();
   const { query, changeQuery, orders, counts } = management;
   const columns = useMemo(() => createOrderStatusColumns(), []);
+  // 상세 조회(⌄): 고치는 중인 값(detailValues)과 [조회]로 적용한 값(조건 칩)
+  const { start, end, clientQ, received } = query;
+  const appliedDetailValues = useMemo<Record<string, PageSearchFieldValue>>(
+    () => statusDetailValues({ start, end, clientQ, received, materialQ: '' }),
+    [start, end, clientQ, received],
+  );
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(appliedDetailValues);
+  useEffect(() => setDetailValues(appliedDetailValues), [appliedDetailValues]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -79,59 +99,21 @@ export function OrderStatusManagementPage({
           <TextField
             size="small"
             margin="none"
-            placeholder="원재료명 검색"
+            placeholder="원재료코드/명 검색"
             value={query.materialQ}
             onChange={(event) => changeQuery('materialQ', event.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': '원재료명 검색' } }}
+            slotProps={{ htmlInput: { 'aria-label': '원재료코드/명 검색' } }}
             sx={(theme) => ({ width: '100%', ...searchFieldSx(theme) })}
           />
         }
         onDefaultSearch={() => void management.loadRows()}
-      >
-        <TextField
-          size="small"
-          margin="none"
-          placeholder="거래처명 검색"
-          value={query.clientQ}
-          onChange={(event) => changeQuery('clientQ', event.target.value)}
-          slotProps={{ htmlInput: { 'aria-label': '거래처명 검색' } }}
-          sx={(theme) => ({ width: { xs: '100%', sm: 180 }, ...sideFieldSx(theme) })}
-        />
-        <TextField
-          select
-          size="small"
-          margin="none"
-          value={query.received}
-          onChange={(event) => management.changeReceived(event.target.value as StatusFilter)}
-          slotProps={{ htmlInput: { 'aria-label': '입고여부' }, select: { displayEmpty: true } }}
-          sx={(theme) => ({ width: { xs: '100%', sm: 140 }, ...sideFieldSx(theme) })}
-        >
-          <MenuItem value="">전부</MenuItem>
-          <MenuItem value="0">미입고만</MenuItem>
-          <MenuItem value="1">입고완료만</MenuItem>
-        </TextField>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TextField
-            type="date"
-            size="small"
-            margin="none"
-            value={query.start}
-            onChange={(event) => changeQuery('start', event.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': '시작일' } }}
-            sx={(theme) => ({ width: 170, ...sideFieldSx(theme) })}
-          />
-          <Typography variant="body2" color="text.secondary">~</Typography>
-          <TextField
-            type="date"
-            size="small"
-            margin="none"
-            value={query.end}
-            onChange={(event) => changeQuery('end', event.target.value)}
-            slotProps={{ htmlInput: { 'aria-label': '종료일' } }}
-            sx={(theme) => ({ width: 170, ...sideFieldSx(theme) })}
-          />
-        </Box>
-      </PageSearchArea>
+        detailFields={DETAIL_FIELDS}
+        detailValues={detailValues}
+        appliedDetailValues={appliedDetailValues}
+        onDetailValuesChange={setDetailValues}
+        onDetailSearch={management.applyDetail}
+        detailLoading={management.loading}
+      />
       <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box aria-label="발주현황 요약" sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', mb: 0.5, fontSize: 14 }}>
@@ -140,12 +122,6 @@ export function OrderStatusManagementPage({
             <span>미입고 <b>{orders ? counts.pending : '-'}</b></span>
             <span>입고완료 <b>{orders ? counts.done : '-'}</b></span>
           </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
-            발주에는 단가를 적지 않아서 금액칸이 없습니다. 수량은 품목마다 단위가 달라 더하지 않습니다. 표 머리 메뉴로 정렬할 수 있어요.
-          </Typography>
-          {orders && !management.loading && orders.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>이 기간에 낸 발주가 없습니다</Typography>
-          )}
           <OrderStatusGrid
             rows={management.rows}
             columns={columns}

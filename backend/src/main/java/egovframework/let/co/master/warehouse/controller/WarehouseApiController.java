@@ -46,7 +46,7 @@ public class WarehouseApiController {
     private final LoginEmployeeResolver loginEmployeeResolver;
 
     // 로그인한 사원의 사번(employees.id = LoginVO.uniqId, 예: 0000). 등록자 · 수정자에 그대로 넣는다
-    // 2026-10-22: 로그인 uniqId 가 tb_user 번호가 되어 사번은 도우미로 찾는다
+    // 2026-11-03: 로그인 uniqId 가 사번이다(도우미가 그대로 돌려준다)
     private String employeeId(LoginVO user) {
         return loginEmployeeResolver.employeeId(user);
     }

@@ -36,8 +36,9 @@ public class NoticeBoardDAO extends EgovAbstractMapper {
         return (NoticeBoardPostVO) selectOne("NoticeBoardDAO.selectNoticePostById", params);
     }
 
-    public Long selectLoginIdByLoginCode(Map<String, Object> params) throws Exception {
-        return (Long) selectOne("NoticeBoardDAO.selectLoginIdByLoginCode", params);
+    /** 사번으로 사용 중인 계정 번호(= 사번, 2026-11-03)를 찾는다. 없으면 null */
+    public String selectLoginIdByLoginCode(Map<String, Object> params) throws Exception {
+        return (String) selectOne("NoticeBoardDAO.selectLoginIdByLoginCode", params);
     }
 
     public Long insertNoticePostViewHistory(Map<String, Object> params) throws Exception {

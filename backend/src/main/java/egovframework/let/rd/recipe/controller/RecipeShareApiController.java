@@ -62,7 +62,7 @@ public class RecipeShareApiController {
 
     // 송연 session employee_id · employee_name (넘긴 사람 · 공유를 등록한 사람)
     // employees.id 는 사번 문자열이다
-    // 2026-10-22: 로그인 uniqId 가 tb_user 번호가 되어 사번은 도우미로 찾는다
+    // 2026-11-03: 로그인 uniqId 가 사번이다(도우미가 그대로 돌려준다)
     private String employeeId(LoginVO user) {
         return loginEmployeeResolver.employeeId(user);
     }

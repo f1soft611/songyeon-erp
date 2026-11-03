@@ -48,7 +48,10 @@ import { SalesStatusManagementPage } from '../../sl/inquiry/sales-status/SalesSt
 import { SalesTotalManagementPage } from '../../sl/inquiry/sales-total/SalesTotalManagementPage';
 import { OrderRegisterManagementPage } from '../../pu/order/order-register/OrderRegisterManagementPage';
 import { OrderStatusManagementPage } from '../../pu/order/order-status/OrderStatusManagementPage';
-import { ReceivingManagementPage } from '../../pu/inbound/receiving/ReceivingManagementPage';
+import { ReceivingRegisterManagementPage } from '../../pu/inbound/receiving-register/ReceivingRegisterManagementPage';
+import { ReceivingStatusManagementPage } from '../../pu/inbound/receiving-status/ReceivingStatusManagementPage';
+import { ReceivingDocManagementPage } from '../../pu/inbound/receiving-doc/ReceivingDocManagementPage';
+import { ReturnRegisterManagementPage } from '../../pu/inbound/return-register/ReturnRegisterManagementPage';
 import { SubstitutionManagementPage } from '../../pu/inbound/substitution/SubstitutionManagementPage';
 import { StockLedgerManagementPage } from '../../pu/stock/stock-ledger/StockLedgerManagementPage';
 import { StockAdjustManagementPage } from '../../pu/stock/stock-adjust/StockAdjustManagementPage';
@@ -908,9 +911,46 @@ export function DashboardContent({
     );
   }
 
-  if (selectedModule.id === 'pu' && currentPageKey === 'IBReceivingView') {
+  // 구매관리 > 입고관리: 2026-11-03 탭 네 개를 화면으로 나눴다(입고등록 · 입고현황 · 서류등록 · 반품등록)
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBReceivingRegisterView') {
     return (
-      <ReceivingManagementPage
+      <ReceivingRegisterManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBReceivingStatusView') {
+    return (
+      <ReceivingStatusManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBReceivingDocView') {
+    return (
+      <ReceivingDocManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  if (selectedModule.id === 'pu' && currentPageKey === 'IBReturnRegisterView') {
+    return (
+      <ReturnRegisterManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}

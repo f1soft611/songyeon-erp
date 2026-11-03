@@ -105,17 +105,4 @@ public class LoginDAO extends EgovAbstractMapper {
 		return (Long) selectOne("loginDAO.selectTenantIdByCode", tenantCode);
 	}
 
-	/**
-	 * 로그인 uniqId(tb_user.user_id)로 사번(tb_login_account.login_code)을 찾는다(송연, 2026-10-22).
-	 * @param tenantId 테넌트 ID(없으면 조건에서 뺀다)
-	 * @param userId tb_user.user_id
-	 * @return 사번 또는 null
-	 * @exception Exception
-	 */
-	public String selectEmployeeIdByUserId(Long tenantId, Long userId) throws Exception {
-		Map<String, Object> params = new HashMap<>();
-		params.put("tenantId", tenantId);
-		params.put("userId", userId);
-		return (String) selectOne("loginDAO.selectEmployeeIdByUserId", params);
-	}
 }

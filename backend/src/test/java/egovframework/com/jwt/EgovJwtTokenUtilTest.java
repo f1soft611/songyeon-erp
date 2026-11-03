@@ -53,7 +53,8 @@ class EgovJwtTokenUtilTest {
         assertEquals("사원", result.getLevelName());
         assertEquals("USER", result.getUserSe());
         assertEquals("testOrg", result.getOrgnztId());
-        assertEquals("testUniqId", result.getUniqId());
+        // 2026-11-03: uniqId 는 사번(id)이다
+        assertEquals("testUser", result.getUniqId());
         assertEquals("ROLE_USER", result.getGroupNm());
         assertEquals("TENANT_USER", result.getRoleCode());
         assertEquals(101L, result.getRoleId());
@@ -99,6 +100,30 @@ class EgovJwtTokenUtilTest {
 
         assertNull(result.getProfileImage());
         assertTrue(token.length() < 5000);
+    }
+
+    @DisplayName("배포 전에 받은 토큰(uniqId = 옛 사용자 번호)은 uniqId 를 사번(id)으로 읽는다.")
+    @Test
+    void testOldTokenUniqIdIsReadAsEmployeeId() {
+        LoginVO loginVO = new LoginVO();
+        loginVO.setId("00000003");
+        loginVO.setUniqId("3");
+
+        LoginVO result = jwtTokenUtil.getLoginVOFromToken(jwtTokenUtil.generateToken(loginVO));
+
+        assertEquals("00000003", result.getUniqId());
+    }
+
+    @DisplayName("사번 uniqId 토큰은 그대로 사번이다.")
+    @Test
+    void testEmployeeUniqIdIsKept() {
+        LoginVO loginVO = new LoginVO();
+        loginVO.setId("00000003");
+        loginVO.setUniqId("00000003");
+
+        LoginVO result = jwtTokenUtil.getLoginVOFromToken(jwtTokenUtil.generateToken(loginVO));
+
+        assertEquals("00000003", result.getUniqId());
     }
 
     private static String repeat(char value, int count) {

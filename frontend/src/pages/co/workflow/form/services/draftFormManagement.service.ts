@@ -37,9 +37,9 @@ export function normalizeDraftFormRow(source: ApiRow): DraftFormRow {
     categoryName: String(source.categoryName ?? ''),
     regTermId: toNumber(source.regTermId),
     regTerm: String(source.regTerm ?? ''),
-    reviewerId: source.reviewerId == null ? null : toNumber(source.reviewerId),
+    reviewerId: source.reviewerId == null ? null : String(source.reviewerId),
     reviewerName: String(source.reviewerName ?? ''),
-    approverId: source.approverId == null ? null : toNumber(source.approverId),
+    approverId: source.approverId == null ? null : String(source.approverId),
     approverName: String(source.approverName ?? ''),
     assigneeIds: Array.isArray(source.assigneeIds)
       ? source.assigneeIds.map((id) => String(id))
@@ -74,7 +74,7 @@ export async function fetchDraftFormUsers(): Promise<DraftFormUserOption[]> {
   );
   return (result.resultList ?? []).map((user) => ({
     userId: String(user.userId ?? ''),
-    loginId: toNumber(user.loginId),
+    loginId: String(user.loginId ?? ''),
     userNm: String(user.userNm ?? ''),
     departmentNm: String(user.departmentNm ?? ''),
     profileImage: user.profileImage == null ? null : String(user.profileImage),

@@ -200,7 +200,7 @@ export function createDraftFormColumns(
       userOptions: getUserOptions((user) => user.loginId),
       renderCell: ({ value }) => getUserLabel(value),
       onValueChange: (_row, value) => ({
-        reviewerId: value === '' || value == null ? null : Number(value),
+        reviewerId: value === '' || value == null ? null : String(value),
       }),
       editable: canEdit,
       form: { group: '결재자', order: 1 },
@@ -215,7 +215,7 @@ export function createDraftFormColumns(
       userOptions: getUserOptions((user) => user.loginId),
       renderCell: ({ value }) => getUserLabel(value),
       onValueChange: (_row, value) => ({
-        approverId: value === '' || value == null ? null : Number(value),
+        approverId: value === '' || value == null ? null : String(value),
       }),
       editable: canEdit,
       form: { group: '결재자', order: 2 },

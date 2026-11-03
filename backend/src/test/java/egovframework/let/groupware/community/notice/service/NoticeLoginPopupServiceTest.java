@@ -26,12 +26,12 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void listUsesKoreanDateAndAuthenticatedAccountWithoutCountingViews() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         when(dao.selectLoginPopupList(anyMap())).thenReturn(Collections.emptyList());
         assertThat(service.list(7L, "reader")).isEmpty();
         ArgumentCaptor<Map<String, Object>> params = ArgumentCaptor.forClass(Map.class);
         verify(dao).selectLoginPopupList(params.capture());
-        assertThat(params.getValue()).containsEntry("tenantId", 7L).containsEntry("loginId", 10L)
+        assertThat(params.getValue()).containsEntry("tenantId", 7L).containsEntry("loginId", "00000010")
                 .containsEntry("today", "2026-10-23");
         verifyNoInteractions(posts);
         verify(dao, never()).incrementNoticePostViewCount(anyMap());
@@ -39,7 +39,7 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void detailCountsOnlyTheCurrentlyEligiblePostThroughExistingUniqueReaderLogic() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         NoticeBoardPostVO post = new NoticeBoardPostVO();
         when(dao.selectLoginPopupById(anyMap())).thenReturn(post);
         when(posts.getPost(7L, 42L, "reader")).thenReturn(post);
@@ -49,7 +49,7 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void expiredDeletedOrDismissedPostDoesNotCountViews() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         assertThatThrownBy(() -> service.detail(7L, 42L, "reader"))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
         verifyNoInteractions(posts);
@@ -57,12 +57,13 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void dismissUsesServerDateAndDoesNotCountViews() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         when(dao.dismissLoginPopup(anyMap())).thenReturn(1);
         service.dismissToday(7L, 42L, "reader");
         ArgumentCaptor<Map<String, Object>> params = ArgumentCaptor.forClass(Map.class);
         verify(dao).dismissLoginPopup(params.capture());
-        assertThat(params.getValue()).containsEntry("postId", 42L).containsEntry("today", "2026-10-23");
+        assertThat(params.getValue()).containsEntry("postId", 42L).containsEntry("today", "2026-10-23")
+                .containsEntry("loginId", "00000010"); // 닫은 사람 = 사번(2026-11-03)
         verifyNoInteractions(posts);
     }
 
@@ -75,7 +76,7 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void dailyCutoffChangesExactlyAtKoreanMidnight() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         for (String instant : new String[] {"2026-10-22T14:59:59Z", "2026-10-22T15:00:00Z"}) {
             new NoticeLoginPopupService(dao, posts, Clock.fixed(Instant.parse(instant), ZoneId.of("Asia/Seoul")))
                     .list(7L, "reader");
@@ -88,7 +89,7 @@ class NoticeLoginPopupServiceTest {
 
     @Test
     void dismissingAnUnavailableNoticeReturnsNotFound() throws Exception {
-        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn(10L);
+        when(dao.selectLoginIdByLoginCode(anyMap())).thenReturn("00000010");
         assertThatThrownBy(() -> service.dismissToday(7L, 42L, "reader"))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("404");
         verifyNoInteractions(posts);

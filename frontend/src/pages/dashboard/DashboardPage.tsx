@@ -41,6 +41,7 @@ import {
 import { fetchModuleRows } from '../settings/system/modules/services/moduleManagement.service';
 import { DashboardSidebar } from './components/DashboardSidebar';
 import { DashboardContent } from './components/DashboardContent';
+import { ScreenReviewDock } from '../../shared/components/screen-review/ScreenReviewDock';
 import { useDashboardResponsive } from './hooks/useDashboardResponsive';
 import type {
   MenuTreeNode,
@@ -976,28 +977,31 @@ function DashboardPage() {
                 </AppBar>
 
                 {hasAccessibleMenu ? (
-                <DashboardContent
-                  sharedDocumentId={parseDocumentShareLink(`${window.location.origin}${location.pathname}${location.search}`)}
-                  onSharedDocumentClose={() => {
-                    const params = new URLSearchParams(location.search);
-                    params.delete('documentId');
-                    params.delete('share');
-                    navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, { replace: true });
-                  }}
-                  selectedModule={selectedModule}
-                  currentMenuName={currentMenu.name}
-                  currentPageKey={currentPageKey}
-                  breadcrumbItems={breadcrumbItems}
-                  content={content}
-                  selectedMenuPermissions={currentMenu.permissions}
-                  dashboardScope={dashboardScope}
-                  onDashboardScopeChange={updateDashboardScope}
-                  isTenantAdmin={[
-                    'TENANT_ADMIN',
-                    'PLATFORM_ADMIN',
-                    'ADMIN',
-                  ].includes((profile.roleName ?? '').trim().toUpperCase())}
-                />
+                // 화면검수 패널이 열리면 오른쪽 칸에 붙고 본문 폭이 줄어든다(2026-11-02)
+                <ScreenReviewDock reviewer={profile.name?.trim() || profile.userId || ''}>
+                  <DashboardContent
+                    sharedDocumentId={parseDocumentShareLink(`${window.location.origin}${location.pathname}${location.search}`)}
+                    onSharedDocumentClose={() => {
+                      const params = new URLSearchParams(location.search);
+                      params.delete('documentId');
+                      params.delete('share');
+                      navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, { replace: true });
+                    }}
+                    selectedModule={selectedModule}
+                    currentMenuName={currentMenu.name}
+                    currentPageKey={currentPageKey}
+                    breadcrumbItems={breadcrumbItems}
+                    content={content}
+                    selectedMenuPermissions={currentMenu.permissions}
+                    dashboardScope={dashboardScope}
+                    onDashboardScopeChange={updateDashboardScope}
+                    isTenantAdmin={[
+                      'TENANT_ADMIN',
+                      'PLATFORM_ADMIN',
+                      'ADMIN',
+                    ].includes((profile.roleName ?? '').trim().toUpperCase())}
+                  />
+                </ScreenReviewDock>
                 ) : (
               <Box
                 sx={{

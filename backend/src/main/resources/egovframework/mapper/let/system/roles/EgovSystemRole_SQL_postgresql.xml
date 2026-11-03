@@ -100,7 +100,7 @@
     </update>
 
     <!-- 송연: 사람은 tb_user 대신 employees(계정 표 login_code = 사번 = employees.id)에서 읽는다(2026-10-21).
-         userId · loginId 는 둘 다 계정 번호(tb_login_account.login_id), loginCode 는 사번. 퇴사자(퇴사일이 오늘 또는 그 전)는 뺀다 -->
+         userId · loginId 는 둘 다 계정 번호(tb_login_account.login_id = 사번, 2026-11-03), loginCode 도 사번. 퇴사자(퇴사일이 오늘 또는 그 전)는 뺀다 -->
     <select id="selectAssignedRoleUsers" parameterType="map" resultType="egovframework.let.system.roles.domain.model.SystemRoleUserVO">
         SELECT
             la.login_id AS userId,
@@ -157,14 +157,14 @@
         WHERE lar.role_id = #{roleId}
           AND r.tenant_id = #{tenantId}
           AND (
-              (#{loginId} IS NOT NULL AND lar.login_id = CAST(#{loginId} AS BIGINT))
-              OR (#{userId} IS NOT NULL AND lar.login_id = CAST(#{userId} AS BIGINT))
+              (#{loginId} IS NOT NULL AND lar.login_id = CAST(#{loginId} AS varchar))
+              OR (#{userId} IS NOT NULL AND lar.login_id = CAST(#{userId} AS varchar))
           )
         LIMIT 1
     </select>
 
-    <!-- 송연: userId 도 계정 번호다. 같은 테넌트 계정인지 확인해서 돌려준다 -->
-    <select id="selectLoginIdByUserId" parameterType="map" resultType="long">
+    <!-- 송연: userId 도 계정 번호(사번)다. 같은 테넌트 계정인지 확인해서 돌려준다 -->
+    <select id="selectLoginIdByUserId" parameterType="map" resultType="string">
         SELECT la.login_id
         FROM tb_login_account la
         WHERE la.login_id = #{userId}
@@ -181,7 +181,7 @@
     <delete id="deleteRoleUserMapping" parameterType="map">
         DELETE FROM tb_login_account_role
         WHERE role_id = #{roleId}
-          AND login_id = CAST(#{loginId} AS BIGINT)
+          AND login_id = CAST(#{loginId} AS varchar)
           AND login_id IN (
               SELECT la.login_id
               FROM tb_login_account la

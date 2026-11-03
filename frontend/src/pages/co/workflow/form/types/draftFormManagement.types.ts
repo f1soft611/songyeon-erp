@@ -6,9 +6,9 @@ export type DraftFormRow = {
   categoryName: string;
   regTermId: number | null;
   regTerm: string;
-  reviewerId: number | null;
+  reviewerId: string | null; // 사번(2026-11-03)
   reviewerName: string;
-  approverId: number | null;
+  approverId: string | null;
   approverName: string;
   assigneeIds: string[];
   assigneeSummary: string;
@@ -20,7 +20,7 @@ export type DraftFormRow = {
 
 export type DraftFormUserOption = {
   userId: string;
-  loginId: number;
+  loginId: string; // 사번(2026-11-03)
   userNm: string;
   departmentNm: string;
   profileImage: string | null;
@@ -32,8 +32,8 @@ export type DraftFormPayload = {
   codeName: string;
   categoryItemId: number;
   regTermId: number;
-  reviewerId: number | null;
-  approverId: number | null;
+  reviewerId: string | null; // 사번(2026-11-03)
+  approverId: string | null;
   assigneeIds: string[];
   useAt: 'Y' | 'N';
 };

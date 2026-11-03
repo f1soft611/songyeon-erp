@@ -2,7 +2,6 @@ import { useRef } from 'react';
 import { Box, Chip, Typography } from '@mui/material';
 import { F1Grid, type F1GridColumn, type F1GridRef } from '../../../../../shared/components/f1-grid';
 import { restoreBlockedGridDeletes } from '../../../../../shared/utils/gridDelete';
-import { formatQty } from '../../order-register/utils/purchaseOrder';
 import type { StatusRow } from '../types/orderStatus.types';
 
 // 발주현황 칸(보기 전용): 금액칸이 없는 대신 입고여부를 보여준다
@@ -48,9 +47,9 @@ export function createOrderStatusColumns(): F1GridColumn<StatusRow>[] {
       field: 'qty',
       headerName: '수량',
       width: 110,
-      headerAlign: 'center',
+      type: 'number',
+      decimalPlaces: 4,
       align: 'right',
-      renderCell: ({ row }) => formatQty(row.qty),
     },
     {
       field: 'received',

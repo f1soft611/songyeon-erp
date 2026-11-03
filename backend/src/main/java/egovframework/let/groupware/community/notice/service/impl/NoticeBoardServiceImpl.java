@@ -225,7 +225,7 @@ public class NoticeBoardServiceImpl extends EgovAbstractServiceImpl implements N
         HashMap<String, Object> loginParams = new HashMap<>();
         loginParams.put("tenantId", tenantId);
         loginParams.put("loginCode", loginCode);
-        Long loginId = noticeBoardDAO.selectLoginIdByLoginCode(loginParams);
+        String loginId = noticeBoardDAO.selectLoginIdByLoginCode(loginParams);
         if (loginId == null) {
             throw new IllegalStateException("인증된 로그인 계정을 찾을 수 없습니다.");
         }

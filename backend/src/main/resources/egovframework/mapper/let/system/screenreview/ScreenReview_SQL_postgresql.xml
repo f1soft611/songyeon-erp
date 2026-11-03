@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 화면검수 (화면마다 맨 오른쪽 [화면검수] → 오른쪽 패널, 2026-11-02)
+     tb_screen_review(화면당 1줄) · tb_screen_review_history(저장마다 1줄) · tb_screen_review_draft(화면 + 작성자당 1줄)
+     검수자 · 작성자 · 등록자 · 수정자는 사번(employees.id, 2026-11-03 20261103_002). 이름은 employees.name 을 붙여 보여주고,
+     사원 표에 없는 값은 사번 그대로 보여준다(송연 다른 화면과 같다).
+     첨부는 tb_common_file: 이력 SCREEN_REVIEW + history_id, 임시저장 SCREEN_REVIEW_DRAFT + draft_id -->
+<mapper namespace="ScreenReviewDAO">
+
+    <select id="selectMenuId" parameterType="map" resultType="long">
+        SELECT menu_id
+        FROM tb_menu
+        WHERE tenant_id = #{tenantId}
+          AND menu_code = #{menuCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectReview" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewVO">
+        SELECT
+            A.review_id                                   AS "reviewId"
+          , A.review_status                               AS "reviewStatus"
+          , COALESCE(B.name, A.reviewer_emp_id)          AS "reviewerName"
+          , TO_CHAR(A.review_date, 'YYYY-MM-DD')          AS "reviewDate"
+          , TO_CHAR(A.request_date, 'YYYY-MM-DD')         AS "requestDate"
+          , A.developer_name                              AS "developerName"
+          , TO_CHAR(A.dev_completed_date, 'YYYY-MM-DD')   AS "devCompletedDate"
+        FROM tb_screen_review A
+        LEFT JOIN employees B
+          ON B.id = A.reviewer_emp_id
+        WHERE A.tenant_id = #{tenantId}
+          AND A.menu_id = #{menuId}
+    </select>
+
+    <select id="selectReviewForUpdate" flushCache="true" useCache="false" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewVO">
+        SELECT
+            review_id                             AS "reviewId"
+          , review_status                         AS "reviewStatus"
+          , TO_CHAR(request_date, 'YYYY-MM-DD')   AS "requestDate"
+        FROM tb_screen_review
+        WHERE tenant_id = #{tenantId}
+          AND menu_id = #{menuId}
+        FOR UPDATE
+    </select>
+
+    <insert id="insertReviewIfAbsent" parameterType="map">
+        INSERT INTO tb_screen_review (tenant_id, menu_id, review_status, created_by, updated_by)
+        VALUES (#{tenantId}, #{menuId}, 'NOT_STARTED', #{empId}, #{empId})
+        ON CONFLICT (tenant_id, menu_id) DO NOTHING
+    </insert>
+
+    <update id="updateReview" parameterType="map">
+        UPDATE tb_screen_review
+        SET review_status    = #{status}
+          , reviewer_emp_id  = #{empId}
+          , review_date      = CAST(#{reviewDate} AS date)
+          , request_date     = CAST(#{requestDate, jdbcType=VARCHAR} AS date)
+        <if test="resetCycle != null and resetCycle">
+          <!-- 검수완료로 한 바퀴가 끝나면 개발담당 · 개발완료일도 비운다(2026-11-03) -->
+          , developer_name     = NULL
+          , dev_completed_date = NULL
+        </if>
+          , updated_at       = now()
+          , updated_by       = #{empId}
+        WHERE review_id = #{reviewId}
+    </update>
+
+    <select id="insertHistory" parameterType="map" resultType="long" flushCache="true" useCache="false">
+        INSERT INTO tb_screen_review_history (tenant_id, review_id, from_status, to_status, review_comment, reviewer_emp_id, review_date, request_no)
+        VALUES (#{tenantId}, #{reviewId}, #{fromStatus}, #{toStatus}, #{reviewComment}, #{empId}, CAST(#{reviewDate} AS date), #{requestNo, jdbcType=INTEGER})
+        RETURNING history_id
+    </select>
+
+    <select id="selectNextRequestNo" parameterType="map" resultType="int">
+        SELECT COALESCE(MAX(request_no), 0) + 1
+        FROM tb_screen_review_history
+        WHERE review_id = #{reviewId}
+    </select>
+
+    <select id="selectHistoryList" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewHistoryVO">
+        SELECT
+            A.history_id                                   AS "historyId"
+          , A.from_status                                  AS "fromStatus"
+          , A.to_status                                    AS "toStatus"
+          , A.review_comment                               AS "reviewComment"
+          , COALESCE(B.name, A.reviewer_emp_id)           AS "reviewerName"
+          , TO_CHAR(A.review_date, 'YYYY-MM-DD')           AS "reviewDate"
+          , TO_CHAR(A.created_at, 'YYYY-MM-DD HH24:MI:SS') AS "createdAt"
+          , A.request_no                                   AS "requestNo"
+        FROM tb_screen_review_history A
+        LEFT JOIN employees B
+          ON B.id = A.reviewer_emp_id
+        WHERE A.tenant_id = #{tenantId}
+          AND A.review_id = #{reviewId}
+        ORDER BY A.history_id DESC
+    </select>
+
+    <select id="selectDraft" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewDraftVO">
+        SELECT
+            draft_id                                     AS "draftId"
+          , review_comment                               AS "reviewComment"
+          , TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') AS "updatedAt"
+        FROM tb_screen_review_draft
+        WHERE tenant_id = #{tenantId}
+          AND menu_id = #{menuId}
+          AND writer_emp_id = #{empId}
+    </select>
+
+    <select id="upsertDraft" parameterType="map" resultType="long" flushCache="true" useCache="false">
+        INSERT INTO tb_screen_review_draft (tenant_id, menu_id, writer_emp_id, review_comment)
+        VALUES (#{tenantId}, #{menuId}, #{empId}, #{reviewComment})
+        ON CONFLICT (tenant_id, menu_id, writer_emp_id)
+        DO UPDATE SET review_comment = EXCLUDED.review_comment
+                    , updated_at     = now()
+        RETURNING draft_id
+    </select>
+
+    <delete id="deleteDraft" parameterType="map">
+        DELETE FROM tb_screen_review_draft
+        WHERE tenant_id = #{tenantId}
+          AND draft_id = #{draftId}
+    </delete>
+
+    <select id="selectFileList" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewFileVO">
+        SELECT
+            file_id    AS "fileId"
+          , owner_id   AS "ownerId"
+          , file_name  AS "fileName"
+          , file_size  AS "fileSize"
+        FROM tb_common_file
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = #{ownerType}
+          AND deleted_yn = 'N'
+          AND owner_id IN
+          <foreach collection="ownerIds" item="ownerId" open="(" separator="," close=")">#{ownerId}</foreach>
+        ORDER BY owner_id, file_id
+    </select>
+
+    <update id="moveDraftFiles" parameterType="map">
+        UPDATE tb_common_file
+        SET owner_type = 'SCREEN_REVIEW'
+          , owner_id   = #{historyId}
+          , updated_at = now()
+        WHERE tenant_id = #{tenantId}
+          AND owner_type = 'SCREEN_REVIEW_DRAFT'
+          AND owner_id = #{draftId}
+          AND deleted_yn = 'N'
+    </update>
+</mapper>

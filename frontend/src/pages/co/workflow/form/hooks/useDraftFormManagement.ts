@@ -27,8 +27,8 @@ function toPayload(
     codeName: row.codeName.trim(),
     categoryItemId: Number(row.categoryItemId),
     regTermId: Number(row.regTermId),
-    reviewerId: row.reviewerId == null ? null : Number(row.reviewerId),
-    approverId: row.approverId == null ? null : Number(row.approverId),
+    reviewerId: row.reviewerId == null ? null : String(row.reviewerId),
+    approverId: row.approverId == null ? null : String(row.approverId),
     assigneeIds: row.assigneeIds.map(String),
     useAt,
   };

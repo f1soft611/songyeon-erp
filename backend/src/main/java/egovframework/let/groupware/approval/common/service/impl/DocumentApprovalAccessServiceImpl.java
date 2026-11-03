@@ -71,11 +71,11 @@ public class DocumentApprovalAccessServiceImpl extends EgovAbstractServiceImpl
     }
 
     @Override
-    public Long authenticatedUserId(LoginVO user) {
-        try {
-            return Long.valueOf(user.getUniqId());
-        } catch (NumberFormatException exception) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "인증 사용자 ID가 올바르지 않습니다.", exception);
+    public String authenticatedUserId(LoginVO user) {
+        // 2026-11-03: uniqId = 사번. 숫자로 바꾸지 않는다(앞자리 0 유지)
+        if (user == null || !StringUtils.hasText(user.getUniqId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "인증 사용자 ID가 올바르지 않습니다.");
         }
+        return user.getUniqId().trim();
     }
 }

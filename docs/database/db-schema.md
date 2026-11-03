@@ -19,7 +19,7 @@
 | use_at                       | char      | 사용 여부 (Y/N)                          |
 | created_at                   | timestamp | 생성 일시                                |
 | updated_at                   | timestamp | 수정 일시                                |
-| created_by                   | bigint    | 생성자                                   |
+| created_by                   | varchar(20) | 생성자 사번(값 없음, FK 없음)          |
 
 역할:
 
@@ -30,9 +30,9 @@
 
 | 컬럼                | 타입      | 설명               |
 | ------------------- | --------- | ------------------ |
-| login_id            | bigint    | 로그인 계정 PK     |
+| login_id            | varchar(20) | 로그인 계정 PK = 사번(`employees.id` FK), 자동 번호 없음 |
 | tenant_id           | bigint    | 소속 테넌트        |
-| login_code          | varchar   | 로그인 코드/아이디 |
+| login_code          | varchar   | 로그인 코드/아이디 = 사번(`login_id`와 같은 값) |
 | password_hash       | varchar   | 암호화 비밀번호    |
 | profile_image       | text      | 프로필 이미지      |
 | stamp_image         | text      | 도장 이미지        |
@@ -52,9 +52,9 @@
 
 | 컬럼          | 타입      | 설명                  |
 | ------------- | --------- | --------------------- |
-| user_id       | bigint    | 사용자 PK             |
+| user_id       | varchar(20) | 사용자 PK = 사번(`employees.id` FK), 자동 번호 없음 |
 | tenant_id     | bigint    | 소속 테넌트           |
-| login_id      | bigint    | 로그인 계정 FK        |
+| login_id      | varchar(20) | 로그인 계정 FK(사번, ON DELETE SET NULL) |
 | user_nm       | varchar   | 사용자명              |
 | email_addr    | varchar   | 이메일                |
 | department_id | bigint    | 부서 FK               |
@@ -117,7 +117,7 @@
 | 컬럼                  | 타입      | 설명           |
 | --------------------- | --------- | -------------- |
 | login_account_role_id | bigint    | 매핑 PK        |
-| login_id              | bigint    | 로그인 계정 FK |
+| login_id              | varchar(20) | 로그인 계정 FK(사번, ON DELETE CASCADE) |
 | role_id               | bigint    | 역할 FK        |
 | created_at            | timestamp | 생성 일시      |
 
@@ -243,8 +243,8 @@
 | use_at               | char      | 사용 여부              |
 | created_at           | timestamp | 생성 일시              |
 | updated_at           | timestamp | 수정 일시              |
-| created_by           | bigint    | 생성자                 |
-| updated_by           | bigint    | 수정자                 |
+| created_by           | varchar(20) | 생성자 사번(FK 없음) |
+| updated_by           | varchar(20) | 수정자 사번(FK 없음) |
 
 역할:
 
@@ -267,8 +267,8 @@
 | use_at              | char      | 사용 여부                  |
 | created_at          | timestamp | 생성 일시                  |
 | updated_at          | timestamp | 수정 일시                  |
-| created_by          | bigint    | 생성자                     |
-| updated_by          | bigint    | 수정자                     |
+| created_by          | varchar(20) | 생성자 사번(FK 없음)     |
+| updated_by          | varchar(20) | 수정자 사번(FK 없음)     |
 
 역할:
 
@@ -503,13 +503,13 @@
 | view_history_id | bigserial | 조회 이력 PK   |
 | tenant_id       | bigint    | 테넌트 FK      |
 | post_id         | bigint    | 게시글 FK      |
-| login_id        | bigint    | 로그인 계정 FK |
+| login_id        | varchar(20) | 조회한 사원 사번(`employees.id` FK) |
 | viewed_at       | timestamp | 최초 조회 일시 |
 
 제약:
 
 - 복합 유니크: `(tenant_id, post_id, login_id)`
-- `tb_tenant`, `tb_board_post`, `tb_login_account`를 참조
+- `tb_tenant`, `tb_board_post`, `employees`를 참조
 
 역할:
 
@@ -527,12 +527,12 @@
 | view_seq                        | integer     | 표시 순서              |
 | use_at                          | char(1)     | 사용 여부 (`Y`/`N`)    |
 | delete_status                   | varchar     | 삭제 상태              |
-| created_by / updated_by         | bigint      | 생성/수정 로그인 ID FK |
+| created_by / updated_by         | varchar(20) | 생성/수정 사번(FK 없음) |
 | created_at / updated_at         | timestamp   | 생성/수정 시각         |
 
 제약/역할:
 
-- `tb_tenant`, `tb_login_account` 참조, 테넌트별 `cata_code` unique
+- `tb_tenant` 참조, 테넌트별 `cata_code` unique
 - HACCP 원본 호환용 분류 그룹 테이블. 신규 화면의 분류 옵션은 공통코드 `WF_FORM_CATEGORY`에서 조회
 
 ### 2-21. tb_drafting_work_category
@@ -547,7 +547,7 @@
 | code_name                       | varchar(50)  | 양식명                              |
 | view_seq                        | integer      | 표시 순서                           |
 | type_cnt                        | text         | 원본 업무 텍스트                    |
-| reviewer_id / approver_id       | bigint       | 검토/승인 로그인 ID FK              |
+| reviewer_id / approver_id       | varchar(20)  | 검토/승인 사번(`employees.id` FK, ON DELETE SET NULL) |
 | user_type                       | varchar(10)  | 원본 사용자 유형                    |
 | haccp_cp_status                 | varchar(10)  | 원본 HACCP 상태                     |
 | reg_term                        | varchar(6)   | 등록주기 표시명 호환 컬럼           |
@@ -557,12 +557,12 @@
 | duty_charge_code                | varchar(10)  | 원본 담당 코드                      |
 | cata_code                       | varchar(3)   | 원본 분류코드 호환 컬럼             |
 | use_at / delete_status          | char/varchar | 사용/삭제 상태                      |
-| created_by / updated_by         | bigint       | 생성/수정 로그인 ID FK              |
+| created_by / updated_by         | varchar(20)  | 생성/수정 사번(FK 없음)             |
 | created_at / updated_at         | timestamp    | 생성/수정 시각                      |
 
 제약/역할:
 
-- `tb_tenant`, 원본 분류 그룹, `tb_common_code_item`, reviewer/approver 및 감사 사용자 참조
+- `tb_tenant`, 원본 분류 그룹, `tb_common_code_item`, reviewer/approver 사원(`employees`) 참조
 - `category_item_id`는 `WF_FORM_CATEGORY`, `reg_term_id`는 `WF_FORM_CYCLE` 그룹 항목을 서비스에서 검증
 - `code_name`은 양식명이다. `reg_term`은 `reg_term_id`가 가리키는 항목명과 동기화
 - `cata_type_code`는 기존 `haccpBaseWorkCodeIdGnrService`로 3자리 생성
@@ -575,21 +575,97 @@
 | tenant_id                           | bigint       | 소속 테넌트 FK         |
 | drafting_work_category_id           | bigint       | 기안양식 FK            |
 | cata_type_code                      | varchar(3)   | 원본 양식 구분코드     |
-| employee_no                         | varchar(10)  | 담당 사용자 식별값     |
+| employee_no                         | varchar(20)  | 담당 사원 사번(`employees.id` FK) |
 | use_at / delete_status              | char/varchar | 사용/삭제 상태         |
-| created_by / updated_by             | bigint       | 생성/수정 로그인 ID FK |
+| created_by / updated_by             | varchar(20)  | 생성/수정 사번(FK 없음) |
 | created_at / updated_at             | timestamp    | 생성/수정 시각         |
 
 제약/역할:
 
-- `tb_tenant`, `tb_drafting_work_category`, `tb_login_account`를 참조
+- `tb_tenant`, `tb_drafting_work_category`, `employees`(담당자)를 참조
 - `(tenant_id, drafting_work_category_id, employee_no)` unique
 - 양식 담당자 매핑을 보존하는 HACCP 원본 테이블
 
 ---
 
+### 2-23. tb_screen_review
+
+| 컬럼               | 타입      | 설명                                                                 |
+| ------------------ | --------- | -------------------------------------------------------------------- |
+| review_id          | bigint    | 화면검수 현황 PK                                                     |
+| tenant_id          | bigint    | 소속 테넌트                                                          |
+| menu_id            | bigint    | 검수 대상 화면, `tb_menu` FK (테넌트 + 메뉴 유일)                    |
+| review_status      | varchar   | `NOT_STARTED` 미검수, `IN_PROGRESS` 검수진행중, `CHANGE_REQUESTED` 수정요청, `COMPLETED` 검수완료 |
+| reviewer_emp_id    | varchar(20) | 마지막 검수자 사번(`employees.id` FK)                              |
+| review_date        | date      | 마지막 검수일                                                        |
+| request_date       | date      | 요청일: 마지막으로 수정요청을 저장한 날                              |
+| developer_name     | varchar   | 개발담당(개발사가 따로 넣는다)                                       |
+| dev_completed_date | date      | 개발완료일(개발사가 따로 넣는다)                                     |
+| created_at / created_by / updated_at / updated_by | timestamp / varchar(20) | 생성 · 수정 일시, 사번(`employees.id`, FK 없음) |
+
+역할:
+
+- 화면당 1줄. 화면마다 맨 오른쪽 [화면검수] 패널의 현재 상태
+- 흐름: 업체가 수정요청 → 검수진행중 → 검수완료 (서버가 고를 수 있는 다음 상태를 검사한다)
+- 검수완료로 한 바퀴가 끝나면 이 줄은 미검수로 돌아가고 요청일 · 개발담당 · 개발완료일은 비운다(2026-11-03, 이력에는 검수완료로 남는다)
+
+### 2-24. tb_screen_review_history
+
+| 컬럼             | 타입      | 설명                                  |
+| ---------------- | --------- | ------------------------------------- |
+| history_id       | bigint    | 화면검수 이력 PK                      |
+| tenant_id        | bigint    | 소속 테넌트                           |
+| review_id        | bigint    | `tb_screen_review` FK                 |
+| from_status      | varchar   | 이전 상태                             |
+| to_status        | varchar   | 새 상태(의견만 남기면 이전과 같다)    |
+| review_comment   | varchar   | 검수 의견(500자)                      |
+| reviewer_emp_id  | varchar(20) | 검수자 사번(`employees.id` FK)      |
+| review_date      | date      | 검수일(서버의 오늘)                   |
+| created_at       | timestamp | 등록 일시                             |
+| request_no       | integer   | 요청 번호: 수정요청 줄에만, 화면마다 1부터 |
+
+역할:
+
+- 저장할 때마다 1줄. 고치거나 지우지 않는다
+- 첨부는 `tb_common_file` 의 `SCREEN_REVIEW` + `history_id`
+- 요청 번호는 저장할 때 서버가 매긴다(`max + 1`, 검수완료 뒤에도 이어서). `UNIQUE (review_id, request_no)`
+
+### 2-25. tb_screen_review_draft
+
+| 컬럼           | 타입      | 설명                                         |
+| -------------- | --------- | -------------------------------------------- |
+| draft_id       | bigint    | 화면검수 임시저장 PK                         |
+| tenant_id      | bigint    | 소속 테넌트                                  |
+| menu_id        | bigint    | 검수 대상 화면, `tb_menu` FK                 |
+| writer_emp_id  | varchar(20) | 작성자 사번(`employees.id` FK) (테넌트 + 메뉴 + 작성자 유일) |
+| review_comment | varchar   | 임시저장한 의견                              |
+| created_at / updated_at | timestamp | 생성 · 마지막 임시저장 일시         |
+
+역할:
+
+- 상태 칸이 없다: 임시저장으로는 상태를 바꿀 수 없다
+- 첨부는 `tb_common_file` 의 `SCREEN_REVIEW_DRAFT` + `draft_id`. 저장하면 서버가 이력으로 옮기고 이 줄을 지운다
+
+### 2-26. 전자결재 · 공지 사람 칸 (사번)
+
+| 테이블.칸 | 타입 | 설명 |
+| --- | --- | --- |
+| `tb_electronic_approval_line_info.participant_user_id` | varchar(20) | 결재선 참여자 사번(`employees.id` FK) |
+| `tb_electronic_approval_line_template_info.participant_user_id` | varchar(20) | 결재선 양식 참여자 사번(`employees.id` FK) |
+| `tb_electronic_approval_pin.user_id` | varchar(20) | 고정한 사원 사번(`employees.id` FK, ON DELETE CASCADE) |
+| `tb_electronic_approval_view_history.login_id` | varchar(20) | 열람한 사원 사번(`employees.id` FK) |
+| `tb_notice_popup_dismissal.login_id` | varchar(20) | 팝업을 닫은 사원 사번(`employees.id` FK, ON DELETE CASCADE) |
+
+- 칸 이름은 S_ERP 그대로, 값은 사번이다(2026-11-03, `20261103_003`).
+
 ## 변경 이력
 
+- 2026-11-03: 구매관리 > 입고관리 탭 네 개를 화면(메뉴)으로 나눴다. 예전 `IBReceivingView` 입고관리 행이 `IBReceivingRegisterView` 입고등록(번호 · 권한 그대로)이 되고, 입고현황 `IBReceivingStatusView`(20) · 서류등록 `IBReceivingDocView`(30) · 반품등록 `IBReturnRegisterView`(40)를 추가(권한은 입고등록 복사), 재료 치환등록은 50. 데이터만 바뀌고 표 구조는 그대로다. 프론트를 함께 배포해야 한다. `20261103_005` 참고.
+- 2026-11-03: 화면검수는 검수완료로 한 바퀴가 끝나면 현황(`tb_screen_review`)이 미검수로 돌아가고 요청일 · 개발담당 · 개발완료일은 비운다. 이미 검수완료로 남은 현황 1줄을 같은 모양으로 바꿨다(데이터만). war 를 함께 배포해야 한다. `20261103_004` 참고.
+- 2026-11-03: 사람을 가리키는 값을 모두 사번(`employees.id`, varchar(20))으로 바꿨다. 로그인 테이블 기본키 `tb_login_account.login_id` · `tb_user.user_id`(자동 번호 없앰)와 `tb_user.login_id` · `tb_login_account_role.login_id`, 전자결재 결재선 · 결재선 양식 · 고정 · 열람, 게시판 열람, 공지 팝업 닫기, 기안 업무(검토 · 승인 · 담당자 · 등록자 · 수정자), 공통코드 · 테넌트 등록자. 사람 칸은 `employees(id)` FK(14개), 등록자 · 수정자 칸은 FK 없음. 롤백하면 번호를 새로 매긴다. war · 프론트를 함께 배포해야 한다. `20261103_003` 참고.
+- 2026-11-03: 화면검수 테이블 3개의 검수자 · 작성자 · 등록자 · 수정자를 `tb_user.user_id`(bigint, FK) 에서 사번 `employees.id`(varchar(20), FK 없음)로 바꿨다(`reviewer_emp_id` · `writer_emp_id` · `created_by` · `updated_by`). 이미 있는 값은 `tb_login_account.login_code` 로 바꿨다. 2026-11-03 적용. war 를 함께 배포해야 한다. `20261103_002` 참고.
+- 2026-11-03: 화면검수 이력 `tb_screen_review_history` 에 요청 번호 `request_no`(수정요청 줄에만, 화면마다 1부터)와 `UNIQUE (review_id, request_no)` 를 추가하고, 이미 있는 수정요청 줄에 번호를 채웠다. 2026-11-03 적용. war · 프론트를 함께 배포해야 한다. `20261103_001` 참고.
+- 2026-11-02: 화면검수 테이블 `tb_screen_review` · `tb_screen_review_history` · `tb_screen_review_draft` 를 만들었다. 저장소 스크립트 없이 설계서 2차(3단계) 모양으로 만들어져 있던 빈 테이블 4개(`tb_screen_change_request` 포함)는 지우고 지금 화면(화면당 상태 하나)에 맞췄다. 2026-11-02 적용. war · 프론트를 함께 배포해야 한다. `20261102_003` 참고.
 - 2026-11-02: 구매관리(`PU /pu`)에 중분류 4개(`PU_ORDER` 발주관리 · `PU_INBOUND` 입고관리 · `PU_STOCK` 재고관리 · `PU_DOCUMENT` 문서관리)를 두어 화면을 옮기고, 발주관리 탭을 발주등록(`POOrderRegisterView`) · 발주현황(`POOrderStatusView`, 새 화면, 권한은 발주관리 복사)으로 나눴다. 2026-11-02 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261102_002` 참고.
 - 2026-11-02: 판매관리(`SL /sl`)에 중분류 2개(`SL_ENTRY` 판매처리 · `SL_INQUIRY` 판매조회)를 두어 화면 3개를 옮기는 스크립트를 만들었다. 화면ID 는 `ENSalesRegisterView` · `INSalesStatusView` · `INSalesTotalView`. 메뉴 번호 · 권한 행 그대로. 2026-11-02 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261102_001` 참고.
 - 2026-10-30: 물류관리(`LG /lg`)에 중분류 2개(`LG_STOCK` 재고관리 · `LG_OUTBOUND` 출고관리)를 두어 화면 3개를 옮기는 스크립트를 만들었다. 화면ID 는 `STProductStockView` · `OBShipConfirmView` · `OBShipStatusView`. 메뉴 번호 · 권한 행 그대로. 2026-10-30 적용. 프론트 폴더 · 서버 패키지 · API 주소도 같이 바뀌어 war · 프론트를 함께 배포해야 한다. `20261030_002` 참고.

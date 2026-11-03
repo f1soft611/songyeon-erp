@@ -7,11 +7,15 @@ import {
   PermissionGroupActionBar,
   type PermissionActionGroupDefinition,
 } from './PermissionGroup';
+import { ScreenReviewControl } from './screen-review/ScreenReviewControl';
+import type { ScreenReviewTarget } from './screen-review/screenReview.types';
 
 export type PageHeaderProps = {
   breadcrumbItems: string[];
   description: string;
   actionGroups?: PermissionActionGroupDefinition[];
+  // 화면검수: 넘긴 화면만 맨 오른쪽에 검수 배지 · [화면검수] 단추가 보인다(2026-11-02 포장유형 샘플)
+  screenReview?: ScreenReviewTarget;
   children?: ReactNode;
 };
 
@@ -22,6 +26,7 @@ export function PageHeader({
   breadcrumbItems,
   description,
   actionGroups,
+  screenReview,
   children,
 }: PageHeaderProps) {
   const theme = useTheme();
@@ -160,7 +165,7 @@ export function PageHeader({
         backdropFilter: 'blur(12px)',
       }}
     >
-      {actionGroups ? (
+      {actionGroups || screenReview ? (
         <Box
           sx={{
             display: 'flex',
@@ -171,7 +176,10 @@ export function PageHeader({
           }}
         >
           {breadcrumbBlock}
-          <PermissionGroupActionBar groups={actionGroups} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end', ml: 'auto' }}>
+            {actionGroups && <PermissionGroupActionBar groups={actionGroups} />}
+            {screenReview && <ScreenReviewControl target={screenReview} />}
+          </Box>
         </Box>
       ) : (
         breadcrumbBlock

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
-import type { PurchaseOrder } from '../../order-register/types/purchaseOrder.types';
+import type { PurchaseOrder } from '../../order-register/types/orderRegister.types';
 import { fetchOrdersByPeriod } from '../services/orderStatus.service';
-import type { StatusFilter, StatusQuery, StatusRow } from '../types/orderStatus.types';
-import { STATUS_EXCEL_COLUMNS, monthStart, sortStatus, statusCounts, toStatusRows } from '../utils/orderStatus';
+import type { PageSearchFieldValue } from '../../../../../shared/components/page-search/searchFields';
+import type { StatusQuery, StatusRow } from '../types/orderStatus.types';
+import { STATUS_EXCEL_COLUMNS, applyStatusDetail, monthStart, sortStatus, statusCounts, toStatusRows } from '../utils/orderStatus';
 
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
@@ -44,10 +45,12 @@ export function useOrderStatusManagement() {
   const changeQuery = (key: keyof StatusQuery, value: string) =>
     setQuery((current) => ({ ...current, [key]: value }));
 
-  // 송연과 같이 입고여부는 고르면 바로 다시 부른다
-  const changeReceived = (received: StatusFilter) => {
-    setQuery((current) => ({ ...current, received }));
-    void loadRows({ received });
+  // 상세 조회(⌄) [조회]: 기간 · 거래처코드/명 · 입고여부를 적용하고 다시 부른다(2026-11-03)
+  const applyDetail = (values: Record<string, PageSearchFieldValue>) => {
+    const next = applyStatusDetail(queryRef.current, values);
+    queryRef.current = next;
+    setQuery(next);
+    void loadRows(next);
   };
 
   const rows = useMemo<StatusRow[]>(() => toStatusRows(orders ?? []), [orders]);
@@ -65,7 +68,7 @@ export function useOrderStatusManagement() {
   return {
     query,
     changeQuery,
-    changeReceived,
+    applyDetail,
     orders,
     rows,
     counts,

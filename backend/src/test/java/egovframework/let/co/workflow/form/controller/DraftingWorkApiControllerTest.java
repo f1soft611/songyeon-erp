@@ -54,8 +54,8 @@ class DraftingWorkApiControllerTest {
     @Test
     void listUserOptionsUsesAuthenticatedTenantAndReturnsLoginAndUserIds() throws Exception {
         DraftingWorkUserOptionVO user = new DraftingWorkUserOptionVO();
-        user.setUserId(110L);
-        user.setLoginId(210L);
+        user.setUserId("00000110");
+        user.setLoginId("00000110");
         user.setUserNm("홍길동");
         user.setDepartmentNm("운영팀");
         user.setProfileImage("/profiles/fixture.png");
@@ -66,8 +66,8 @@ class DraftingWorkApiControllerTest {
         mockMvc.perform(get("/api/v1/co/workflow/forms/users")
                         .principal(authenticationForTenant(1L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.resultList[0].userId").value(110))
-                .andExpect(jsonPath("$.result.resultList[0].loginId").value(210))
+                .andExpect(jsonPath("$.result.resultList[0].userId").value("00000110"))
+                .andExpect(jsonPath("$.result.resultList[0].loginId").value("00000110"))
                 .andExpect(jsonPath("$.result.resultList[0].userNm").value("홍길동"))
                 .andExpect(jsonPath("$.result.resultList[0].departmentNm").value("운영팀"))
                 .andExpect(jsonPath("$.result.resultList[0].profileImage").value("/profiles/fixture.png"))
@@ -100,7 +100,7 @@ class DraftingWorkApiControllerTest {
         saved.setCataTypeCode("007");
         saved.setCodeName("정기점검");
         when(draftingWorkService.createWork(
-            eq(1L), eq(101L), argThat(payload ->
+            eq(1L), eq("00000101"), argThat(payload ->
                 "정기점검".equals(payload.getCodeName())
                     && Long.valueOf(31L).equals(payload.getCategoryItemId())
                     && Long.valueOf(42L).equals(payload.getRegTermId())
@@ -110,13 +110,13 @@ class DraftingWorkApiControllerTest {
         mockMvc.perform(post("/api/v1/co/workflow/forms")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"codeName\":\"정기점검\",\"categoryItemId\":31,\"regTermId\":42,\"assigneeIds\":null,\"useAt\":\"Y\"}")
-                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "101")))
+                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "00000101")))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.result.item.draftingWorkCategoryId").value(71))
             .andExpect(jsonPath("$.result.item.cataTypeCode").value("007"));
 
         verify(draftingWorkService).createWork(
-            eq(1L), eq(101L), argThat(payload ->
+            eq(1L), eq("00000101"), argThat(payload ->
                 "정기점검".equals(payload.getCodeName())
                     && Long.valueOf(31L).equals(payload.getCategoryItemId())
                         && Long.valueOf(42L).equals(payload.getRegTermId())
@@ -125,13 +125,13 @@ class DraftingWorkApiControllerTest {
 
     @Test
     void createWorkReturnsBadRequestWhenTheCodeInsertConflicts() throws Exception {
-        when(draftingWorkService.createWork(eq(1L), eq(101L), org.mockito.ArgumentMatchers.any()))
+        when(draftingWorkService.createWork(eq(1L), eq("00000101"), org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new IllegalArgumentException("이미 사용 중인 구분코드입니다."));
 
         mockMvc.perform(post("/api/v1/co/workflow/forms")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"cataTypeCode\":\"007\",\"codeName\":\"정기점검\",\"categoryItemId\":31,\"regTermId\":42}")
-                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "101")))
+                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "00000101")))
             .andExpect(status().isBadRequest());
     }
 
@@ -142,7 +142,7 @@ class DraftingWorkApiControllerTest {
         saved.setCataTypeCode("007");
         saved.setCodeName("수정양식");
         when(draftingWorkService.updateWork(
-                eq(1L), eq(101L), eq(71L), argThat(payload ->
+                eq(1L), eq("00000101"), eq(71L), argThat(payload ->
                     "수정양식".equals(payload.getCodeName())
                         && Long.valueOf(31L).equals(payload.getCategoryItemId())
                         && Long.valueOf(42L).equals(payload.getRegTermId()))))
@@ -151,13 +151,13 @@ class DraftingWorkApiControllerTest {
         mockMvc.perform(put("/api/v1/co/workflow/forms/71")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"codeName\":\"수정양식\",\"categoryItemId\":31,\"regTermId\":42}")
-                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "101")))
+                .principal(authenticationForTenant(1L, "TENANT_ADMIN", "00000101")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.result.item.draftingWorkCategoryId").value(71))
             .andExpect(jsonPath("$.result.item.cataTypeCode").value("007"));
 
         verify(draftingWorkService).updateWork(
-                eq(1L), eq(101L), eq(71L), argThat(payload ->
+                eq(1L), eq("00000101"), eq(71L), argThat(payload ->
                     "수정양식".equals(payload.getCodeName())
                         && Long.valueOf(31L).equals(payload.getCategoryItemId())
                         && Long.valueOf(42L).equals(payload.getRegTermId())));

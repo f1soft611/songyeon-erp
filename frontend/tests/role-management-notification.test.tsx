@@ -536,7 +536,7 @@ describe('RoleManagementPage notifications', () => {
       expect(apiMocks.apiPost).toHaveBeenCalledWith(
         '/api/v1/system/roles/7/users',
         {
-          loginId: 12,
+          loginId: '12',
         },
       );
       expect(apiMocks.apiGet).toHaveBeenCalledWith('/api/v1/system/roles');
@@ -703,7 +703,7 @@ describe('RoleManagementPage notifications', () => {
     await waitFor(() => {
       expect(apiMocks.apiPost).toHaveBeenCalledWith(
         '/api/v1/system/roles/7/users',
-        { loginId: 12 },
+        { loginId: '12' },
       );
     });
     await waitFor(() => {
@@ -1065,7 +1065,7 @@ describe('RoleManagementPage notifications', () => {
     expect(apiMocks.apiPost).toHaveBeenNthCalledWith(
       3,
       '/api/v1/system/roles/7/users',
-      { loginId: 13 },
+      { loginId: '13' },
     );
   });
 });

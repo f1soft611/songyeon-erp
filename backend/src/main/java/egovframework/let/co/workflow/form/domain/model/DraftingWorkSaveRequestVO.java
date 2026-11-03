@@ -24,9 +24,9 @@ public class DraftingWorkSaveRequestVO implements Serializable {
     @Schema(description = "등록주기 공통코드 항목 ID", required = true)
     private Long regTermId;
     @Schema(description = "검토자 로그인 ID")
-    private Long reviewerId;
+    private String reviewerId;
     @Schema(description = "승인자 로그인 ID")
-    private Long approverId;
+    private String approverId;
     @Schema(description = "담당자 사용자 ID 목록, 생략 또는 null은 빈 목록으로 처리")
     private List<String> assigneeIds = new ArrayList<String>();
     @Schema(description = "사용 여부 (Y/N)", example = "Y")

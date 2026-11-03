@@ -200,7 +200,7 @@ class DocumentApprovalInteractionServiceImplTest {
     @Test
     void detailIncrementsViewCountForFirstAuthorizedView() throws Exception {
         when(approvalDAO.selectDocumentApprovalDetail(anyMap())).thenReturn(detail(0), detail(1));
-        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn(201L);
+        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn("00000201");
         when(approvalDAO.insertElectronicApprovalViewHistory(anyMap())).thenReturn(401L);
         when(approvalDAO.incrementElectronicApprovalViewCount(anyMap())).thenReturn(1);
         when(fileService.listFiles(4L, "APPROVAL", 77L)).thenReturn(Collections.<CommonFileVO>emptyList());
@@ -217,7 +217,7 @@ class DocumentApprovalInteractionServiceImplTest {
         verify(approvalDAO).insertElectronicApprovalViewHistory(argThat(params ->
             Long.valueOf(4L).equals(params.get("tenantId"))
                 && Long.valueOf(77L).equals(params.get("electronicApprovalId"))
-                && Long.valueOf(201L).equals(params.get("loginId"))));
+                && "00000201".equals(params.get("loginId"))));
         verify(approvalDAO).incrementElectronicApprovalViewCount(argThat(params ->
             Long.valueOf(4L).equals(params.get("tenantId"))
                 && Long.valueOf(77L).equals(params.get("electronicApprovalId"))));
@@ -226,7 +226,7 @@ class DocumentApprovalInteractionServiceImplTest {
     @Test
     void detailDoesNotIncrementViewCountForRepeatedView() throws Exception {
         when(approvalDAO.selectDocumentApprovalDetail(anyMap())).thenReturn(detail(2), detail(2));
-        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn(201L);
+        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn("00000201");
         when(approvalDAO.insertElectronicApprovalViewHistory(anyMap())).thenReturn(null);
         when(fileService.listFiles(4L, "APPROVAL", 77L)).thenReturn(Collections.<CommonFileVO>emptyList());
         when(approvalDAO.selectApprovalLines(anyMap())).thenReturn(Collections.<DocumentApprovalLineVO>emptyList());
@@ -243,7 +243,7 @@ class DocumentApprovalInteractionServiceImplTest {
     void detailRecordsAnotherLoginAsSeparateViewer() throws Exception {
         LoginVO anotherUser = participantUser("login-other", "202", "다른 사용자");
         when(approvalDAO.selectDocumentApprovalDetail(anyMap())).thenReturn(detail(3), detail(4));
-        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn(202L);
+        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn("00000202");
         when(approvalDAO.insertElectronicApprovalViewHistory(anyMap())).thenReturn(402L);
         when(approvalDAO.incrementElectronicApprovalViewCount(anyMap())).thenReturn(1);
         when(fileService.listFiles(4L, "APPROVAL", 77L)).thenReturn(Collections.<CommonFileVO>emptyList());
@@ -257,7 +257,7 @@ class DocumentApprovalInteractionServiceImplTest {
             Long.valueOf(4L).equals(params.get("tenantId"))
                 && "login-other".equals(params.get("loginCode"))));
         verify(approvalDAO).insertElectronicApprovalViewHistory(argThat(params ->
-            Long.valueOf(202L).equals(params.get("loginId"))));
+            "00000202".equals(params.get("loginId"))));
     }
 
     @Test
@@ -291,7 +291,7 @@ class DocumentApprovalInteractionServiceImplTest {
     @Test
     void detailFailsWhenFirstViewCannotUpdateDocumentCounter() throws Exception {
         when(approvalDAO.selectDocumentApprovalDetail(anyMap())).thenReturn(detail(0));
-        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn(201L);
+        when(approvalDAO.selectLoginIdByLoginCode(anyMap())).thenReturn("00000201");
         when(approvalDAO.insertElectronicApprovalViewHistory(anyMap())).thenReturn(401L);
         when(approvalDAO.incrementElectronicApprovalViewCount(anyMap())).thenReturn(0);
 

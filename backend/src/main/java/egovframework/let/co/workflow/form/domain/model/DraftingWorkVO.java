@@ -34,11 +34,11 @@ public class DraftingWorkVO implements Serializable {
     @Schema(description = "사용 여부")
     private String useAt;
     @Schema(description = "검토자 로그인 ID")
-    private Long reviewerId;
+    private String reviewerId;
     @Schema(description = "검토자명")
     private String reviewerName;
     @Schema(description = "승인자 로그인 ID")
-    private Long approverId;
+    private String approverId;
     @Schema(description = "승인자명")
     private String approverName;
     @Schema(description = "담당자 요약")

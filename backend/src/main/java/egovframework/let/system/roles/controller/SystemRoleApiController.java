@@ -183,7 +183,7 @@ public class SystemRoleApiController {
     @DeleteMapping("/{roleId}/users/{loginId}")
     public ResultVO removeUserFromRole(
             @PathVariable Long roleId,
-            @PathVariable Long loginId,
+            @PathVariable String loginId,
             @Parameter(hidden = true) @AuthenticationPrincipal LoginVO user) throws Exception {
         requireAdmin(user);
         try {

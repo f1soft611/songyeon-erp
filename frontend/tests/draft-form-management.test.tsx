@@ -75,8 +75,8 @@ beforeEach(() => {
       return Promise.resolve({
         resultList: [
           {
-            userId: 110,
-            loginId: 210,
+            userId: '00000110',
+            loginId: '00000110',
             userNm: '홍길동',
             departmentNm: '운영팀',
           },
@@ -101,8 +101,8 @@ describe('Draft form management page', () => {
     apiMocks.apiGet.mockResolvedValueOnce({
       resultList: [
         {
-          userId: 110,
-          loginId: 210,
+          userId: '00000110',
+          loginId: '00000110',
           userNm: '홍길동',
           departmentNm: '운영팀',
           profileImage: '/profiles/fixture.png',
@@ -113,8 +113,8 @@ describe('Draft form management page', () => {
 
     await expect(fetchDraftFormUsers()).resolves.toEqual([
       {
-        userId: '110',
-        loginId: 210,
+        userId: '00000110',
+        loginId: '00000110',
         userNm: '홍길동',
         departmentNm: '운영팀',
         profileImage: '/profiles/fixture.png',
@@ -129,8 +129,8 @@ describe('Draft form management page', () => {
       [],
       [
         {
-          userId: '110',
-          loginId: 210,
+          userId: '00000110',
+          loginId: '00000110',
           userNm: '홍길동',
           departmentNm: '운영팀',
           profileImage: '/profiles/fixture.png',
@@ -146,7 +146,7 @@ describe('Draft form management page', () => {
     expect(reviewer?.type).toBe('user');
     expect(reviewer?.userOptions).toEqual([
       {
-        value: 210,
+        value: '00000110',
         label: '홍길동',
         avatarUrl: '/profiles/fixture.png',
         positionName: '부장',
@@ -154,25 +154,25 @@ describe('Draft form management page', () => {
       },
     ]);
     expect(approver?.type).toBe('user');
-    expect(approver?.userOptions?.[0].value).toBe(210);
+    expect(approver?.userOptions?.[0].value).toBe('00000110');
     expect(assignee?.type).toBe('user');
-    expect(assignee?.userOptions?.[0].value).toBe('110');
+    expect(assignee?.userOptions?.[0].value).toBe('00000110');
     expect(assignee?.form?.multiple).toBe(true);
   });
 
   it('applies a selected reviewer to the draft form grid row', async () => {
     const users = [
       {
-        userId: '110',
-        loginId: 210,
+        userId: '00000110',
+        loginId: '00000110',
         userNm: '홍길동',
         departmentNm: '운영팀',
         profileImage: null,
         levelNm: '부장',
       },
       {
-        userId: '111',
-        loginId: 211,
+        userId: '00000111',
+        loginId: '00000111',
         userNm: '김민지',
         departmentNm: '기획팀',
         profileImage: null,
@@ -187,7 +187,7 @@ describe('Draft form management page', () => {
       categoryName: '점검',
       regTermId: 201,
       regTerm: '월',
-      reviewerId: 210,
+      reviewerId: '00000110',
       reviewerName: '홍길동',
       approverId: null,
       approverName: '',
@@ -222,7 +222,7 @@ describe('Draft form management page', () => {
     ).toBeInTheDocument();
     await waitFor(() => expect(onChangesChange).toHaveBeenCalled());
     expect(onChangesChange.mock.lastCall?.[0].updatedRows).toEqual([
-      expect.objectContaining({ reviewerId: 211 }),
+      expect.objectContaining({ reviewerId: '00000111' }),
     ]);
   });
 
@@ -1007,11 +1007,11 @@ describe('Draft form management page', () => {
       categoryName: '점검',
       regTermId: 201,
       regTerm: '월',
-      reviewerId: 210,
+      reviewerId: '00000110',
       reviewerName: '홍길동',
       approverId: null,
       approverName: '',
-      assigneeIds: ['110'],
+      assigneeIds: ['00000110'],
       assigneeSummary: '홍길동',
       createdByName: '관리자',
       createdAt: '2026-10-01 09:00',
@@ -1026,8 +1026,8 @@ describe('Draft form management page', () => {
           ? Promise.resolve({
               resultList: [
                 {
-                  userId: 110,
-                  loginId: 210,
+                  userId: '00000110',
+                  loginId: '00000110',
                   userNm: '홍길동',
                   departmentNm: '운영팀',
                   profileImage: '/profiles/fixture.png',
@@ -1114,7 +1114,7 @@ describe('Draft form management page', () => {
           categoryItemId: 101,
           regTermId: 201,
           reviewerId: null,
-          assigneeIds: ['110'],
+          assigneeIds: ['00000110'],
           useAt: 'Y',
         }),
       ),

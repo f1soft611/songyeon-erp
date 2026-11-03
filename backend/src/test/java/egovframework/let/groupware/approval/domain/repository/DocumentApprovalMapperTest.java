@@ -85,7 +85,7 @@ class DocumentApprovalMapperTest {
 
         Map<String, Object> params = new HashMap<>();
         params.put("tenantId", 4L);
-        params.put("userId", 101L);
+        params.put("userId", "00000101");
         params.put("drafterId", "login-author");
         params.put("participantUserId", "101");
         params.put("scope", "MY_PENDING");
@@ -124,7 +124,7 @@ class DocumentApprovalMapperTest {
 
         Map<String, Object> params = new HashMap<>();
         params.put("tenantId", 4L);
-        params.put("userId", 101L);
+        params.put("userId", "00000101");
         params.put("drafterId", "login-author");
         params.put("participantUserId", "101");
         params.put("electronicApprovalId", 77L);
@@ -665,7 +665,7 @@ class DocumentApprovalMapperTest {
         params.put("tenantId", 4L);
         params.put("loginCode", "login-author");
         params.put("electronicApprovalId", 77L);
-        params.put("loginId", 201L);
+        params.put("loginId", "00000201");
 
         String detailSql = configuration
                 .getMappedStatement("DocumentApprovalDAO.selectDocumentApprovalDetail")

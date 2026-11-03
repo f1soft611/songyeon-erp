@@ -18,9 +18,9 @@ interface SystemRoleVO {
 }
 
 interface RoleUserApiRow {
-  loginId: number | string;
+  loginId: string; // 계정 번호 = 사번(2026-11-03)
   loginCode?: string | null; // 송연: 계정 login_code = 사번(2026-10-21)
-  userId?: number | string;
+  userId?: string;
   userNm?: string;
   departmentNm?: string;
   assigned?: boolean;
@@ -109,7 +109,7 @@ export async function assignUserToRole(
   loginId: string,
 ): Promise<void> {
   await apiPost(`/api/v1/system/roles/${roleId}/users`, {
-    loginId: Number(loginId),
+    loginId,
   });
 }
 

@@ -63,9 +63,8 @@
                 ELSE 'USR'
             END AS userSe,
             NULL AS orgnztId,
-            <!-- 2026-10-22: S_ERP 와 같이 uniqId = tb_user.user_id(전자결재가 이 값으로 사람을 찾는다).
-                 tb_user 가 없는 계정은 예전처럼 사번. 사번이 필요한 송연 화면은 LoginEmployeeResolver 로 사번을 찾는다 -->
-            COALESCE(CAST(gu.user_id AS varchar), e.id) AS uniqId,
+            <!-- 2026-11-03: uniqId = 사번(tb_login_account.login_id = tb_user.user_id = employees.id) -->
+            li.login_id AS uniqId,
             NULL AS groupId,
             CASE
                 WHEN sr.role_code = 'PLATFORM_ADMIN' THEN 'ROLE_ADMIN'
@@ -81,14 +80,6 @@
          AND COALESCE(t.use_at, 'Y') = 'Y'
         JOIN employees e
           ON e.id = li.login_code
-        LEFT JOIN LATERAL (
-            SELECT u.user_id
-            FROM tb_user u
-            WHERE u.tenant_id = li.tenant_id
-              AND u.login_id = li.login_id
-            ORDER BY u.user_id
-            LIMIT 1
-        ) gu ON TRUE
         LEFT JOIN LATERAL (
             SELECT
                 r.role_code,
@@ -138,7 +129,7 @@
                 ELSE 'USR'
             END AS userSe,
             u.department_id AS orgnztId,
-            u.user_id::text AS uniqId,
+            u.user_id AS uniqId,
             u.department_id AS groupId,
             COALESCE(d.department_nm, u.department_id::text) AS groupCode,
             CASE
@@ -275,7 +266,7 @@
     <select id="selectMyProfile" parameterType="map" resultType="egovframework.let.uat.uia.domain.model.MyProfileVO">
         SELECT
             e.id AS userId,
-            gu.user_id AS employeeId,
+            la.login_id AS employeeId,
             e.name AS name,
             e.email AS email,
             e.department AS departmentName,
@@ -284,17 +275,9 @@
             la.profile_image AS profileImage,
             la.stamp_image AS stampImage
         FROM employees e
-        <!-- 2026-10-22: employeeId = tb_user.user_id(S_ERP 내 정보와 같은 값). 문서작성 · 결재 화면이 로그인 사용자를 찾는다 -->
+        <!-- 2026-11-03: employeeId = 사번(계정 login_id). 문서작성 · 결재 화면이 결재선의 사번과 비교한다 -->
         LEFT JOIN tb_login_account la
           ON la.login_code = e.id
-        LEFT JOIN LATERAL (
-            SELECT u.user_id
-            FROM tb_user u
-            WHERE u.tenant_id = la.tenant_id
-              AND u.login_id = la.login_id
-            ORDER BY u.user_id
-            LIMIT 1
-        ) gu ON TRUE
         WHERE e.id = #{loginCode}
         LIMIT 1
     </select>
@@ -371,18 +354,5 @@
         </if>
     </update>
 
-    <!-- 송연(2026-10-22): 로그인 uniqId(tb_user.user_id)로 사번(tb_login_account.login_code)을 찾는다 -->
-    <select id="selectEmployeeIdByUserId" parameterType="map" resultType="string">
-        SELECT la.login_code
-        FROM tb_user u
-        JOIN tb_login_account la
-          ON la.login_id = u.login_id
-         AND la.tenant_id = u.tenant_id
-        WHERE u.user_id = #{userId}
-        <if test="tenantId != null">
-          AND u.tenant_id = #{tenantId}
-        </if>
-        LIMIT 1
-    </select>
 
 </mapper>

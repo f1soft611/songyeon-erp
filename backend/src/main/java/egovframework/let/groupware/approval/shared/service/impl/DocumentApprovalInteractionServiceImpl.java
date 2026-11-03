@@ -365,7 +365,7 @@ public class DocumentApprovalInteractionServiceImpl extends EgovAbstractServiceI
         Map<String, Object> loginParams = new HashMap<>();
         loginParams.put("tenantId", user.getTenantId());
         loginParams.put("loginCode", user.getId());
-        Long loginId = documentApprovalDAO.selectLoginIdByLoginCode(loginParams);
+        String loginId = documentApprovalDAO.selectLoginIdByLoginCode(loginParams);
         if (loginId == null) {
             throw new IllegalStateException("인증된 로그인 계정을 찾을 수 없습니다.");
         }

@@ -196,14 +196,11 @@ public class DraftingWorkApiController {
                 .body(resultVoHelper.buildFromMap(errorMap, ResponseCode.INPUT_CHECK_ERROR));
     }
 
-    private Long resolveUserId(LoginVO user) {
+    // 로그인 사번(2026-11-03, uniqId = 사번). 숫자로 바꾸지 않는다
+    private String resolveUserId(LoginVO user) {
         if (user == null || !StringUtils.hasText(user.getUniqId())) {
             return null;
         }
-        try {
-            return Long.valueOf(user.getUniqId().trim());
-        } catch (NumberFormatException ex) {
-            return null;
-        }
+        return user.getUniqId().trim();
     }
 }

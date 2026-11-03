@@ -19,9 +19,9 @@ public interface DraftingWorkService {
             Long regTermId,
             String useAt) throws Exception;
 
-    DraftingWorkVO createWork(Long tenantId, Long actorUserId, DraftingWorkSaveRequestVO payload) throws Exception;
+    DraftingWorkVO createWork(Long tenantId, String actorUserId, DraftingWorkSaveRequestVO payload) throws Exception;
 
-    DraftingWorkVO updateWork(Long tenantId, Long actorUserId, Long draftingWorkCategoryId,
+    DraftingWorkVO updateWork(Long tenantId, String actorUserId, Long draftingWorkCategoryId,
             DraftingWorkSaveRequestVO payload) throws Exception;
 
     DraftingWorkTemplateVO getTemplate(Long tenantId, Long draftingWorkCategoryId) throws Exception;

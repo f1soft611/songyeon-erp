@@ -14,5 +14,6 @@ public interface DocumentApprovalAccessService {
 
     Map<String, Object> actorParams(LoginVO user);
 
-    Long authenticatedUserId(LoginVO user);
+    /** 로그인 사원 사번(2026-11-03, 앞자리 0 그대로) */
+    String authenticatedUserId(LoginVO user);
 }

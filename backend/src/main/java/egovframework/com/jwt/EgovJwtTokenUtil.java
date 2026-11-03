@@ -151,6 +151,10 @@ public class EgovJwtTokenUtil implements Serializable{
 			loginVO.setUserSe(getUserSeFromToken(token));
 			loginVO.setOrgnztId(getInfoFromToken("orgnztId", token));
 			loginVO.setUniqId(getInfoFromToken("uniqId", token));
+			// 송연(2026-11-03): uniqId 는 사번(= id)이다. 배포 전에 받은 토큰은 uniqId 가 옛 사용자 번호라 id 로 맞춘다
+			if (loginVO.getId() != null && !loginVO.getId().trim().isEmpty()) {
+				loginVO.setUniqId(loginVO.getId().trim());
+			}
             loginVO.setGroupNm(getInfoFromToken("groupNm", token));
             loginVO.setRoleCode(getRoleCodeFromToken(token));
 			Object roleIdValue = getClaimFromToken(token).get("roleId");

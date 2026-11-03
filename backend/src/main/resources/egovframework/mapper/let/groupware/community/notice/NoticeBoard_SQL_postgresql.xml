@@ -200,7 +200,8 @@
         DO UPDATE SET dismissed_on = EXCLUDED.dismissed_on
     </insert>
 
-    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="long">
+    <!-- 2026-11-03: 계정 번호 login_id = 사번 -->
+    <select id="selectLoginIdByLoginCode" parameterType="map" resultType="string">
         SELECT login_id
         FROM tb_login_account
         WHERE tenant_id = #{tenantId}

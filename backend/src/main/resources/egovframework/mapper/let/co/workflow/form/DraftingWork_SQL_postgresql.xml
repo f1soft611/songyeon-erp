@@ -204,9 +204,9 @@
           created_by, created_at, updated_by, updated_at
         ) VALUES (
           #{tenantId}, #{categoryItemId}, #{divisionCode}, #{divisionName}, 0,
-          #{cycle}, #{regTermId}, #{reviewerId, jdbcType=BIGINT}, #{approverId, jdbcType=BIGINT},
-          #{useAt}, 'N', #{createdBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP,
-          #{updatedBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP
+          #{cycle}, #{regTermId}, #{reviewerId, jdbcType=VARCHAR}, #{approverId, jdbcType=VARCHAR},
+          #{useAt}, 'N', #{createdBy, jdbcType=VARCHAR}, CURRENT_TIMESTAMP,
+          #{updatedBy, jdbcType=VARCHAR}, CURRENT_TIMESTAMP
         )
         ON CONFLICT (tenant_id, cata_type_code)
           WHERE delete_status IS DISTINCT FROM 'Y'
@@ -220,8 +220,8 @@
           use_at, delete_status, created_by, created_at, updated_by, updated_at
         ) VALUES (
           #{tenantId}, #{workId}, #{cataTypeCode}, #{employeeNo},
-          'Y', 'N', #{createdBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP,
-          #{updatedBy, jdbcType=BIGINT}, CURRENT_TIMESTAMP
+          'Y', 'N', #{createdBy, jdbcType=VARCHAR}, CURRENT_TIMESTAMP,
+          #{updatedBy, jdbcType=VARCHAR}, CURRENT_TIMESTAMP
         )
         ON CONFLICT (tenant_id, drafting_work_category_id, employee_no)
         DO UPDATE SET
@@ -238,10 +238,10 @@
           code_name = #{codeName},
           reg_term_id = #{regTermId},
           reg_term = #{cycle},
-          reviewer_id = #{reviewerId, jdbcType=BIGINT},
-          approver_id = #{approverId, jdbcType=BIGINT},
+          reviewer_id = #{reviewerId, jdbcType=VARCHAR},
+          approver_id = #{approverId, jdbcType=VARCHAR},
           use_at = #{useAt},
-          updated_by = #{updatedBy, jdbcType=BIGINT},
+          updated_by = #{updatedBy, jdbcType=VARCHAR},
           updated_at = CURRENT_TIMESTAMP
         WHERE tenant_id = #{tenantId}
           AND drafting_work_category_id = #{workId}
@@ -261,7 +261,7 @@
       <update id="deactivateWorkAuthorityMappings" parameterType="map">
         UPDATE public.tb_drafting_work_category_authority
         SET use_at = 'N',
-          updated_by = #{updatedBy, jdbcType=BIGINT},
+          updated_by = #{updatedBy, jdbcType=VARCHAR},
           updated_at = CURRENT_TIMESTAMP
         WHERE tenant_id = #{tenantId}
           AND drafting_work_category_id = #{workId}

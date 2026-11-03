@@ -57,13 +57,13 @@ class SystemRoleUserMappingApiControllerTest {
     @Test
     void listRoleUsersReturnsAssignedAndUnassignedForAdmin() throws Exception {
         SystemRoleUserVO assigned = new SystemRoleUserVO();
-        assigned.setLoginId(101L);
+        assigned.setLoginId("00000101");
         assigned.setUserNm("관리자");
         assigned.setDepartmentNm("운영팀");
         assigned.setAssigned(true);
 
         SystemRoleUserVO unassigned = new SystemRoleUserVO();
-        unassigned.setLoginId(202L);
+        unassigned.setLoginId("00000202");
         unassigned.setUserNm("홍길동");
         unassigned.setDepartmentNm("영업팀");
         unassigned.setAssigned(false);
@@ -77,16 +77,16 @@ class SystemRoleUserMappingApiControllerTest {
         mockMvc.perform(get("/api/v1/system/roles/2/users")
                 .principal(adminAuthentication))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.assignedUsers[0].loginId").value(101))
+                .andExpect(jsonPath("$.result.assignedUsers[0].loginId").value("00000101"))
                 .andExpect(jsonPath("$.result.assignedUsers[0].assigned").value(true))
-                .andExpect(jsonPath("$.result.unassignedUsers[0].loginId").value(202))
+                .andExpect(jsonPath("$.result.unassignedUsers[0].loginId").value("00000202"))
                 .andExpect(jsonPath("$.result.unassignedUsers[0].assigned").value(false));
     }
 
     @Test
     void assignUserToRoleAcceptsLoginIdAndPersistsMapping() throws Exception {
         SystemRoleUserVO mappedUser = new SystemRoleUserVO();
-        mappedUser.setLoginId(101L);
+        mappedUser.setLoginId("00000101");
         mappedUser.setUserNm("관리자");
         mappedUser.setAssigned(true);
 
@@ -96,10 +96,15 @@ class SystemRoleUserMappingApiControllerTest {
         mockMvc.perform(post("/api/v1/system/roles/2/users")
                 .principal(adminAuthentication)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"loginId\":101}"))
+                .content("{\"loginId\":\"00000101\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.item.loginId").value(101))
+                .andExpect(jsonPath("$.result.item.loginId").value("00000101"))
                 .andExpect(jsonPath("$.result.item.assigned").value(true));
+
+        // 사번은 앞자리 0 그대로 서비스에 간다(2026-11-03)
+        org.mockito.ArgumentCaptor<SystemRoleUserAssignRequestVO> payload = org.mockito.ArgumentCaptor.forClass(SystemRoleUserAssignRequestVO.class);
+        org.mockito.Mockito.verify(systemRoleService).assignUserToRole(eq(1L), eq(2L), payload.capture());
+        org.junit.jupiter.api.Assertions.assertEquals("00000101", payload.getValue().getLoginId());
     }
 
     @Test
@@ -110,7 +115,7 @@ class SystemRoleUserMappingApiControllerTest {
         mockMvc.perform(post("/api/v1/system/roles/2/users")
                 .principal(adminAuthentication)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"loginId\":101}"))
+                .content("{\"loginId\":\"00000101\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resultCode").value(900))
                 .andExpect(jsonPath("$.result.message").value("권한 사용자 매핑 저장 중 오류가 발생했습니다."));
@@ -118,16 +123,16 @@ class SystemRoleUserMappingApiControllerTest {
 
     @Test
     void removeUserFromRoleRejectsNonAdmin() throws Exception {
-        mockMvc.perform(delete("/api/v1/system/roles/2/users/101")
+        mockMvc.perform(delete("/api/v1/system/roles/2/users/00000101")
                 .principal(userAuthentication))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     void removeUserFromRoleReturnsSuccessForAdmin() throws Exception {
-        when(systemRoleService.removeUserFromRole(1L, 2L, 101L)).thenReturn(true);
+        when(systemRoleService.removeUserFromRole(1L, 2L, "00000101")).thenReturn(true);
 
-        mockMvc.perform(delete("/api/v1/system/roles/2/users/101")
+        mockMvc.perform(delete("/api/v1/system/roles/2/users/00000101")
                 .principal(adminAuthentication))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.result.message").value("권한 사용자 매핑이 삭제되었습니다."));

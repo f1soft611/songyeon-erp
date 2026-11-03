@@ -55,7 +55,7 @@ public class NoticeLoginPopupService {
         Map<String, Object> params = new HashMap<>();
         params.put("tenantId", tenantId);
         params.put("loginCode", loginCode);
-        Long loginId = dao.selectLoginIdByLoginCode(params);
+        String loginId = dao.selectLoginIdByLoginCode(params);
         if (loginId == null) {
             throw new IllegalStateException("인증된 로그인 계정을 찾을 수 없습니다.");
         }

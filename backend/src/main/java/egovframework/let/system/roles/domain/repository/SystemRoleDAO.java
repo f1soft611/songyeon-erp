@@ -78,7 +78,7 @@ public class SystemRoleDAO extends EgovAbstractMapper {
     /**
      * 사용자 ID로 로그인 ID를 조회한다.
      */
-    public Long selectLoginIdByUserId(Map<String, Object> params) throws Exception {
+    public String selectLoginIdByUserId(Map<String, Object> params) throws Exception {
         return selectOne("SystemRoleDAO.selectLoginIdByUserId", params);
     }
 
