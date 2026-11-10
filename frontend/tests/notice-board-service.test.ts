@@ -12,9 +12,11 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock('../src/shared/services/apiClient', () => apiMocks);
 
 import {
+  buildNoticeShareLink,
   deleteNoticeEmbeddedImage,
   downloadNoticeAttachment,
   fetchNoticePosts,
+  getSharedNoticePreview,
   updateNoticePinned,
 } from '../src/pages/groupware/community/notice/services/noticeBoardService';
 
@@ -62,6 +64,44 @@ describe('notice board pagination', () => {
     expect(result).toEqual({
       resultList: [{ postId: 7, isPinned: 'Y' }],
       resultCnt: 21,
+    });
+  });
+
+  describe('notice share links', () => {
+    it('creates a canonical share URL from a valid server token', async () => {
+      const token = `v1.${'A'.repeat(59)}`;
+      apiMocks.apiPost.mockResolvedValue({ item: { token } });
+
+      await expect(buildNoticeShareLink(42)).resolves.toBe(
+        `${window.location.origin}/groupware/community/notice?share=${token}`,
+      );
+      expect(apiMocks.apiPost).toHaveBeenCalledWith(
+        '/api/v1/groupware/boards/notice/posts/42/share-link',
+        {},
+      );
+    });
+
+    it('rejects invalid IDs and malformed tokens without returning a fallback link', async () => {
+      apiMocks.apiPost.mockClear();
+      await expect(buildNoticeShareLink(0)).rejects.toThrow();
+      expect(apiMocks.apiPost).not.toHaveBeenCalled();
+
+      apiMocks.apiPost.mockResolvedValue({ item: { token: 'bad-token' } });
+      await expect(buildNoticeShareLink(42)).rejects.toThrow();
+    });
+
+    it('resolves a shared notice token and rejects malformed preview responses', async () => {
+      const token = `v1.${'B'.repeat(59)}`;
+      const post = { postId: 42, title: '공지 제목', noticeGubunCode: 'OPS' };
+      apiMocks.apiGet.mockResolvedValue({ item: post });
+
+      await expect(getSharedNoticePreview(token)).resolves.toEqual(post);
+      expect(apiMocks.apiGet).toHaveBeenCalledWith(
+        `/api/v1/groupware/boards/notice/shared-post?token=${token}`,
+      );
+
+      apiMocks.apiGet.mockResolvedValueOnce({ item: { title: '잘못된 응답' } });
+      await expect(getSharedNoticePreview(token)).rejects.toThrow();
     });
   });
 

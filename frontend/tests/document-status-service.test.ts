@@ -165,6 +165,22 @@ describe('document status service', () => {
       });
   });
 
+  it.each([
+    { myParticipantType: 'REFERENCE', myActionStatus: 'CONFIRMED' },
+    { myParticipantType: 'APPROVAL, REFERENCE', myActionStatus: 'APPROVED, CONFIRMED' },
+  ])('keeps the full list when a confirmed reference is present: %j', async (reference) => {
+    const confirmedRow = { ...row, electronicApprovalId: 42, ...reference };
+    const rows = [row, confirmedRow];
+    api.get.mockResolvedValue({ resultList: rows, totalRowCount: 2 });
+
+    await expect(searchDocumentStatus({})).resolves.toEqual({
+      rows, totalRowCount: 2,
+    });
+    await expect(
+      createDocumentStatusDataSource({}).load(query(new AbortController().signal)),
+    ).resolves.toEqual({ rows, totalRowCount: 2 });
+  });
+
   it('rejects malformed page responses instead of returning success-shaped empty rows', async () => {
     const dataSource = createDocumentStatusDataSource({});
     const request = query(new AbortController().signal);

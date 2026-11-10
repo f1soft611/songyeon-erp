@@ -1,12 +1,12 @@
 import {
   Box,
-  CircularProgress,
   IconButton,
   Paper,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import type { ReactNode } from 'react';
+import { AppLoadingSpinner } from '../AppLoadingSpinner';
 
 type PostDetailPanelProps = {
   title?: string;
@@ -91,7 +91,11 @@ export function PostDetailPanel({
           }),
         }}
       >
-        {isLoading ? <CircularProgress aria-label={loadingLabel} /> : children}
+        {isLoading ? (
+          <AppLoadingSpinner size={40} aria-label={loadingLabel} />
+        ) : (
+          children
+        )}
       </Box>
     </Paper>
   );

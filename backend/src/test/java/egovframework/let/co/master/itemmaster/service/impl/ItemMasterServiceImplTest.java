@@ -163,7 +163,7 @@ class ItemMasterServiceImplTest {
 		verify(dao).updateProductDiscontinued(any(ProductBomVO.class));
 	}
 
-	@DisplayName("기본정보: 제품명 필수, 거래처는 고른 거래처코드 그대로(사용 중만, 지금 코드는 통과), 보관방법은 공통코드 코드만, 단가표 제품명도 바꾼다")
+	@DisplayName("기본정보: 제품명 필수, 거래처는 고른 거래처코드 그대로(사용 중만, 지금 코드는 통과), 보관방법 · 식품유형은 공통코드 코드만, 단가표 제품명도 바꾼다")
 	@Test
 	void saveProductInfo_rules() throws Exception {
 		ItemMasterDAO dao = mock(ItemMasterDAO.class);
@@ -171,6 +171,7 @@ class ItemMasterServiceImplTest {
 		p1.setClientCode("000009"); // 지금 거래처(사용안함이 됐어도 그대로 둔다)
 		when(dao.selectProduct("P1")).thenReturn(p1);
 		when(dao.selectStorageCodes()).thenReturn(Arrays.asList("001", "002", "003"));
+		when(dao.selectFoodTypeCodes()).thenReturn(Arrays.asList("001", "002", "003"));
 		when(dao.selectActiveClientCode("000003")).thenReturn("000003");
 		when(dao.selectRegisteredClientCode("000009")).thenReturn("000009");
 		when(dao.selectRegisteredClientCode("000003")).thenReturn("000003");
@@ -190,15 +191,24 @@ class ItemMasterServiceImplTest {
 		ProductInfoSaveRequestVO keep = new ProductInfoSaveRequestVO();
 		keep.setName(" 고추장(신) ");
 		keep.setStorage(" 002 ");
+		keep.setFoodType(" 001 "); // 2026-11-05 공통코드 FOOD_TYPE 코드
 		keep.setClientCode("000009");
 		service.saveProductInfo("P1", keep);
-		verify(dao).updateProductInfo("P1", "고추장(신)", "002", "000009");
+		verify(dao).updateProductInfo("P1", "고추장(신)", "002", "001", "000009");
 
 		ProductInfoSaveRequestVO change = new ProductInfoSaveRequestVO();
 		change.setName("고추장");
 		change.setClientCode(" 000003 ");
 		service.saveProductInfo("P1", change);
-		verify(dao).updateProductInfo("P1", "고추장", null, "000003");
+		verify(dao).updateProductInfo("P1", "고추장", null, null, "000003");
+
+		// 2026-11-05 식품유형도 공통코드 FOOD_TYPE 코드만(이름 글자는 막는다)
+		ProductInfoSaveRequestVO foodName = new ProductInfoSaveRequestVO();
+		foodName.setName("고추장");
+		foodName.setFoodType("조미식품");
+		foodName.setClientCode("000009");
+		assertEquals(ItemMasterServiceImpl.FOOD_TYPE_MESSAGE,
+				assertThrows(IllegalArgumentException.class, () -> service.saveProductInfo("P1", foodName)).getMessage());
 
 		// 2026-10-23 보관방법은 공통코드 STORAGE_METHOD 코드만(예전 글자는 막는다)
 		ProductInfoSaveRequestVO oldText = new ProductInfoSaveRequestVO();
@@ -223,7 +233,7 @@ class ItemMasterServiceImplTest {
 		gone.setClientCode("000777");
 		assertEquals(ItemMasterServiceImpl.CLIENT_NOT_REGISTERED_MESSAGE,
 				assertThrows(IllegalArgumentException.class, () -> service.saveProductInfo("P2", gone)).getMessage());
-		verify(dao, never()).updateProductInfo(eq("P2"), any(), any(), any());
+		verify(dao, never()).updateProductInfo(eq("P2"), any(), any(), any(), any());
 	}
 
 	@DisplayName("부자재: 그 분류로 등록된 원재료만 받고, 송연 문구(조사 포함)로 막는다")
@@ -302,5 +312,19 @@ class ItemMasterServiceImplTest {
 		verify(dao).updateProductAudit("P1", "00000002");
 		service.markProductUpdated("  ", "00000002");
 		verify(dao, never()).updateProductAudit("", "00000002");
+	}
+
+	@DisplayName("식품유형(2026-11-05): 비우면 null, 공통코드 FOOD_TYPE 의 사용 중 코드만 받는다(이름 글자는 막는다)")
+	@Test
+	void resolveFoodTypeCode_rules() throws Exception {
+		ItemMasterDAO dao = mock(ItemMasterDAO.class);
+		when(dao.selectFoodTypeCodes()).thenReturn(Arrays.asList("001", "002", "003"));
+		ItemMasterServiceImpl service = new ItemMasterServiceImpl(dao, mapper);
+		assertNull(service.resolveFoodTypeCode(null));
+		assertNull(service.resolveFoodTypeCode("  "));
+		assertEquals("002", service.resolveFoodTypeCode(" 002 "));
+		assertEquals(ItemMasterServiceImpl.FOOD_TYPE_MESSAGE,
+				assertThrows(IllegalArgumentException.class, () -> service.resolveFoodTypeCode("소스(살균제품)")).getMessage());
+		assertEquals("식품유형을 다시 골라주세요(공통코드 식품유형에 없는 값입니다)", ItemMasterServiceImpl.FOOD_TYPE_MESSAGE);
 	}
 }

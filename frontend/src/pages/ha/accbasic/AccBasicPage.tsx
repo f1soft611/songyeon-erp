@@ -155,7 +155,7 @@ export function AccBasicPage({ selectedModule, currentMenuName, content, breadcr
           <Tab value="card" label="카드등록" />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           {tab === 'subject' && (
             <>

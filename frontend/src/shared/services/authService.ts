@@ -294,7 +294,7 @@ export const logout = (): void => {
   // 공지 로그인 팝업 진행 정보 정리(S_ERP 와 같음)
   try {
     for (const key of Object.keys(window.sessionStorage)) {
-      if (key.startsWith('s-erp-notice-popups:')) window.sessionStorage.removeItem(key);
+      if (key.startsWith('songyeon-erp-notice-popups:')) window.sessionStorage.removeItem(key);
     }
   } catch {
     console.warn('공지 팝업 진행 정보를 정리하지 못했습니다.');

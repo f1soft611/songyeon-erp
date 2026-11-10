@@ -1,4 +1,5 @@
 import { Box, Container, Stack, useTheme } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import type { ReactNode } from 'react';
 
 interface AuthLayoutProps {
@@ -11,19 +12,23 @@ function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <Box
+      component="main"
       sx={{
-        minHeight: '100vh',
+        flex: '1 1 0%',
+        minHeight: 0,
+        width: '100%',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'stretch',
         justifyContent: 'center',
-        background: isDark
-          ? 'radial-gradient(circle at top, rgba(59,130,246,0.18), rgba(15,23,42,0.96) 42%, rgba(2,6,23,1) 100%)'
-          : 'linear-gradient(135deg, rgba(14,116,144,0.08) 0%, rgba(37,99,235,0.06) 30%, rgba(15,23,42,0.03) 100%)',
-        px: 2,
-        py: 4,
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+        bgcolor: 'background.default',
+        backgroundImage: `radial-gradient(ellipse at 50% 0%, ${alpha(theme.palette.primary.main, isDark ? 0.14 : 0.07)}, transparent 62%)`,
+        px: { xs: 2, sm: 3 },
+        py: { xs: 2, sm: 3 },
       }}
     >
-      <Container maxWidth="sm" disableGutters>
+      <Container maxWidth="sm" disableGutters sx={{ my: 'auto' }}>
         <Stack spacing={0} sx={{ alignItems: 'center' }}>
           {children}
         </Stack>

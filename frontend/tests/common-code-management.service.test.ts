@@ -1,8 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as apiClient from '../src/shared/services/apiClient';
 import {
+  createCommonCodeItem,
   fetchCommonCodeGroups,
   fetchCommonCodeItems,
+  updateCommonCodeItem,
   type CommonCodeGroupSearchFilters,
 } from '../src/pages/co/master/common-code/services/commonCodeManagement.service';
 
@@ -82,6 +84,48 @@ describe('commonCodeManagement.service', () => {
     ]);
     expect(apiClient.apiGet).toHaveBeenCalledWith(
       '/api/v1/co/master/common-code/groups/2/items',
+    );
+  });
+
+  it('creates an item through the common-code item endpoint', async () => {
+    vi.mocked(apiClient.apiPost).mockResolvedValue({ item: { id: 1 } });
+    await createCommonCodeItem('11', {
+      itemCode: 'ARCHIVE',
+      itemNm: '자료실',
+      itemDc: '',
+      sortOrder: 1,
+      useAt: 'Y',
+    });
+    expect(apiClient.apiPost).toHaveBeenCalledWith(
+      '/api/v1/co/master/common-code/groups/11/items',
+      {
+        itemCode: 'ARCHIVE',
+        itemNm: '자료실',
+        itemDc: '',
+        sortOrder: 1,
+        useAt: 'Y',
+      },
+    );
+  });
+
+  it('updates an item through the common-code item endpoint', async () => {
+    vi.mocked(apiClient.apiPut).mockResolvedValue({ item: { id: 1 } });
+    await updateCommonCodeItem('11', '22', {
+      itemCode: 'ARCHIVE',
+      itemNm: '자료실 수정',
+      itemDc: 'desc',
+      sortOrder: 2,
+      useAt: 'N',
+    });
+    expect(apiClient.apiPut).toHaveBeenCalledWith(
+      '/api/v1/co/master/common-code/groups/11/items/22',
+      {
+        itemCode: 'ARCHIVE',
+        itemNm: '자료실 수정',
+        itemDc: 'desc',
+        sortOrder: 2,
+        useAt: 'N',
+      },
     );
   });
 });

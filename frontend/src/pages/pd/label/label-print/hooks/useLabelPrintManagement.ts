@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LabelPrintTarget } from '../../../../../shared/components/LabelPrintDialog';
 import { todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchLabelPrintRows } from '../services/labelPrint.service';
 import type { LabelPrintRow } from '../types/labelPrint.types';
 
@@ -11,17 +12,20 @@ const errorText = (error: unknown, fallback: string) =>
 // 마지막 요청의 응답만 쓴다
 export function useLabelPrintManagement() {
   const requestIdRef = useRef(0);
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 생산확정일은 탭 세션에 둔다. 조회한 적이 있으면 다른 화면에 갔다 돌아왔을 때 그 날로 바로 다시 부른다
+  const [saved] = useState(() => readSearchSession<{ date: string } | null>('pd-label-print', null, { date: '' }));
+  const [date, setDate] = useState(() => saved?.date || todayDash());
   const [rows, setRows] = useState<LabelPrintRow[]>([]);
   const [searchedDate, setSearchedDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [printing, setPrinting] = useState<LabelPrintTarget | null>(null);
   const [error, setError] = useState('');
 
-  const loadRows = async () => {
+  const loadRows = async (target: string = date) => {
     // 날짜를 비우고 조회하면 오늘로 채운다(송연과 같음)
-    const day = date || todayDash();
-    if (!date) setDate(day);
+    const day = target || todayDash();
+    if (!target) setDate(day);
+    saveSearchSession('pd-label-print', { date: day });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -35,6 +39,11 @@ export function useLabelPrintManagement() {
       if (requestId === requestIdRef.current) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (saved) void loadRows(saved.date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 🏷️ 인쇄: 라벨등록과 같은 라벨 창을 인쇄 전용으로 연다(제조년월일 = 조회한 날짜)
   const openPrint = useCallback((row: LabelPrintRow) => {

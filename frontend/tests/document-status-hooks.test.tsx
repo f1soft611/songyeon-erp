@@ -4,7 +4,7 @@ import { useDocumentStatusList } from '../src/pages/groupware/documents/status/h
 import { useDocumentStatusDetail } from '../src/pages/groupware/documents/status/hooks/useDocumentStatusDetail';
 import type { DocumentStatusResult } from '../src/pages/groupware/documents/status/types/documentStatusApi.types';
 import type { DocumentApprovalDetail } from '../src/pages/groupware/documents/write/types/documentWrite.types';
-import type { DocumentStatusFilters } from '../src/pages/groupware/documents/status/types/documentStatus.types';
+import type { DocumentStatusFilters, DocumentStatusRow } from '../src/pages/groupware/documents/status/types/documentStatus.types';
 
 const service = vi.hoisted(() => ({ search: vi.fn() }));
 vi.mock('../src/pages/groupware/documents/status/services/documentStatus.service', () => ({
@@ -80,14 +80,13 @@ describe('document status hooks', () => {
     expect(result.current.hasLoaded).toBe(true);
   });
 
-  it('validates selection, clears editing state and refreshes detail', () => {
+  it('validates the opened document, clears editing state and refreshes detail', () => {
     const { result } = renderHook(() => useDocumentStatusDetail());
-    act(() => result.current.handleSelectionChange([1, '41']));
+    const documentRow = { electronicApprovalId: 41 } as DocumentStatusRow;
+    act(() => result.current.handleOpenDocument(documentRow));
     expect(result.current.selectedDocumentId).toBe(41);
-    act(() => result.current.handleSelectionChange(['not-an-id']));
-    expect(result.current.selectedDocumentId).toBeNull();
-    for (const id of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-      act(() => result.current.handleSelectionChange([id]));
+    for (const id of [NaN, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      act(() => result.current.handleOpenDocument({ ...documentRow, electronicApprovalId: id }));
       expect(result.current.selectedDocumentId).toBeNull();
     }
     const document = { electronicApprovalId: 41 } as DocumentApprovalDetail;
@@ -101,7 +100,7 @@ describe('document status hooks', () => {
     expect(result.current.detailRefreshToken).toBe(1);
     act(() => result.current.refreshDetail());
     expect(result.current.detailRefreshToken).toBe(2);
-    act(() => result.current.handleSelectionChange([41]));
+    act(() => result.current.handleOpenDocument(documentRow));
     act(() => result.current.closeDetail());
     expect(result.current.selectedDocumentId).toBeNull();
   });

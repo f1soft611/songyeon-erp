@@ -2,7 +2,6 @@ import { ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { DocumentStatusSearchArea } from '../src/pages/groupware/documents/status/components/DocumentStatusSearchArea';
-import { SalesOrderStatusSearchArea } from '../src/pages/sales/order/status/components/SalesOrderStatusSearchArea';
 import { createAppTheme, type AppThemeMode } from '../src/theme/theme';
 
 function renderSearchAreas(mode: AppThemeMode) {
@@ -25,22 +24,22 @@ function renderSearchAreas(mode: AppThemeMode) {
     <ThemeProvider theme={createAppTheme(mode)}>
       <>
         <DocumentStatusSearchArea {...commonProps} />
-        <SalesOrderStatusSearchArea {...commonProps} />
       </>
     </ThemeProvider>,
   );
 }
 
+// S_ERP 테스트는 문서현황 · 수주현황(sales/order/status) 둘을 본다. 송연에는 S_ERP 수주현황 화면이 없어 문서현황만 본다(2026-11-04)
 describe('status integrated search backgrounds', () => {
   it.each([
     ['light', 'rgb(255, 255, 255)'],
     ['dark', 'rgb(17, 24, 39)'],
   ] as const)(
-    'matches the %s theme surface color on both status pages',
+    'matches the %s theme surface color on the document status page',
     (mode, expectedBackground) => {
       renderSearchAreas(mode);
 
-      for (const label of ['문서현황 빠른 검색', '수주현황 빠른 검색']) {
+      for (const label of ['문서현황 빠른 검색']) {
         const input = screen.getByRole('textbox', { name: label });
         const outlinedInput = input.closest('.MuiOutlinedInput-root');
 

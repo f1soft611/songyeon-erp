@@ -192,7 +192,7 @@ export function RecipeSharePage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1.5, overflow: 'auto' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1.5, overflow: 'auto' }}>
         <Card sx={{ ...cardSx, flex: '0 0 auto' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontSize: 12.5, lineHeight: 1.7 }}>
             레시피 작성에서 만든 레시피가 전부 여기서 찾아집니다. 여기서는 <b>보기·공유와 넘기기만</b> 합니다. 고치는 것은 레시피 작성에서 하세요.<br />

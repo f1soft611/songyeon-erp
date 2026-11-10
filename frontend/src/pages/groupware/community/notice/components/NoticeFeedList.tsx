@@ -17,6 +17,7 @@ import type { FeedCommentItem } from '../../../../../shared/components/feed/Comm
 import { FeedCard } from '../../../../../shared/components/feed/FeedCard';
 import { FeedBodyContent } from '../../../../../shared/components/feed/FeedBodyContent';
 import { FeedCommentsSection } from '../../../../../shared/components/feed/FeedCommentsSection';
+import { FeedLinkPreviews, type InternalContentPreview } from '../../../../../shared/components/feed/FeedLinkPreviews';
 import { FeedReactionBar } from '../../../../../shared/components/feed/FeedReactionBar';
 import { FeedView } from '../../../../../shared/components/view-mode/FeedView';
 import { ImageViewerDialog } from '../../../../../shared/components/ImageViewerDialog';
@@ -28,12 +29,20 @@ import { prepareNoticeFeedHtml } from '../utils/noticeHtml';
 import { resolveApiBaseUrl } from '../../../../../shared/services/authService';
 import { apiGetBlob } from '../../../../../shared/services/apiClient';
 import { fetchCommonFileBlob } from '../../../../../shared/services/commonContentApi';
+import type { DocumentShareReference } from '../../../documents/write/data/documentShareLink';
+import { getDocumentKindPresentation } from '../../../documents/write/data/documentPresentation';
+import {
+  getSharedDocumentPreview,
+  listDocumentApprovals,
+} from '../../../documents/write/services/documentApproval.service';
+import { resolveNoticeLinkPreview } from '../services/noticeLinkPreview.service';
 import { NoticeLoginPopupBadge } from './NoticeLoginPopupBadge';
 import { NoticeCategoryBadge } from './NoticeCategoryBadge';
 
 type NoticeFeedListProps = {
   items: NoticeFeedItem[];
   isDark: boolean;
+  showManagementActions?: boolean;
   expandedNoticeId?: number | null;
   isRefreshing?: boolean;
   onToggleExpand?: (id: number) => Promise<void> | void;
@@ -58,6 +67,8 @@ type NoticeFeedListProps = {
     commentId: number | string,
   ) => Promise<void> | void;
   onDelete?: (noticeId: number) => void;
+  onShare?: (noticeId: number) => void;
+  onOpenNotice?: (noticeId: number) => void;
   onTogglePinned?: (item: NoticeFeedItem) => void;
   onEdit?: (item: NoticeFeedItem) => void;
   onDownload?: (
@@ -545,9 +556,25 @@ type HydratedNoticeBody = {
   hasImageLoadError: boolean;
 };
 
+async function resolveDocumentLinkPreview(
+  reference: DocumentShareReference,
+): Promise<InternalContentPreview | null> {
+  const record = typeof reference === 'number'
+    ? (await listDocumentApprovals('ALL', undefined, reference))
+      .find((item) => item.electronicApprovalId === reference) ?? null
+    : await getSharedDocumentPreview(reference);
+  return record ? {
+    id: record.electronicApprovalId,
+    title: record.title,
+    subtitle: `${getDocumentKindPresentation(record.documentType).label ?? record.documentType} · ${record.drafterName}`,
+    description: record.summary,
+  } : null;
+}
+
 export function NoticeFeedList({
   items,
   isDark,
+  showManagementActions = true,
   expandedNoticeId,
   onToggleExpand,
   onNoticeInteract,
@@ -557,6 +584,8 @@ export function NoticeFeedList({
   onEditComment,
   onDeleteComment,
   onDelete,
+  onShare,
+  onOpenNotice,
   onTogglePinned,
   onEdit,
   onDownload,
@@ -1063,20 +1092,22 @@ export function NoticeFeedList({
               actions={
                 <>
                   <NoticeLoginPopupBadge loginPopupYn={item.loginPopupYn} popupEndDate={item.popupEndDate} />
-                  <IconButton
-                    size="small"
-                    aria-label={`${item.isPinned === 'Y' ? '상단 고정 해제' : '상단 고정'} ${item.title}`}
-                    title={
-                      item.isPinned === 'Y' ? '상단 고정 해제' : '상단 고정'
-                    }
-                    onClick={() => onTogglePinned?.(item)}
-                  >
-                    <PushPinOutlinedIcon
-                      fontSize="small"
-                      color={item.isPinned === 'Y' ? 'primary' : 'inherit'}
-                    />
-                  </IconButton>
-                  {item.isPostOwner !== false && (
+                  {showManagementActions && (
+                    <IconButton
+                      size="small"
+                      aria-label={`${item.isPinned === 'Y' ? '상단 고정 해제' : '상단 고정'} ${item.title}`}
+                      title={
+                        item.isPinned === 'Y' ? '상단 고정 해제' : '상단 고정'
+                      }
+                      onClick={() => onTogglePinned?.(item)}
+                    >
+                      <PushPinOutlinedIcon
+                        fontSize="small"
+                        color={item.isPinned === 'Y' ? 'primary' : 'inherit'}
+                      />
+                    </IconButton>
+                  )}
+                  {showManagementActions && item.isPostOwner !== false && (
                     <>
                       <IconButton
                         size="small"
@@ -1096,6 +1127,17 @@ export function NoticeFeedList({
                           setNoticeMenuId(null);
                         }}
                       >
+                        {onShare && (
+                          <MenuItem
+                            onClick={() => {
+                              setNoticeMenuAnchor(null);
+                              setNoticeMenuId(null);
+                              onShare(item.id);
+                            }}
+                          >
+                            공지 공유하기
+                          </MenuItem>
+                        )}
                         <MenuItem
                           onClick={() => {
                             setNoticeMenuAnchor(null);
@@ -1318,6 +1360,12 @@ export function NoticeFeedList({
                   expanded: item.body,
                 }}
               />
+              <FeedLinkPreviews
+                html={hydratedBody?.html ?? previewHtml}
+                resolveDocument={resolveDocumentLinkPreview}
+                resolveNotice={resolveNoticeLinkPreview}
+                onOpenNotice={onOpenNotice}
+              />
 
               {attachmentFiles.length > 0 && (
                 <Box
@@ -1498,6 +1546,14 @@ export function NoticeFeedList({
                       )
                     }
                     onOpenAttachmentImage={setViewerImage}
+                    renderContentPreview={(html) => (
+                      <FeedLinkPreviews
+                        html={html}
+                        resolveDocument={resolveDocumentLinkPreview}
+                        resolveNotice={resolveNoticeLinkPreview}
+                        onOpenNotice={onOpenNotice}
+                      />
+                    )}
                     isDark={isDark}
                     showComposer
                     placeholder="줄바꿈 Shift+Enter, 입력 Enter"

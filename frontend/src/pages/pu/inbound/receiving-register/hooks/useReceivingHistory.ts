@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchReceivings } from '../services/receiving.service';
 import type { Receiving } from '../types/receiving.types';
 import { type DayPeriod, errorText, periodQuery, sumOf, todayPeriod } from '../utils/receiving';
@@ -10,14 +11,17 @@ export function useReceivingHistory(onError: (text: string) => void) {
   const requestRef = useRef(0);
   const [version, setVersion] = useState(0); // 다시 조회하면 표를 새로 그려 '지운 줄' 기록도 비운다
   const [dirty, setDirty] = useState(false);
-  const [period, setPeriod] = useState<DayPeriod>(todayPeriod); // [조회]로 적용한 기간
-  const [client, setClient] = useState('');
+  // 2026-11-04 마지막으로 조회한 기간 · 거래처는 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [initial] = useState(() => readSearchSession('pu-receiving-register', { period: todayPeriod(), client: '' }));
+  const [period, setPeriod] = useState<DayPeriod>(initial.period); // [조회]로 적용한 기간
+  const [client, setClient] = useState(initial.client);
   const [rows, setRows] = useState<Receiving[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
 
   // 반품은 반품등록 화면에서 따로 본다
   const load = useCallback(async (range: DayPeriod, clientQ: string) => {
+    saveSearchSession('pu-receiving-register', { period: range, client: clientQ });
     const requestId = ++requestRef.current;
     setLoading(true);
     try {
@@ -35,8 +39,8 @@ export function useReceivingHistory(onError: (text: string) => void) {
   }, [onError]);
 
   useEffect(() => {
-    void load(todayPeriod(), '');
-  }, [load]);
+    void load(initial.period, initial.client);
+  }, [load, initial]);
 
   // 등록한 입고일의 내역을 바로 보여준다
   const afterRegistered = (receiveDate: string) => {

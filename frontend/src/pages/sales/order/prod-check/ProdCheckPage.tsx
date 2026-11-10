@@ -104,7 +104,7 @@ export function ProdCheckPage({
         onDefaultSearch={() => void check.run()}
       />
       <PageMessageArea message={check.error} onClose={() => check.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Typography variant="body2" aria-live="polite" sx={{ px: 0.5, color: 'text.secondary' }}>{conditionText(data, check.lines.length)}</Typography>
 
         <Card sx={cardSx}>

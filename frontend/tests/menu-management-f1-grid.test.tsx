@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ThemeProvider } from '@mui/material/styles';
 import { useRef, type ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -167,6 +167,7 @@ function mockMenuPageRequests({
 
 beforeEach(() => {
   vi.resetAllMocks();
+  window.sessionStorage.clear();
 });
 
 const modules: MenuModuleOption[] = [
@@ -1161,7 +1162,14 @@ describe('MenuManagementPanel F1Tree workflow', () => {
     );
 
     addRootMenuViaContextMenu();
-    fireEvent.click(screen.getByLabelText('읽기 new-menu-1'));
+    const createDialog = screen.getByRole('dialog', { name: '신규 등록' });
+    fireEvent.change(within(createDialog).getByRole('textbox', { name: /경로/ }), {
+      target: { value: '/new-menu' },
+    });
+    fireEvent.click(within(createDialog).getByRole('button', { name: '적용' }));
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '읽기 new-menu-1' }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect(await screen.findByText('권한 저장 실패')).toBeVisible();
 
@@ -1177,6 +1185,7 @@ describe('MenuManagementPanel F1Tree workflow', () => {
   });
 
   it('does not repeat completed menu or permission requests when automatic refresh is retried', async () => {
+    const onDirtyChange = vi.fn();
     const onRefresh = vi
       .fn()
       .mockRejectedValueOnce(new Error('메뉴 목록 요청 실패'))
@@ -1189,17 +1198,45 @@ describe('MenuManagementPanel F1Tree workflow', () => {
         selectedModule={modules[1]}
         permissions={permissions}
         onRefresh={onRefresh}
+        onDirtyChange={onDirtyChange}
       />,
     );
 
     addRootMenuViaContextMenu();
-    fireEvent.click(screen.getByLabelText('읽기 new-menu-1'));
+    const createDialog = screen.getByRole('dialog', { name: '신규 등록' });
+    fireEvent.change(within(createDialog).getByRole('textbox', { name: /경로/ }), {
+      target: { value: '/new-menu' },
+    });
+    fireEvent.click(within(createDialog).getByRole('button', { name: '적용' }));
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '읽기 new-menu-1' }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect(await screen.findByText('메뉴 목록 요청 실패')).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: '읽기 new-menu-1' })).toBeChecked();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    expect(apiMocks.apiPost).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/system/menus',
+      expect.objectContaining({ menuCode: 'NEW1', menuUrl: '/new-menu' }),
+    );
+    expect(apiMocks.apiPut).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/system/menus/77/permissions',
+      { permissionCodes: ['READ'] },
+    );
+    expect(onRefresh).toHaveBeenCalledExactlyOnceWith(2, true);
+    expect(apiMocks.apiPost.mock.invocationCallOrder[0]).toBeLessThan(
+      apiMocks.apiPut.mock.invocationCallOrder[0],
+    );
+    expect(apiMocks.apiPut.mock.invocationCallOrder[0]).toBeLessThan(
+      onRefresh.mock.invocationCallOrder[0],
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
+    expect(onRefresh).toHaveBeenNthCalledWith(2, 2, true);
+    expect(await screen.findByText('메뉴 변경사항을 저장했습니다.')).toBeVisible();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
     expect(apiMocks.apiPost).toHaveBeenCalledOnce();
     expect(apiMocks.apiPut).toHaveBeenCalledOnce();
   });
@@ -1430,6 +1467,9 @@ describe('MenuManagementPage module selection', () => {
 
   it('aligns the module selector and search field on the same baseline', async () => {
     apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/system/roles') {
+        return Promise.resolve({ resultList: [] });
+      }
       if (path === '/api/v1/system/modules') {
         return Promise.resolve({
           resultList: modules.map((module) => ({
@@ -1625,6 +1665,23 @@ describe('MenuManagementPage module selection', () => {
     });
   }
 
+  async function selectAdministratorRole() {
+    const moduleSelector = await screen.findByRole('combobox', {
+      name: '모듈 선택',
+    });
+    fireEvent.mouseDown(moduleSelector);
+    fireEvent.click(await screen.findByRole('option', { name: '기본' }));
+    await waitFor(() =>
+      expect(moduleSelector).not.toHaveAttribute('aria-disabled', 'true'),
+    );
+
+    const roleSelector = await screen.findByRole('combobox', {
+      name: '권한 선택',
+    });
+    fireEvent.mouseDown(roleSelector);
+    fireEvent.click(await screen.findByRole('option', { name: '관리자' }));
+  }
+
   it('shows only permission-gated page actions at the top-right and keeps the grid toolbar to tree controls', async () => {
     mockMenuPageRequests();
     render(<MenuManagementPage {...pageProps} />);
@@ -1652,7 +1709,7 @@ describe('MenuManagementPage module selection', () => {
     expect(screen.getByRole('button', { name: '전체 접기' })).toBeVisible();
   });
 
-  it('keeps the completed creation checkpoint after a confirmed same-module refresh', async () => {
+  it('keeps the completed creation checkpoint after a failed confirmed same-module refresh', async () => {
     mockMenuPageRequests();
     apiMocks.apiPost.mockResolvedValue({ item: { menuId: 77 } });
     apiMocks.apiPut
@@ -1660,31 +1717,71 @@ describe('MenuManagementPage module selection', () => {
       .mockResolvedValueOnce({});
     render(<MenuManagementPage {...pageProps} />);
 
+    await selectAdministratorRole();
     expect(
       await screen.findByRole('gridcell', { name: '대시보드' }),
     ).toBeVisible();
     addRootMenuViaContextMenu();
-    fireEvent.click(screen.getByLabelText('읽기 new-menu-1'));
+    const createDialog = screen.getByRole('dialog', { name: '신규 등록' });
+    fireEvent.change(within(createDialog).getByRole('textbox', { name: /경로/ }), {
+      target: { value: '/new-menu' },
+    });
+    fireEvent.click(within(createDialog).getByRole('button', { name: '적용' }));
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: '읽기 new-menu-1' }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
     expect(await screen.findByText('권한 저장 실패')).toBeVisible();
+    expect(apiMocks.apiPost).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/system/menus',
+      expect.objectContaining({ menuCode: 'NEW1', menuUrl: '/new-menu' }),
+    );
+    const permissionPayload = {
+      menuPermissions: [{ menuId: 77, permissionCodes: ['READ'] }],
+    };
+    expect(apiMocks.apiPut).toHaveBeenCalledExactlyOnceWith(
+      '/api/v1/system/roles/1/menu-permissions',
+      permissionPayload,
+    );
 
+    apiMocks.apiGet.mockRejectedValueOnce(new Error('메뉴 목록 요청 실패'));
     fireEvent.click(screen.getByRole('button', { name: '조회' }));
     fireEvent.click(screen.getByRole('button', { name: '계속' }));
-    await waitFor(() =>
-      expect(apiMocks.apiGet).toHaveBeenCalledWith(
-        '/api/v1/system/menus?moduleId=1',
-      ),
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '메뉴 목록 요청 실패',
     );
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
+    expect(apiMocks.apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/system/menus?moduleId=1&roleId=1',
+    );
+    expect(screen.getByRole('gridcell', { name: 'NEW1' })).toBeVisible();
+    expect(screen.getByRole('checkbox', { name: '읽기 new-menu-1' })).toBeChecked();
+    expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+    expect(apiMocks.apiPost).toHaveBeenCalledOnce();
+    expect(apiMocks.apiPut).toHaveBeenCalledOnce();
+    const requestCountBeforeRetry = apiMocks.apiGet.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledOnce());
-    expect(apiMocks.apiPut).toHaveBeenLastCalledWith(
-      '/api/v1/system/menus/77/permissions',
-      { permissionCodes: ['READ'] },
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '저장' })).toBeDisabled(),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('gridcell', { name: 'NEW1' })).not.toBeInTheDocument(),
+    );
+    expect(apiMocks.apiGet).toHaveBeenCalledTimes(requestCountBeforeRetry + 1);
+    expect(apiMocks.apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/system/menus?moduleId=1&roleId=1',
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(apiMocks.apiPost).toHaveBeenCalledOnce();
+    expect(apiMocks.apiPut).toHaveBeenCalledTimes(2);
+    expect(apiMocks.apiPut).toHaveBeenNthCalledWith(
+      2,
+      '/api/v1/system/roles/1/menu-permissions',
+      permissionPayload,
     );
   });
 
@@ -1790,28 +1887,191 @@ describe('MenuManagementPage module selection', () => {
     ).toBeVisible();
   });
 
-  it('disables module selection during a deferred save and prevents stale module requests', async () => {
+  it('locks live search and clear while saving and refreshing without changing visible rows', async () => {
     mockMenuPageRequests();
-    let resolveSave:
-      | ((value: { item: { menuId: number } }) => void)
-      | undefined;
-    apiMocks.apiPost.mockImplementation(
-      () =>
-        new Promise((resolve) => {
+    let resolveSave: ((value: unknown) => void) | undefined;
+    let resolveReload: ((value: unknown) => void) | undefined;
+    let deferRefresh = false;
+    const existingGet = apiMocks.apiGet.getMockImplementation();
+    if (!existingGet) throw new Error('Expected menu page GET mock');
+    const menuResponse = {
+      resultList: [
+        {
+          menuId: 1,
+          moduleId: 1,
+          moduleNm: '기본',
+          menuCode: 'DASHBOARD',
+          menuNm: '대시보드',
+          menuUrl: '/dashboard',
+          sortOrder: 1,
+          useAt: 'Y',
+          permissionCodes: ['READ'],
+        },
+        {
+          menuId: 2,
+          moduleId: 1,
+          moduleNm: '기본',
+          menuCode: 'REPORT',
+          menuNm: '보고서',
+          menuUrl: '/reports',
+          sortOrder: 2,
+          useAt: 'Y',
+          permissionCodes: ['READ'],
+        },
+      ],
+    };
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path.startsWith('/api/v1/system/menus?moduleId=1')) {
+        if (deferRefresh) {
+          return new Promise((resolve) => {
+            resolveReload = resolve;
+          });
+        }
+        return Promise.resolve(menuResponse);
+      }
+      return existingGet(path);
+    });
+    apiMocks.apiPut.mockImplementation((path: string) => {
+      if (path === '/api/v1/system/roles/1/menu-permissions') {
+        return new Promise((resolve) => {
           resolveSave = resolve;
-        }),
-    );
+        });
+      }
+      return Promise.resolve({});
+    });
     render(<MenuManagementPage {...pageProps} />);
 
+    await selectAdministratorRole();
+    expect(await screen.findByRole('gridcell', { name: '보고서' })).toBeVisible();
+    const searchInput = screen.getByRole('textbox', { name: '메뉴 검색' });
+    fireEvent.change(searchInput, { target: { value: '대시보드' } });
+    expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
+    expect(screen.queryByRole('gridcell', { name: '보고서' })).not.toBeInTheDocument();
+    const clearButton = screen.getByRole('button', { name: '검색어 초기화' });
+    fireEvent.click(screen.getByLabelText('엑셀 1'));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(resolveSave).toBeDefined());
+
+    const expectFilterLocked = () => {
+      expect.soft(searchInput).toBeDisabled();
+      expect.soft(clearButton).toBeDisabled();
+      fireEvent.change(searchInput, { target: { value: '보고서' } });
+      expect.soft(searchInput).toHaveValue('대시보드');
+      expect.soft(screen.queryByRole('gridcell', { name: '대시보드' })).toBeVisible();
+      expect.soft(screen.queryByRole('gridcell', { name: '보고서' })).not.toBeInTheDocument();
+      fireEvent.click(clearButton);
+      expect.soft(searchInput).toHaveValue('대시보드');
+      expect.soft(screen.queryByRole('gridcell', { name: '대시보드' })).toBeVisible();
+      expect.soft(screen.queryByRole('gridcell', { name: '보고서' })).not.toBeInTheDocument();
+    };
+    expectFilterLocked();
+
+    deferRefresh = true;
+    resolveSave?.({});
+    await waitFor(() => expect(resolveReload).toBeDefined());
+    expectFilterLocked();
+    resolveReload?.(menuResponse);
+    await waitFor(() => expect(searchInput).not.toBeDisabled());
+
+    expect(clearButton).not.toBeDisabled();
+    fireEvent.click(clearButton);
+    expect(searchInput).toHaveValue('');
+    expect(screen.getByRole('gridcell', { name: '보고서' })).toBeVisible();
+    fireEvent.change(searchInput, { target: { value: '보고서' } });
+    expect(screen.getByRole('gridcell', { name: '보고서' })).toBeVisible();
+    expect(screen.queryByRole('gridcell', { name: '대시보드' })).not.toBeInTheDocument();
+  });
+
+  it('disables module selection during a deferred save and prevents stale module requests', async () => {
+    mockMenuPageRequests();
+    let resolveSave: ((value: unknown) => void) | undefined;
+    let resolveReload:
+      | ((value: { resultList: unknown[] }) => void)
+      | undefined;
+    let deferRefresh = false;
+    const existingGet = apiMocks.apiGet.getMockImplementation();
+    if (!existingGet) throw new Error('Expected menu page GET mock');
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (deferRefresh && path.startsWith('/api/v1/system/menus?moduleId=1')) {
+        return new Promise((resolve) => {
+          resolveReload = resolve;
+        });
+      }
+      return existingGet(path);
+    });
+    apiMocks.apiPut.mockImplementation((path: string) => {
+      if (path === '/api/v1/system/menus/1') {
+        return new Promise((resolve) => {
+          resolveSave = resolve;
+        });
+      }
+      return Promise.resolve({});
+    });
+    render(<MenuManagementPage {...pageProps} />);
+
+    await selectAdministratorRole();
+    await waitFor(() =>
+      expect(apiMocks.apiGet).toHaveBeenCalledWith(
+        '/api/v1/system/menus?moduleId=1&roleId=1',
+      ),
+    );
     expect(
       await screen.findByRole('gridcell', { name: '대시보드' }),
     ).toBeVisible();
-    addRootMenuViaContextMenu();
-    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    const permissionCheckbox = screen.getByLabelText('엑셀 1');
+    fireEvent.click(permissionCheckbox);
+    expect(permissionCheckbox).toBeChecked();
+    const saveButton = await screen.findByRole('button', { name: '저장' });
+    const queryButton = screen.getByRole('button', { name: '조회' });
+    const deleteButton = screen.getByRole('button', { name: '삭제' });
+    fireEvent.click(saveButton);
 
-    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiMocks.apiPut).toHaveBeenCalledWith(
+        '/api/v1/system/menus/1',
+        expect.any(Object),
+      ),
+    );
     const moduleSelector = screen.getByRole('combobox', { name: '모듈 선택' });
+    const roleSelector = screen.getByRole('combobox', { name: '권한 선택' });
     expect(moduleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(roleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(saveButton).toBeDisabled();
+    expect(queryButton).toBeDisabled();
+    expect(deleteButton).toBeDisabled();
+    expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
+
+    fireEvent.doubleClick(screen.getByRole('gridcell', { name: '대시보드' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(getTreeGridBody());
+    expect(
+      screen.queryByRole('menuitem', { name: '루트 추가' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /삭제/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('gridcell', { name: 'NEW1' })).not.toBeInTheDocument();
+    fireEvent.keyDown(getTreeGridBody(), { key: 'Delete', code: 'Delete' });
+    expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
+
+    fireEvent.click(permissionCheckbox);
+    expect(permissionCheckbox).toBeChecked();
+    const menuRequestsBeforeDuplicateQuery = apiMocks.apiGet.mock.calls.filter(
+      ([path]) =>
+        typeof path === 'string' &&
+        path.startsWith('/api/v1/system/menus?moduleId='),
+    ).length;
+    fireEvent.click(queryButton);
+    expect(
+      apiMocks.apiGet.mock.calls.filter(
+        ([path]) =>
+          typeof path === 'string' &&
+          path.startsWith('/api/v1/system/menus?moduleId='),
+      ),
+    ).toHaveLength(menuRequestsBeforeDuplicateQuery);
+    fireEvent.click(saveButton);
+    expect(apiMocks.apiPut).toHaveBeenCalledTimes(1);
+
     fireEvent.mouseDown(moduleSelector);
     expect(
       screen.queryByRole('option', { name: '환경설정' }),
@@ -1820,21 +2080,188 @@ describe('MenuManagementPage module selection', () => {
       '/api/v1/system/menus?moduleId=2',
     );
 
-    resolveSave?.({ item: { menuId: 12 } });
+    deferRefresh = true;
+    resolveSave?.({});
 
-    await waitFor(() =>
-      expect(moduleSelector).not.toHaveAttribute('aria-disabled', 'true'),
-    );
+    await waitFor(() => expect(resolveReload).toBeDefined());
+    expect(moduleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(roleSelector).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
     expect(
       screen.queryByRole('gridcell', { name: '시스템 관리' }),
     ).not.toBeInTheDocument();
+
+    resolveReload?.({
+      resultList: moduleOneRows.map((row) => ({
+        menuId: Number(row.id),
+        moduleId: row.moduleId,
+        moduleNm: row.moduleName,
+        parentMenuId: row.parentMenuId,
+        parentMenuNm: row.parent,
+        menuCode: row.code,
+        menuNm: '대시보드',
+        menuUrl: row.path,
+        iconNm: row.iconName,
+        sortOrder: row.order,
+        useAt: 'Y',
+        hasChildren: row.hasChildren,
+        permissionCodes: row.permissionCodes,
+      })),
+    });
+    await waitFor(() => {
+      expect(moduleSelector).not.toHaveAttribute('aria-disabled', 'true');
+      expect(roleSelector).not.toHaveAttribute('aria-disabled', 'true');
+    });
   });
+
+  it('locks role-menu mapping controls while role permission saving and refresh are pending', async () => {
+    mockMenuPageRequests();
+    let resolvePermissionSave: ((value: unknown) => void) | undefined;
+    let resolveReload:
+      | ((value: { resultList: unknown[] }) => void)
+      | undefined;
+    const existingGet = apiMocks.apiGet.getMockImplementation();
+    if (!existingGet) throw new Error('Expected menu page GET mock');
+    let deferRefresh = false;
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (deferRefresh && path.startsWith('/api/v1/system/menus?moduleId=1')) {
+        return new Promise((resolve) => {
+          resolveReload = resolve;
+        });
+      }
+      return existingGet(path);
+    });
+    apiMocks.apiPut.mockImplementation((path: string) => {
+      if (path === '/api/v1/system/roles/1/menu-permissions') {
+        return new Promise((resolve) => {
+          resolvePermissionSave = resolve;
+        });
+      }
+      return Promise.resolve({});
+    });
+    render(<MenuManagementPage {...pageProps} />);
+
+    await selectAdministratorRole();
+    expect(
+      await screen.findByRole('gridcell', { name: '대시보드' }),
+    ).toBeVisible();
+    const permissionCheckbox = screen.getByLabelText('엑셀 1');
+    fireEvent.click(permissionCheckbox);
+    const saveButton = await screen.findByRole('button', { name: '저장' });
+    fireEvent.click(saveButton);
+
+    await waitFor(() =>
+      expect(apiMocks.apiPut).toHaveBeenCalledWith(
+        '/api/v1/system/roles/1/menu-permissions',
+        expect.any(Object),
+      ),
+    );
+    const moduleSelector = screen.getByRole('combobox', { name: '모듈 선택' });
+    const roleSelector = screen.getByRole('combobox', { name: '권한 선택' });
+    expect(moduleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(roleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(saveButton).toBeDisabled();
+    expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
+
+    fireEvent.click(permissionCheckbox);
+    expect(permissionCheckbox).toBeChecked();
+    fireEvent.doubleClick(screen.getByRole('gridcell', { name: '대시보드' }));
+    expect(screen.queryByDisplayValue('대시보드')).not.toBeInTheDocument();
+    fireEvent.contextMenu(getTreeGridBody());
+    expect(
+      screen.queryByRole('menuitem', { name: '루트 추가' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('gridcell', { name: 'NEW1' })).not.toBeInTheDocument();
+    fireEvent.click(saveButton);
+    expect(apiMocks.apiPut).toHaveBeenCalledTimes(2);
+
+    deferRefresh = true;
+    resolvePermissionSave?.({});
+    await waitFor(() => expect(resolveReload).toBeDefined());
+    expect(moduleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(roleSelector).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+    expect(screen.getByRole('gridcell', { name: '대시보드' })).toBeVisible();
+
+    resolveReload?.({
+      resultList: moduleOneRows.map((row) => ({
+        menuId: Number(row.id),
+        moduleId: row.moduleId,
+        moduleNm: row.moduleName,
+        parentMenuId: row.parentMenuId,
+        parentMenuNm: row.parent,
+        menuCode: row.code,
+        menuNm: row.name,
+        menuUrl: row.path,
+        iconNm: row.iconName,
+        sortOrder: row.order,
+        useAt: 'Y',
+        hasChildren: row.hasChildren,
+        permissionCodes: row.permissionCodes,
+      })),
+    });
+    await waitFor(() => {
+      expect(moduleSelector).not.toHaveAttribute('aria-disabled', 'true');
+      expect(roleSelector).not.toHaveAttribute('aria-disabled', 'true');
+    });
+  });
+
+  it.each([
+    ['write failure', false, '권한 저장 실패'],
+    ['refresh failure', true, '메뉴 목록 요청 실패'],
+  ])(
+    'preserves dirty menu permissions and unlocks selectors after %s',
+    async (_failureName, failReload, expectedError) => {
+      mockMenuPageRequests({ failModuleOneReload: failReload });
+      apiMocks.apiPut.mockImplementation((path: string) => {
+        if (
+          !failReload &&
+          path === '/api/v1/system/roles/1/menu-permissions'
+        ) {
+          return Promise.reject(new Error('권한 저장 실패'));
+        }
+        return Promise.resolve({});
+      });
+      render(<MenuManagementPage {...pageProps} />);
+
+      await selectAdministratorRole();
+      expect(
+        await screen.findByRole('gridcell', { name: '대시보드' }),
+      ).toBeVisible();
+      const permissionCheckbox = screen.getByLabelText('엑셀 1');
+      const permissionCell = permissionCheckbox.closest('[role="gridcell"]');
+      fireEvent.click(permissionCheckbox);
+      fireEvent.click(
+        await screen.findByRole('button', { name: '저장' }),
+      );
+
+      expect(await screen.findByText(expectedError)).toBeVisible();
+      expect(permissionCheckbox).toBeChecked();
+      expect(permissionCell).toHaveAttribute('data-dirty-cell', 'true');
+      expect(
+        screen.getByRole('combobox', { name: '모듈 선택' }),
+      ).not.toHaveAttribute('aria-disabled', 'true');
+      expect(
+        screen.getByRole('combobox', { name: '권한 선택' }),
+      ).not.toHaveAttribute('aria-disabled', 'true');
+      expect(
+        screen.queryByText('메뉴 변경사항을 저장했습니다.'),
+      ).not.toBeInTheDocument();
+    },
+  );
 
   it('disables module selection while a clean refresh is loading', async () => {
     let resolveReload: ((value: { resultList: unknown[] }) => void) | undefined;
-    let moduleOneRequestCount = 0;
+    let shouldDeferReload = false;
     apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/system/roles') {
+        return Promise.resolve({
+          resultList: [
+            { roleId: 1, roleNm: '관리자', useAt: 'Y', roleCode: 'ADMIN' },
+          ],
+        });
+      }
       if (path === '/api/v1/system/modules') {
         return Promise.resolve({
           resultList: modules.map((module) => ({
@@ -1847,10 +2274,11 @@ describe('MenuManagementPage module selection', () => {
       if (path === '/api/v1/system/permissions') {
         return Promise.resolve({ resultList: permissions });
       }
-      if (path === '/api/v1/system/menus?moduleId=1') {
-        moduleOneRequestCount += 1;
-        if (moduleOneRequestCount === 1)
-          return Promise.resolve({ resultList: [] });
+      if (
+        path === '/api/v1/system/menus?moduleId=1' ||
+        path === '/api/v1/system/menus?moduleId=1&roleId=1'
+      ) {
+        if (!shouldDeferReload) return Promise.resolve({ resultList: [] });
         return new Promise((resolve) => {
           resolveReload = resolve;
         });
@@ -1859,7 +2287,9 @@ describe('MenuManagementPage module selection', () => {
     });
     render(<MenuManagementPage {...pageProps} />);
 
+    await selectAdministratorRole();
     await screen.findByRole('grid', { name: 'F1-TREE 메뉴 관리' });
+    shouldDeferReload = true;
     fireEvent.click(screen.getByRole('button', { name: '조회' }));
 
     await waitFor(() =>
@@ -1867,6 +2297,9 @@ describe('MenuManagementPage module selection', () => {
         screen.getByRole('combobox', { name: '모듈 선택' }),
       ).toHaveAttribute('aria-disabled', 'true'),
     );
+    expect(
+      screen.getByTestId('f1-grid-loading-overlay'),
+    ).toBeInTheDocument();
 
     resolveReload?.({ resultList: [] });
     await waitFor(() =>

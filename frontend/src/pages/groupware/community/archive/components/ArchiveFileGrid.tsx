@@ -1,16 +1,8 @@
 import { useMemo } from 'react';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
-import DescriptionOutlined from '@mui/icons-material/DescriptionOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import FolderOutlined from '@mui/icons-material/FolderOutlined';
-import FolderZipOutlined from '@mui/icons-material/FolderZipOutlined';
-import ImageOutlined from '@mui/icons-material/ImageOutlined';
-import InsertDriveFileOutlined from '@mui/icons-material/InsertDriveFileOutlined';
-import PictureAsPdfOutlined from '@mui/icons-material/PictureAsPdfOutlined';
-import SlideshowOutlined from '@mui/icons-material/SlideshowOutlined';
-import TableChartOutlined from '@mui/icons-material/TableChartOutlined';
-import VideoFileOutlined from '@mui/icons-material/VideoFileOutlined';
 import {
   Box,
   Button,
@@ -22,6 +14,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import { getAttachmentIconMeta } from '../../../../../shared/components/feed/attachmentIconMeta';
 import {
   F1Tree,
   type F1GridColumn,
@@ -54,30 +47,6 @@ function formatDate(value?: string | Date | null) {
   return Number.isNaN(date.getTime())
     ? String(value)
     : date.toLocaleDateString('ko-KR');
-}
-
-function getFileIcon(file: ArchiveFileRow) {
-  const mimeType = (file.mimeType ?? '').toLowerCase();
-  const extension = file.fileName.split('.').pop()?.toLowerCase() ?? '';
-  if (mimeType === 'application/pdf' || extension === 'pdf')
-    return PictureAsPdfOutlined;
-  if (mimeType.startsWith('image/')) return ImageOutlined;
-  if (mimeType.startsWith('video/')) return VideoFileOutlined;
-  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'].includes(extension)) {
-    return FolderZipOutlined;
-  }
-  if (['xls', 'xlsx', 'xlsm', 'ods', 'csv'].includes(extension)) {
-    return TableChartOutlined;
-  }
-  if (['ppt', 'pptx', 'odp'].includes(extension)) return SlideshowOutlined;
-  if (
-    ['doc', 'docx', 'hwp', 'hwpx', 'odt', 'rtf', 'txt', 'md'].includes(
-      extension,
-    )
-  ) {
-    return DescriptionOutlined;
-  }
-  return InsertDriveFileOutlined;
 }
 
 export function ArchiveFileGrid({
@@ -117,7 +86,7 @@ export function ArchiveFileGrid({
                 spacing={1}
                 sx={{ alignItems: 'center', minWidth: 0 }}
               >
-                <FolderOutlined color={row.active ? 'primary' : 'disabled'} />
+                <FolderOutlined sx={{ color: 'text.secondary' }} />
                 <Button
                   type="button"
                   variant="text"
@@ -128,6 +97,8 @@ export function ArchiveFileGrid({
                     justifyContent: 'flex-start',
                     textAlign: 'left',
                     overflowWrap: 'anywhere',
+                    color: 'text.primary',
+                    fontWeight: 700,
                   }}
                 >
                   {row.folderName}
@@ -138,14 +109,32 @@ export function ArchiveFileGrid({
               </Stack>
             );
           }
-          const FileIcon = getFileIcon(row.file);
+          const iconMeta = getAttachmentIconMeta(row.file.fileName);
+          const FileIcon = iconMeta.icon;
           return (
             <Stack
               direction="row"
               spacing={1}
               sx={{ alignItems: 'center', minWidth: 0 }}
             >
-              <FileIcon fontSize="small" color="action" />
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 1,
+                  backgroundColor: iconMeta.bg,
+                  color: iconMeta.color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <FileIcon
+                  fontSize="small"
+                  aria-label={`${iconMeta.label} 파일 아이콘`}
+                />
+              </Box>
               <Stack sx={{ minWidth: 0 }}>
                 <Button
                   type="button"
@@ -157,6 +146,8 @@ export function ArchiveFileGrid({
                     justifyContent: 'flex-start',
                     textAlign: 'left',
                     overflowWrap: 'anywhere',
+                    color: 'text.primary',
+                    fontWeight: 400,
                   }}
                 >
                   {row.file.fileName}

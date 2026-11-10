@@ -58,6 +58,7 @@ type ModuleManagementPanelProps = {
   onError?: (message: string) => void;
   moduleGridKey?: number;
   moduleGridLoading?: boolean;
+  saving?: boolean;
 };
 
 export type ModuleManagementPanelHandle = {
@@ -139,12 +140,13 @@ export const ModuleManagementPanel = forwardRef<
     onError,
     moduleGridKey = 0,
     moduleGridLoading = false,
+    saving = false,
   },
   ref,
 ) {
   const gridRef = useRef<F1GridRef<ModuleManagementRow>>(null);
   const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
-  const completedOperationsRef = useRef(new Set<string>());
+  const completedOperationsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     const nextChanges =
@@ -172,7 +174,7 @@ export const ModuleManagementPanel = forwardRef<
         field: 'moduleCode',
         headerName: '모듈 코드',
         flex: 1,
-        editable: (row) => canEditModuleCode(row),
+        editable: (row) => !saving && canEditModuleCode(row),
         required: true,
         headerAlign: 'center',
         align: 'left',
@@ -181,7 +183,7 @@ export const ModuleManagementPanel = forwardRef<
         field: 'moduleName',
         headerName: '모듈명',
         flex: 1.2,
-        editable: true,
+        editable: !saving,
         required: true,
         headerAlign: 'center',
       },
@@ -189,7 +191,7 @@ export const ModuleManagementPanel = forwardRef<
         field: 'iconName',
         headerName: '아이콘명',
         flex: 1,
-        editable: true,
+        editable: !saving,
         required: true,
         type: 'select',
         options: MODULE_ICON_OPTIONS,
@@ -200,7 +202,7 @@ export const ModuleManagementPanel = forwardRef<
         field: 'moduleUrl',
         headerName: '루트 경로',
         flex: 1.2,
-        editable: true,
+        editable: !saving,
         required: true,
         headerAlign: 'center',
       },
@@ -209,7 +211,7 @@ export const ModuleManagementPanel = forwardRef<
         headerName: '정렬 순서',
         flex: 0.8,
         type: 'number',
-        editable: true,
+        editable: !saving,
         required: true,
         align: 'center',
         headerAlign: 'center',
@@ -234,7 +236,7 @@ export const ModuleManagementPanel = forwardRef<
         headerAlign: 'center',
       },
     ],
-    [],
+    [saving],
   );
 
   const createModuleRow = useCallback(
@@ -294,6 +296,11 @@ export const ModuleManagementPanel = forwardRef<
     [],
   );
 
+  const toOperationSignature = useCallback((value: unknown) => {
+    if (value == null) return '';
+    return JSON.stringify(value);
+  }, []);
+
   const saveCurrentChanges = useCallback(() => {
     if (saveInFlightRef.current) {
       return saveInFlightRef.current;
@@ -315,24 +322,60 @@ export const ModuleManagementPanel = forwardRef<
 
         for (const row of nextChanges.insertedRows) {
           const operationKey = `create:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
-          await onCreateModule(toPayload(row));
-          completedOperationsRef.current.add(operationKey);
+          const payload = toPayload(row);
+          const nextSignature = toOperationSignature(payload);
+          const completedSignature =
+            completedOperationsRef.current.get(operationKey);
+          if (completedSignature === nextSignature) continue;
+          if (completedSignature != null) {
+            throw new Error(
+              '저장 후 재조회가 완료되기 전 신규 모듈을 다시 수정했습니다. 조회 후 다시 저장해 주세요.',
+            );
+          }
+          await onCreateModule(payload);
+          completedOperationsRef.current.set(operationKey, nextSignature);
         }
 
         for (const row of nextChanges.updatedRows) {
           const operationKey = `update:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
-          await onUpdateModule(row.id, toPayload(row));
-          completedOperationsRef.current.add(operationKey);
+          if (String(row.id).startsWith('new-module-')) {
+            const createOperationKey = `create:${row.id}`;
+            const createSignature =
+              completedOperationsRef.current.get(createOperationKey);
+            if (createSignature != null) {
+              const payload = toPayload(row);
+              const nextSignature = toOperationSignature(payload);
+              if (createSignature !== nextSignature) {
+                throw new Error(
+                  '저장 후 재조회가 완료되기 전 신규 모듈을 다시 수정했습니다. 조회 후 다시 저장해 주세요.',
+                );
+              }
+              continue;
+            }
+          }
+          const payload = toPayload(row);
+          const nextSignature = toOperationSignature(payload);
+          if (completedOperationsRef.current.get(operationKey) === nextSignature)
+            continue;
+          await onUpdateModule(row.id, payload);
+          completedOperationsRef.current.set(operationKey, nextSignature);
         }
 
         for (const row of nextChanges.deletedRows) {
           const operationKey = `delete:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
+          if (completedOperationsRef.current.get(operationKey) === 'deleted')
+            continue;
           if (!String(row.id).startsWith('new-module-')) {
             await onDeleteModule(String(row.id));
-            completedOperationsRef.current.add(operationKey);
+            completedOperationsRef.current.set(operationKey, 'deleted');
+            continue;
+          }
+
+          const createOperationKey = `create:${row.id}`;
+          if (completedOperationsRef.current.has(createOperationKey)) {
+            throw new Error(
+              '저장 후 재조회가 완료되기 전 신규 모듈을 삭제할 수 없습니다. 조회 후 다시 시도해 주세요.',
+            );
           }
         }
 
@@ -377,6 +420,7 @@ export const ModuleManagementPanel = forwardRef<
     onError,
     onModulesSaved,
     onSaveSuccess,
+    toOperationSignature,
     toPayload,
     onUpdateModule,
   ]);
@@ -386,11 +430,12 @@ export const ModuleManagementPanel = forwardRef<
     () => ({
       saveCurrentChanges,
       deleteSelectedRows: () => {
+        if (saving) return;
         gridRef.current?.deleteSelectedRows();
       },
       exportCurrentRows,
     }),
-    [exportCurrentRows, saveCurrentChanges],
+    [exportCurrentRows, saveCurrentChanges, saving],
   );
 
   return (
@@ -444,17 +489,18 @@ export const ModuleManagementPanel = forwardRef<
               minRowHeight={32}
               maxRowHeight={320}
               showCheckbox={false}
-              createRow={createModuleRow}
+              createRow={saving ? undefined : createModuleRow}
               rowFormPlugin={{}}
               columnLine={true}
               editorPlugins={[
                 {
                   id: 'module-grid-editor',
                   enabled: true,
-                  canEdit: () => true,
+                  canEdit: () => !saving,
                 },
               ]}
               beforeEdit={({ row, field }) => {
+                if (saving) return false;
                 if (field === 'moduleCode' && !canEditModuleCode(row)) {
                   return false;
                 }
@@ -463,9 +509,9 @@ export const ModuleManagementPanel = forwardRef<
               canExportExcel={canExportExcel}
               excelFileName="module-management-export"
               loading={moduleGridLoading}
-              allowAddRowInContextMenu={canWrite}
+              allowAddRowInContextMenu={canWrite && !saving}
               allowDuplicateRowInContextMenu={false}
-              allowDeleteRowInContextMenu={canDelete}
+              allowDeleteRowInContextMenu={canDelete && !saving}
               onChangesChange={(changes) => {
                 onDirtyChange?.(
                   (changes?.insertedRows?.length ?? 0) > 0 ||

@@ -61,6 +61,10 @@ describe('shared document navigation', () => {
     render(<DocumentWritePage {...props} sharedDocumentId={42} />);
     await waitFor(() => expect(state.openDetail).toHaveBeenCalledWith(42));
   });
+  it('opens the approval detail referenced by a notification', async () => {
+    render(<DocumentWritePage {...props} requestedApprovalId={29} />);
+    await waitFor(() => expect(state.openDetail).toHaveBeenCalledWith(29));
+  });
 
   it('resolves a direct encrypted URL before opening the detail', async () => {
     vi.mocked(getSharedDocumentPreview).mockResolvedValue({

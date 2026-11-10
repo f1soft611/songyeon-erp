@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchShipStatus } from '../services/shipStatus.service';
 import type { ShipStatusQuery, ShipStatusRow } from '../types/shipStatus.types';
 import { SHIP_STATUS_EXCEL_COLUMNS, statusExcelName, toStatusRow } from '../utils/shipStatus';
@@ -11,7 +12,10 @@ const errorText = (error: unknown, fallback: string) =>
 // 마지막 요청의 응답만 쓴다
 export function useShipStatusManagement() {
   const requestIdRef = useRef(0);
-  const [query, setQuery] = useState<ShipStatusQuery>(() => ({ start: todayDash(), end: todayDash(), productName: '', clientName: '' }));
+  // 2026-11-04 마지막으로 조회한 조건은 탭 세션에 둔다. 조회한 적이 있으면 다른 화면에 갔다 돌아왔을 때 그 조건으로 바로 다시 부른다
+  const [saved] = useState(() =>
+    readSearchSession<ShipStatusQuery | null>('lg-ship-status', null, { start: '', end: '', productName: '', clientName: '' }));
+  const [query, setQuery] = useState<ShipStatusQuery>(() => saved ?? { start: todayDash(), end: todayDash(), productName: '', clientName: '' });
   const [rows, setRows] = useState<ShipStatusRow[]>([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -29,6 +33,7 @@ export function useShipStatusManagement() {
 
   const loadRows = async (target: ShipStatusQuery = query) => {
     if (periodMissing(target)) return;
+    saveSearchSession('lg-ship-status', target);
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -42,6 +47,11 @@ export function useShipStatusManagement() {
       if (requestId === requestIdRef.current) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (saved) void loadRows(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 상세 조회(⌄) [조회]: 거래처 · 품목코드/명을 조건에 넣고 다시 받는다
   const applyDetailFilter = (filter: { clientName: string; product: string }) => {

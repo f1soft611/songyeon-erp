@@ -14,6 +14,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +25,7 @@ import org.mockito.InOrder;
 
 import egovframework.let.system.screenreview.domain.model.ScreenReviewDraftVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewSaveVO;
+import egovframework.let.system.screenreview.domain.model.ScreenReviewSummaryVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewVO;
 import egovframework.let.system.screenreview.domain.repository.ScreenReviewDAO;
 
@@ -246,5 +249,32 @@ class ScreenReviewServiceImplTest {
 				() -> service.saveDraft(1L, "BSBoxTypeView", null, payload(null, null, "x"))).getMessage());
 		verify(dao, never()).insertHistory(anyMap());
 		verify(dao, never()).upsertDraft(anyMap());
+	}
+	private static ScreenReviewSummaryVO summary(String menuCode, String reviewStatus, String lastToStatus) {
+		ScreenReviewSummaryVO v = new ScreenReviewSummaryVO();
+		v.setMenuCode(menuCode);
+		v.setReviewStatus(reviewStatus);
+		v.setLastToStatus(lastToStatus);
+		return v;
+	}
+
+	@DisplayName("화면검수 관리 목록: 수정요청 · 검수진행중은 현황 그대로, 미검수로 돌아간 검수완료는 검수완료, 나머지는 미진행")
+	@Test
+	void getSummaryList_displayStatus() throws Exception {
+		ScreenReviewDAO dao = mock(ScreenReviewDAO.class);
+		when(dao.selectSummaryList(anyMap())).thenReturn(Arrays.asList(
+				summary("A", "CHANGE_REQUESTED", "CHANGE_REQUESTED"),
+				summary("B", "IN_PROGRESS", "IN_PROGRESS"),
+				summary("C", "NOT_STARTED", "COMPLETED"),
+				summary("D", null, null),
+				summary("E", "CHANGE_REQUESTED", "CHANGE_REQUESTED"),
+				summary("F", "NOT_STARTED", "CHANGE_REQUESTED")));
+		List<ScreenReviewSummaryVO> list = service(dao).getSummaryList(1L);
+		assertEquals(Arrays.asList("CHANGE_REQUESTED", "IN_PROGRESS", "COMPLETED", "NOT_STARTED", "CHANGE_REQUESTED", "NOT_STARTED"),
+				list.stream().map(ScreenReviewSummaryVO::getDisplayStatus).collect(java.util.stream.Collectors.toList()));
+		@SuppressWarnings("unchecked")
+		ArgumentCaptor<Map<String, Object>> captor = ArgumentCaptor.forClass(Map.class);
+		verify(dao).selectSummaryList(captor.capture());
+		assertEquals(1L, captor.getValue().get("tenantId"));
 	}
 }

@@ -305,3 +305,15 @@ export function missingLabelItems(info: LabelInfo, company: LabelCompanyInfo) {
   if (!company.businessName) missing.push('영업소 명칭(회사 고정정보)');
   return missing;
 }
+
+// 라벨 값의 식품유형 · 보관방법은 공통코드 코드다(FOOD_TYPE 2026-11-05 · STORAGE_METHOD 2026-10-26).
+// 미리보기 · 인쇄 창 · 인쇄에는 공통코드 이름을 찍는다(코드가 아니면 글자 그대로). 받은 값은 바꾸지 않는다
+type CodeName = { code: string; name: string };
+export function labelInfoWithCodeNames(info: LabelInfo, foodTypes: CodeName[], storages: CodeName[]): LabelInfo {
+  const nameOf = (options: CodeName[], value: string | null | undefined) =>
+    value ? options.find((option) => option.code === value.trim())?.name ?? value : value;
+  const out: LabelInfo = { ...info };
+  if ('foodType' in info) out.foodType = nameOf(foodTypes, info.foodType);
+  if ('storage' in info) out.storage = nameOf(storages, info.storage);
+  return out;
+}

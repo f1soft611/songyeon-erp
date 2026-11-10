@@ -46,6 +46,8 @@ export function DocumentWritePage({
   content,
   dashboardScope = null,
   onDashboardScopeChange,
+  requestedApprovalId = null,
+  onRequestedApprovalClose,
   sharedDocumentId = null,
   onSharedDocumentClose,
 }: DocumentWritePageProps) {
@@ -97,6 +99,14 @@ export function DocumentWritePage({
     retryLoadMore,
   } = useDocumentWritePage(initialScope, onDashboardScopeChange);
   useEffect(() => {
+    if (requestedApprovalId === null) return;
+    if (!Number.isSafeInteger(requestedApprovalId) || requestedApprovalId <= 0) {
+      showError('알림 문서 정보가 올바르지 않습니다.');
+      return;
+    }
+    openDetail(requestedApprovalId);
+  }, [openDetail, requestedApprovalId, showError]);
+  useEffect(() => {
     let active = true;
     if (sharedDocumentId !== null) {
       void resolveDocumentShareReference(sharedDocumentId).then((id) => {
@@ -111,6 +121,7 @@ export function DocumentWritePage({
     if (linkedDocumentId !== null) return;
     closeDetail();
     if (sharedDocumentId !== null) onSharedDocumentClose?.();
+    if (requestedApprovalId !== null) onRequestedApprovalClose?.();
   };
   const requestPinToggle = (
     electronicApprovalId: number,

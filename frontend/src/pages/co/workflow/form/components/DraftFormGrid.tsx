@@ -20,6 +20,7 @@ export type DraftFormGridProps = {
   canCreate: boolean;
   canUpdate: boolean;
   canExportExcel: boolean;
+  saving: boolean;
   loading: boolean;
   gridKey: number;
   gridRef: RefObject<F1GridRef<DraftFormRow> | null>;
@@ -321,6 +322,8 @@ export function DraftFormGrid({
   columns,
   canCreate,
   canUpdate,
+  canExportExcel,
+  saving,
   loading,
   gridKey,
   gridRef,
@@ -328,14 +331,14 @@ export function DraftFormGrid({
 }: DraftFormGridProps) {
   const [layoutMigrated] = useState(migrateDraftFormGridActionPin);
   const rowFormPlugin = useMemo(() => {
-    if (!canCreate && !canUpdate) return { enabled: false };
     return {
+      enabled: (canCreate || canUpdate) && !saving,
       getTitle: ({ mode }: { mode: 'create' | 'edit' }) =>
         mode === 'create' ? '기안양식 등록' : '기안양식 수정',
       onBeforeApply: ({ mode }: { mode: 'create' | 'edit' }) =>
-        mode === 'create' ? canCreate : canUpdate,
+        !saving && (mode === 'create' ? canCreate : canUpdate),
     };
-  }, [canCreate, canUpdate]);
+  }, [canCreate, canUpdate, saving]);
 
   return (
     <F1Grid
@@ -347,15 +350,15 @@ export function DraftFormGrid({
       columns={columns}
       rowKey="draftingWorkCategoryId"
       rowFormPlugin={rowFormPlugin}
-      createRow={createDraftFormRow}
-      createDuplicate={duplicateDraftFormRow}
+      createRow={canCreate && !saving ? createDraftFormRow : undefined}
+      createDuplicate={canCreate && !saving ? duplicateDraftFormRow : undefined}
       onChangesChange={onChangesChange}
       loading={loading}
       height="100%"
       showCheckbox={false}
-      canExportExcel={true}
-      allowAddRowInContextMenu={canCreate}
-      allowDuplicateRowInContextMenu={canCreate}
+      canExportExcel={canExportExcel}
+      allowAddRowInContextMenu={canCreate && !saving}
+      allowDuplicateRowInContextMenu={canCreate && !saving}
       allowDeleteRowInContextMenu={false}
     />
   );

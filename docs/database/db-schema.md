@@ -402,7 +402,7 @@
 | comment_type          | varchar   | 댓글 구분 (`USER` 기본, 결재 이벤트는 `SYSTEM`) |
 | event_type            | varchar   | 시스템 댓글 이벤트 (승인 · 반려 · 상신 등, USER 는 NULL) |
 
-- 제약: `uq_tb_common_comment_tenant_comment UNIQUE (tenant_id, comment_id)`, `chk_tb_common_comment_event_type`(2026-10-22 `20261022_004`)
+- 제약: `uq_tb_common_comment_tenant_comment UNIQUE (tenant_id, comment_id)`, `chk_tb_common_comment_event_type`(2026-10-22 `20261022_004`, 2026-11-04 `20261104_004` 에서 `REFERENCE_CONFIRMED` · `REFERENCE_ADDED` · `FINAL_CONFIRMATION_CONFIRMED` 추가)
 
 ### 2-17-1. tb_common_comment_like
 
@@ -657,9 +657,67 @@
 | `tb_notice_popup_dismissal.login_id` | varchar(20) | 팝업을 닫은 사원 사번(`employees.id` FK, ON DELETE CASCADE) |
 
 - 칸 이름은 S_ERP 그대로, 값은 사번이다(2026-11-03, `20261103_003`).
+- `tb_electronic_approval_line_info` 결재선 제약(2026-11-04, `20261104_004`, S_ERP 최신과 같음):
+  - `participant_type`: `APPROVAL` · `AGREEMENT` · `REFERENCE` · `FINAL_CONFIRMATION`(서버가 만드는 기안자 최종확인 줄).
+  - 참조자는 상태 없음 또는 `CONFIRMED`(확인 시각 필수). 최종확인은 `WAITING` → `PENDING`(최종 승인 · 반려 때) → `CONFIRMED`.
+  - `uq_electronic_approval_line_participant`: 최종확인 줄을 뺀 (테넌트, 문서, 참여자) 유일 인덱스. `uq_electronic_approval_line_final_confirmation`: 문서당 최종확인 1줄.
+
+### 2-27. tb_notification
+
+사용자별 알림(결재 댓글 멘션 · 쪽지 받음). S_ERP 와 같은 구조, 받는 사람만 사번(2026-11-04, `20261104_001`).
+
+| 칸 | 형식 | 설명 |
+|---|---|---|
+| `notification_id` | bigserial PK | 알림 번호 |
+| `tenant_id` | bigint | `tb_tenant` FK(CASCADE) |
+| `recipient_user_id` | varchar(20) | 받는 사람 사번(`employees.id` FK, CASCADE) |
+| `event_type` · `source_type` | varchar(40) · varchar(30) | `APPROVAL_COMMENT_MENTION`/`APPROVAL_COMMENT`, `DIRECT_MESSAGE_RECEIVED`/`DIRECT_MESSAGE` |
+| `source_id` | bigint | 원본 ID(결재 댓글 · 쪽지) |
+| `title` · `summary` | varchar(200) · varchar(500) | 제목 · 요약(빈 값 안 됨) |
+| `read_at` · `archived_at` · `created_at` | timestamp | 읽은 · 지운(보관) · 만든 시각 |
+
+- 유일: (`tenant_id`, `recipient_user_id`, `event_type`, `source_type`, `source_id`). 인덱스: 받는 사람별 목록 · 안 읽음 · 보관 안 한 것.
+
+### 2-28. tb_direct_message_thread · tb_direct_message
+
+1:1 쪽지 대화방 · 쪽지. S_ERP 와 같은 구조, 사람 칸은 사번(2026-11-04, `20261104_002`).
+
+| 표 · 칸 | 형식 | 설명 |
+|---|---|---|
+| `tb_direct_message_thread.thread_id` | bigserial PK | 대화방 번호 |
+| `participant_a_user_id` · `participant_b_user_id` | varchar(20) | 두 사람 사번(`employees.id` FK, CASCADE), a < b |
+| `subject` | varchar(120) | 대화방 제목(없어도 됨) |
+| `participant_a_hidden_at` · `participant_b_hidden_at` | timestamp | 그 사람이 대화방을 지운(숨김) 시각. 이전 쪽지는 그 사람에게 안 보임 |
+| `tb_direct_message.message_id` | bigserial PK | 쪽지 번호 |
+| `thread_id` | bigint | 대화방(같은 회사, 대화방을 지우면 함께 지워짐) |
+| `sender_user_id` · `recipient_user_id` | varchar(20) | 보낸 · 받는 사람 사번(`employees.id` FK, CASCADE), 같으면 안 됨 |
+| `content` · `read_at` · `created_at` | text · timestamp | 내용(1~5000자) · 읽은 · 보낸 시각 |
+
+### 2-29. tb_user_menu_favorite_folder · tb_user_menu_favorite
+
+사람별 메뉴 즐겨찾기 폴더 · 즐겨찾기. S_ERP 와 같은 구조, 사람 칸은 사번(2026-11-04, `20261104_003`).
+
+| 표 · 칸 | 형식 | 설명 |
+|---|---|---|
+| `tb_user_menu_favorite_folder.favorite_folder_id` | bigserial PK | 폴더 번호 |
+| `user_id` | varchar(20) | 주인 사번(`employees.id` FK, CASCADE) |
+| `folder_nm` | varchar(40) | 폴더 이름(1~40자) |
+| `tb_user_menu_favorite.favorite_id` | bigserial PK | 즐겨찾기 번호 |
+| `user_id` · `menu_id` | varchar(20) · bigint | 주인 사번 · 메뉴(`tb_menu` FK, CASCADE). 같은 사람 · 같은 메뉴는 한 번 |
+| `favorite_folder_id` | bigint | 같은 주인의 폴더(없으면 맨 위) |
+| `favorite_nm` | varchar(100) | 보일 이름(없으면 메뉴 이름) |
 
 ## 변경 이력
 
+- 2026-11-09: 품질 서류 표 `qdoc_form` · `qdoc_version` · `qdoc_item` · `qdoc_record` · `qdoc_answer` 를 새로 만들고(송연 schema.py 이름 · 칸 그대로, 사람 칸은 사번 `employees.id`, 시각은 timestamp) HACCP(선행) 기본 양식 '협력업체 자체 위생점검 평가표'(묶음 10 · 질문 91)를 넣었다. 결재란 · 고친 이력 표는 결재 방식이 정해지면 만든다. 2026-11-09 적용. war · 프론트를 함께 올려야 한다. `20261109_001` 참고.
+- 2026-11-06: 품질관리(`/qm`)에 중분류 HACCP(`QM_HACCP`, 순서 4)와 화면 HACCP(선행)(`HCPrerequisiteView`, `/qm/haccp/HCPrerequisiteView`)를 넣고 권한은 라벨등록을 복사했다(데이터 변경, 스키마 변경 없음). 2026-11-06 적용. 프론트(`pages/qm/haccp/prerequisite`)를 함께 올려야 한다. `20261106_002` 참고.
+- 2026-11-06: 품질관리(`/qm`)에 중분류 품질검사(`QM_INSPECTION`, 순서 3)와 화면 제품검사(`QIProductInspectionView`, `/qm/inspection/QIProductInspectionView`)를 넣고 권한은 라벨등록을 복사했다(데이터 변경, 스키마 변경 없음). 2026-11-06 적용. 프론트(`pages/qm/inspection/product-inspection`)를 함께 올려야 한다. `20261106_001` 참고.
+- 2026-11-05: 품질관리(`/qm`)에 중분류 라벨관리(`QM_LABEL`) · 온도관리(`QM_TEMPERATURE`)를 두고, 라벨등록 · 실시간 온도의 화면ID를 `LBLabelRegisterView` · `TMTempMonitorView` 로 바꿨다. 라벨등록의 탭 두 개를 화면 `LBLabelRequestView`(표시사항 요청) · `LBLabelFormatView`(라벨양식)로 나누고 권한은 라벨등록을 복사했다(데이터 변경, 스키마 변경 없음). `20261105_002` 참고.
+- 2026-11-05: 환경설정 > 시스템 관리 아래에 화면검수 관리 화면 메뉴(`tb_menu.menu_code = 'ST_SCREEN_REVIEWS'`, `/settings/system/screen-reviews`, 순서 35)와 권한 행(메뉴관리 권한 복사)을 추가했다(데이터 변경, 스키마 변경 없음). `20261105_001` 참고.
+- 2026-11-04: 전자결재 참조자 확인 · 참조 추가 이벤트 · 기안자 최종확인 제약을 S_ERP 최신으로 맞췄다(S_ERP 20261029_001 · 20261030_006 · 20261102_003 을 합침, 새 표 · 칸 없음). `20261104_004` 참고.
+- 2026-11-04: 메뉴 즐겨찾기 표 `tb_user_menu_favorite_folder` · `tb_user_menu_favorite` 를 새로 만들었다(S_ERP 20261102_001 · 002 구조, 사람 칸은 사번 `employees.id`). `20261104_003` 참고.
+- 2026-11-04: 쪽지 표 `tb_direct_message_thread` · `tb_direct_message` 를 새로 만들었다(S_ERP 20261030_005 · 009 구조, 사람 칸은 사번 `employees.id`). 쪽지함 2단계. `20261104_002` 참고.
+- 2026-11-04: 알림 표 `tb_notification` 을 새로 만들었다(S_ERP 20261030_005 · 008 구조, 받는 사람은 사번 `employees.id`). 알림함 · 결재 댓글 멘션 1단계. `20261104_001` 참고.
 - 2026-11-03: 구매관리 > 입고관리 탭 네 개를 화면(메뉴)으로 나눴다. 예전 `IBReceivingView` 입고관리 행이 `IBReceivingRegisterView` 입고등록(번호 · 권한 그대로)이 되고, 입고현황 `IBReceivingStatusView`(20) · 서류등록 `IBReceivingDocView`(30) · 반품등록 `IBReturnRegisterView`(40)를 추가(권한은 입고등록 복사), 재료 치환등록은 50. 데이터만 바뀌고 표 구조는 그대로다. 프론트를 함께 배포해야 한다. `20261103_005` 참고.
 - 2026-11-03: 화면검수는 검수완료로 한 바퀴가 끝나면 현황(`tb_screen_review`)이 미검수로 돌아가고 요청일 · 개발담당 · 개발완료일은 비운다. 이미 검수완료로 남은 현황 1줄을 같은 모양으로 바꿨다(데이터만). war 를 함께 배포해야 한다. `20261103_004` 참고.
 - 2026-11-03: 사람을 가리키는 값을 모두 사번(`employees.id`, varchar(20))으로 바꿨다. 로그인 테이블 기본키 `tb_login_account.login_id` · `tb_user.user_id`(자동 번호 없앰)와 `tb_user.login_id` · `tb_login_account_role.login_id`, 전자결재 결재선 · 결재선 양식 · 고정 · 열람, 게시판 열람, 공지 팝업 닫기, 기안 업무(검토 · 승인 · 담당자 · 등록자 · 수정자), 공통코드 · 테넌트 등록자. 사람 칸은 `employees(id)` FK(14개), 등록자 · 수정자 칸은 FK 없음. 롤백하면 번호를 새로 매긴다. war · 프론트를 함께 배포해야 한다. `20261103_003` 참고.

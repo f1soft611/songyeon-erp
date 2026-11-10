@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Card, TextField, Typography } from '@mui/material';
+import { Alert, Box, Card, TextField } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import { SearchResultMessage } from '../../../../shared/components/SearchResultMessage';
 import type { PageSearchField, PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
@@ -116,15 +117,14 @@ export function ReceivingStatusManagementPage({
         onDetailSearch={status.applyDetail}
         detailLoading={status.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* 2026-11-04 S_ERP 현황 표준(SearchResultMessage): 조회가 끝나면 '조회 결과 총 N건입니다.' · 0건 안내, X 로 닫고 다시 조회하면 다시 보인다 */}
+      {status.records && !status.loading && <SearchResultMessage resultCount={status.records.length} />}
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           {status.noPrice > 0 && (
             <Alert severity="warning" sx={{ mb: 1, py: 0 }}>
               단가가 없어 금액이 비어 있는 줄이 {status.noPrice}건 있어요. 아래 소계·합계에는 그만큼 빠져 있습니다.
             </Alert>
-          )}
-          {status.records && !status.loading && status.records.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>이 기간에 들어온 것이 없습니다</Typography>
           )}
           <ReceivingStatusGrid rows={status.rows} columns={columns} loading={status.loading} />
           {/* 합계줄. 수량은 품목마다 단위가 달라 더하지 않는다 */}

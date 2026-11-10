@@ -102,8 +102,10 @@ export function ProductBomDialog({
     name: product.name,
     clientCode: product.clientCode, // 거래처코드(2026-10-23, 목록에서 고른다)
     storage: product.storage, // 보관방법 코드(공통코드 STORAGE_METHOD, 2026-10-23)
+    foodType: product.foodType, // 식품유형 코드(공통코드 FOOD_TYPE, 2026-11-05)
   });
   const storageOptions = useCommonCodeOptions('STORAGE_METHOD');
+  const foodTypeOptions = useCommonCodeOptions('FOOD_TYPE');
   const [infoMessage, setInfoMessage] = useState<Message>(NO_MESSAGE);
   const [sub, setSub] = useState({ net: '', filmLength: '', pouchPer: '', film: '', pouch: '', box: '' });
   const [subMessage, setSubMessage] = useState<Message>(NO_MESSAGE);
@@ -228,7 +230,7 @@ export function ProductBomDialog({
       return;
     }
     try {
-      await saveProductInfo(product.code, { name, storage: info.storage, clientCode: info.clientCode });
+      await saveProductInfo(product.code, { name, storage: info.storage, foodType: info.foodType, clientCode: info.clientCode });
       setInfoMessage({ text: '저장되었습니다', error: false });
       await onSaved();
     } catch (error) {
@@ -404,6 +406,23 @@ export function ProductBomDialog({
                   ))}
                   {info.storage && storageOptions.length > 0 && !storageOptions.some((option) => option.code === info.storage) ? (
                     <MenuItem value={info.storage}>{product.storageNm || info.storage} (다시 골라주세요)</MenuItem>
+                  ) : null}
+                </TextField>
+                {/* 식품유형: 공통코드 FOOD_TYPE 에서 고른다(2026-11-05, 저장은 코드. 송연 제품BOM 기본정보처럼 보관방법 다음) */}
+                <TextField
+                  select
+                  size="small"
+                  label="식품유형"
+                  value={info.foodType}
+                  onChange={(event) => setInfo({ ...info, foodType: event.target.value })}
+                  slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}
+                >
+                  <MenuItem value="">선택 안 함</MenuItem>
+                  {foodTypeOptions.map((option) => (
+                    <MenuItem key={option.code} value={option.code}>{option.name}</MenuItem>
+                  ))}
+                  {info.foodType && foodTypeOptions.length > 0 && !foodTypeOptions.some((option) => option.code === info.foodType) ? (
+                    <MenuItem value={info.foodType}>{product.foodTypeNm || info.foodType} (다시 골라주세요)</MenuItem>
                   ) : null}
                 </TextField>
                 <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>

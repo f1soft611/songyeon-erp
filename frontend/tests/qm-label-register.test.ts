@@ -6,7 +6,7 @@ import {
   applyCellEdit, blankFormat, cellKind, cellSpecialValue, colSumText, deepCopy, extraFieldsOf, filterProducts, formatGrid, mergeSelection,
   nextVersionName, normalizeFormat, requestStatusText, resizeSelection, selectedCell, selectionBetween, selectionText, unmergeSelection, versionOptionText,
   type LabelProductRow,
-} from '../src/pages/qm/labelregister/utils/labelRegister';
+} from '../src/pages/qm/label/label-register/utils/labelRegister';
 
 const basic = () => deepCopy(LABEL_FORMAT_BASIC);
 const cellsPerRow = (fmt: LabelFormat) => fmt.rows.map((r) => r.cells.length);

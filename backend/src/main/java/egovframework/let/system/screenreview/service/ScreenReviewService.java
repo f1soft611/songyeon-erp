@@ -1,7 +1,10 @@
 package egovframework.let.system.screenreview.service;
 
+import java.util.List;
+
 import egovframework.let.system.screenreview.domain.model.ScreenReviewDetailVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewSaveVO;
+import egovframework.let.system.screenreview.domain.model.ScreenReviewSummaryVO;
 
 /**
  * 화면검수 서비스 인터페이스 클래스
@@ -13,6 +16,9 @@ import egovframework.let.system.screenreview.domain.model.ScreenReviewSaveVO;
  */
 // 검수자 · 작성자는 로그인한 사람의 사번(employees.id). 컨트롤러가 LoginEmployeeResolver 로 찾아 넘긴다
 public interface ScreenReviewService {
+
+    /** 화면검수 관리 목록: 사용 중인 화면마다 현황 · 마지막 이력 · 표시 상태(검수완료 · 검수진행중 · 수정요청 · 미진행) */
+    List<ScreenReviewSummaryVO> getSummaryList(Long tenantId) throws Exception;
 
     /** 화면ID(menu_code)의 현황 · 이력(첨부 포함) · 내 임시저장(첨부 포함) */
     ScreenReviewDetailVO getDetail(Long tenantId, String menuCode, String empId) throws Exception;

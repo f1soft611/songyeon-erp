@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import type { LabelPrintTarget } from '../../../../../shared/components/LabelPrintDialog';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { clientProductDetailValues, readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { restoreBlockedGridDeletes } from '../../../../../shared/utils/gridDelete';
 import { unknownClientMessage } from '../../../../co/master/item-master/utils/productBom';
 import { fetchClientNames } from '../../../../co/master/item-master/services/itemMaster.service';
@@ -37,7 +38,9 @@ export function useProdConfirmManagement() {
   const gridRef = useRef<F1GridRef<ScheduleRow>>(null);
   const requestIdRef = useRef(0);
   const nextKeyRef = useRef(1);
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 날짜 · 상세 조회 조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('pd-prod-confirm', { date: todayDash(), filter: NO_FILTER }));
+  const [date, setDate] = useState(saved.date);
   const [rows, setRows] = useState<ScheduleRow[]>([]);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -64,7 +67,7 @@ export function useProdConfirmManagement() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   // 상세 조회(⌄)로 적용한 조건. 받은 생산건 중 맞는 줄만 표에 둔다(수주등록과 같음, 2026-10-30)
-  const detailFilterRef = useRef<ScheduleDetailFilter>(NO_FILTER);
+  const detailFilterRef = useRef<ScheduleDetailFilter>(saved.filter);
 
   // 표에서 빼 둔 확정 줄을 모은다(표를 새로 그리기 전에도 부른다)
   const keepRemoved = () => {
@@ -86,6 +89,7 @@ export function useProdConfirmManagement() {
       setError('조회할 날짜를 먼저 선택해주세요');
       return;
     }
+    saveSearchSession('pd-prod-confirm', { date: day, filter: detailFilterRef.current });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -108,10 +112,10 @@ export function useProdConfirmManagement() {
 
   // 송연처럼 열면 오늘 것을 바로 보여준다. 거래처는 거래처BOM 전체(재고생산은 비워둘 수 있다), 품목은 사용 중 제품.
   useEffect(() => {
-    void loadRows(todayDash());
+    void loadRows(saved.date);
     fetchClientNames().then(setClients).catch(() => undefined);
     fetchOrderProducts().then(setProducts).catch(() => undefined);
-  }, [loadRows]);
+  }, [loadRows, saved]);
 
   const unknownClient = (row: ScheduleRow) => {
     const typed = row.clientName.trim();
@@ -326,6 +330,7 @@ export function useProdConfirmManagement() {
   };
 
   return {
+    savedDetailValues: clientProductDetailValues(saved.filter),
     gridRef,
     date,
     setDate,

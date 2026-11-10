@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  emptyText, excelColumns, splitWarehouses, ssPrice, ssQty, visibleRows, visibleTotal, warehouseQty,
+  excelColumns, splitWarehouses, ssPrice, ssQty, visibleRows, visibleTotal, warehouseQty,
 } from '../src/pages/pu/stock/stock-status/utils/stockStatus';
 import type { StockStatusRow } from '../src/pages/pu/stock/stock-status/types/stockStatus.types';
 
@@ -19,8 +19,6 @@ describe('재고현황 utils(송연 29-stock-status.js)', () => {
     expect(visibleRows(rows, 'submaterial', '', true).map((r) => r.code)).toEqual(['9']);
     expect(visibleRows(rows, 'material', ' sug ', false).map((r) => r.code)).toEqual(['3']);
     expect(visibleRows(rows, 'material', '1', false).map((r) => r.code)).toEqual(['1']);
-    expect(emptyText('material')).toBe('해당하는 원재료가 없습니다');
-    expect(emptyText('submaterial')).toBe('해당하는 부자재가 없습니다');
   });
 
   it('합계는 보이는 줄만, 금액이 없으면 0 으로', () => {

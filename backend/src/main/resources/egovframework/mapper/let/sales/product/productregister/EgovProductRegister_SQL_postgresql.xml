@@ -26,6 +26,7 @@
             name,
             spec,
             storage,
+            food_type, <!-- 2026-11-05 식품유형 코드(공통코드 FOOD_TYPE) -->
             client_code, <!-- 2026-10-23 거래처코드 -->
             product_type,
             reg_user_id,
@@ -35,6 +36,7 @@
             #{productName},
             #{spec},
             #{storage},
+            #{foodType, jdbcType=VARCHAR},
             #{clientCode, jdbcType=VARCHAR},
             #{productType},
             #{regUserId, jdbcType=VARCHAR},

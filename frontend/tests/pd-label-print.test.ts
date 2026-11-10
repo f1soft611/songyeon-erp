@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { printQtyText } from '../src/pages/pd/label/label-print/utils/labelPrint';
 import {
-  buildLabelHTML, LABEL_FORMAT_BASIC, labelPrintExpiryStr, labelShelfLifeText, missingLabelItems, sanitizeLabelHtml,
+  buildLabelHTML, LABEL_FORMAT_BASIC, labelInfoWithCodeNames, labelPrintExpiryStr, labelShelfLifeText, missingLabelItems, sanitizeLabelHtml,
 } from '../src/shared/components/LabelPrintDialog/labelHtml';
 
 describe('라벨출력(송연 PD0004)', () => {
@@ -39,6 +39,24 @@ describe('라벨출력(송연 PD0004)', () => {
     expect(html).toContain('031-000-0000');
     expect(html).toContain('주의<br>사항');
     expect(sanitizeLabelHtml('<span onclick="x()" style="font-weight:700">a</span>')).toBe('<span style="font-weight:700">a</span>');
+  });
+
+  it('식품유형 · 보관방법 코드는 공통코드 이름으로 바꿔 찍고, 코드가 아니면 글자 그대로(2026-11-05)', () => {
+    const foodTypes = [{ code: '001', name: '복합조미식품' }, { code: '002', name: '소스(살균제품)' }];
+    const storages = [{ code: '002', name: '냉장(0℃~10℃)' }];
+    const info = { foodType: '002', storage: '002', netWeight: '5Kg' };
+    expect(labelInfoWithCodeNames(info, foodTypes, storages)).toEqual({ foodType: '소스(살균제품)', storage: '냉장(0℃~10℃)', netWeight: '5Kg' });
+    expect(info.foodType).toBe('002'); // 받은 값은 그대로 둔다
+    expect(labelInfoWithCodeNames({ foodType: '옛 글자', storage: '' }, foodTypes, storages)).toEqual({ foodType: '옛 글자', storage: '' });
+    expect(labelInfoWithCodeNames({}, foodTypes, storages)).toEqual({});
+    // 이름으로 바꾼 값이 라벨 HTML 에 찍힌다
+    const html = buildLabelHTML({
+      code: '000006', name: '소스', mfgDate: '2026-10-06', info: labelInfoWithCodeNames(info, foodTypes, storages),
+      companyInfo: {}, format: null, recycle: null, marks: [],
+    });
+    expect(html).toContain('>소스(살균제품)</td>');
+    expect(html).toContain('냉장(0℃~10℃)');
+    expect(html).not.toContain('>002</td>');
   });
 
   it('비어 있는 항목 안내', () => {

@@ -6,6 +6,7 @@ export type ProductRegisterForm = {
   spec: string;
   productType: string; // 포장유형(기초정보 포장유형 이름)
   storage: string; // 보관방법 코드(공통코드 STORAGE_METHOD, 2026-10-23)
+  foodType: string; // 식품유형 코드(공통코드 FOOD_TYPE, 2026-11-05)
   clientCode: string; // 거래처코드(2026-10-23, 목록에서 고른다)
 };
 
@@ -14,6 +15,7 @@ export type ProductRegisterBody = {
   spec: string | null;
   productType: string | null;
   storage: string | null;
+  foodType: string | null;
   clientCode: string | null;
   bom: { materialName: string; ratioPercent: number; unitPrice: number | null; materialCode?: string }[];
   // 견적에서 '확정' 으로 넘어왔으면 그 견적 번호와 원가 항목(등록하면 견적이 확정되고 원가 항목이 단가관리에 반영된다)

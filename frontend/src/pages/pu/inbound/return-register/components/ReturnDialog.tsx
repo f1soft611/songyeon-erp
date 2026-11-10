@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Autocomplete, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
+  Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel,
   IconButton, MenuItem, TextField, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -9,8 +9,13 @@ import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-g
 import { cellInputProps } from '../../../../../shared/utils/gridCellInput';
 import { resetGridStorageIfColumnsChanged } from '../../../../../shared/utils/gridStorage';
 import { todayDash } from '../../../../../shared/utils/excelFile';
+import { MasterPickerDialog } from '../../../../../shared/components/master-picker/MasterPickerDialog';
+import type { MasterPickerOption } from '../../../../../shared/components/master-picker/masterPicker.types';
 import { fetchMaterialOptions } from '../../../../co/master/item-master/services/itemMaster.service';
+import { materialPickerOptions } from '../../../../co/master/item-master/utils/productBom';
+import { vendorPickerOptions } from '../../../../co/master/material-master/hooks/useMaterialMasterManagement';
 import { fetchVendors } from '../../../../co/master/material-master/services/materialMaster.service';
+import { PickerField } from '../../receiving-register/components/PickerField';
 import { ConfirmDialog } from '../../../../../shared/components/ConfirmDialog';
 import { fetchLastPrice, fetchReceivings, registerReceivings } from '../../receiving-register/services/receiving.service';
 import type { Receiving, StagingItem, TaxType } from '../../receiving-register/types/receiving.types';
@@ -19,7 +24,8 @@ import { TAX_TYPES, formatMoney, formatQty, itemCalc, returnQtyError, stagingTot
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 
-type Material = { code: string; name: string };
+type Material = Awaited<ReturnType<typeof fetchMaterialOptions>>[number];
+type Vendor = Awaited<ReturnType<typeof fetchVendors>>[number];
 type Message = { text: string; ok: boolean } | null;
 type PickRow = Receiving & { left: number; state: 'pick' | 'done' | 'staged' };
 
@@ -43,10 +49,12 @@ export function ReturnDialog({ open, onClose, onRegistered }: {
 
   const keyRef = useRef(0);
   const rowsRef = useRef<StagingItem[]>([]);
-  const [vendors, setVendors] = useState<string[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [clientName, setClientName] = useState('');
-  const [materialName, setMaterialName] = useState('');
+  const [client, setClient] = useState<MasterPickerOption | null>(null);
+  const [material, setMaterial] = useState<MasterPickerOption | null>(null);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [qty, setQty] = useState('');
   const [rows, setRowsState] = useState<StagingItem[]>([]);
   const [pickDate, setPickDate] = useState(() => todayDash());
@@ -84,17 +92,21 @@ export function ReturnDialog({ open, onClose, onRegistered }: {
     if (!open) return;
     rowsRef.current = [];
     setRowsState([]);
-    setClientName('');
-    setMaterialName('');
+    setClient(null);
+    setMaterial(null);
     setQty('');
     const today = todayDash();
     setPickDate(today);
     setReturnDate(today);
     setMessage(null);
-    fetchVendors().then((list) => setVendors(list.map((vendor) => vendor.name).filter(Boolean))).catch(() => undefined);
-    fetchMaterialOptions().then((list) => setMaterials(list.map((m) => ({ code: m.code, name: m.name })))).catch(() => undefined);
+    // 매입 거래처와 원재료. 2026-11-05 칸에 직접 치지 않고 팝업에서 고른다(입고 등록 · 발주등록과 같음)
+    fetchVendors().then(setVendors).catch(() => undefined);
+    fetchMaterialOptions().then(setMaterials).catch(() => undefined);
     void loadPickList(today);
   }, [open, loadPickList]);
+
+  const searchClients = useCallback(async (keyword: string) => vendorPickerOptions(vendors, keyword), [vendors]);
+  const searchMaterials = useCallback(async (keyword: string) => materialPickerOptions(materials, keyword), [materials]);
 
   const pick = (row: PickRow) => {
     keyRef.current += 1;
@@ -107,31 +119,27 @@ export function ReturnDialog({ open, onClose, onRegistered }: {
   };
 
   const addManual = async () => {
-    if (!clientName.trim()) {
-      setMessage({ text: '거래처를 먼저 입력해주세요', ok: false });
+    if (!client) {
+      setMessage({ text: '거래처를 먼저 선택해주세요', ok: false });
       return;
     }
-    if (!materialName.trim() || !qty) {
+    if (!material || !qty) {
       setMessage({ text: '품목과 수량을 입력해주세요', ok: false });
-      return;
-    }
-    const material = materials.find((m) => m.name === materialName.trim());
-    if (!material) {
-      setMessage({ text: '등록된 원재료명과 일치하지 않아요', ok: false });
       return;
     }
     setMessage(null);
     keyRef.current += 1;
     const key = keyRef.current;
-    const client = clientName.trim();
+    const clientName = client.name;
+    const picked = material;
     setRows((current) => [...current, {
-      key, materialCode: material.code, materialName: material.name, qty: parseFloat(qty), unitPrice: null,
-      taxType: '과세', clientName: client, returnReason: '', checked: true,
+      key, materialCode: picked.code, materialName: picked.name, qty: parseFloat(qty), unitPrice: null,
+      taxType: '과세', clientName, returnReason: '', checked: true,
     }]);
-    setMaterialName('');
+    setMaterial(null);
     setQty('');
     try {
-      const price = await fetchLastPrice(material.code, client);
+      const price = await fetchLastPrice(picked.code, clientName);
       if (price != null) setRows((current) => current.map((row) => (row.key === key && (row.unitPrice == null || row.unitPrice === '') ? { ...row, unitPrice: price } : row)));
     } catch {
       // 못 받아도 손으로 적는다
@@ -382,17 +390,9 @@ export function ReturnDialog({ open, onClose, onRegistered }: {
           </Box>
         </Box>
 
-        <Autocomplete
-          freeSolo options={vendors} value={clientName} inputValue={clientName}
-          onInputChange={(_event, value) => setClientName(value)}
-          renderInput={(params) => <TextField {...params} size="small" margin="none" label="거래처" placeholder="직접 추가할 품목의 거래처명" />}
-        />
+        <PickerField label="거래처" value={client} onOpen={() => setClientPickerOpen(true)} />
         <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) auto', gap: 1, alignItems: 'center' }}>
-          <Autocomplete
-            freeSolo options={materials.map((m) => m.name)} value={materialName} inputValue={materialName}
-            onInputChange={(_event, value) => setMaterialName(value)}
-            renderInput={(params) => <TextField {...params} size="small" margin="none" label="품목" placeholder="원재료명 입력" />}
-          />
+          <PickerField label="품목" value={material} onOpen={() => setMaterialPickerOpen(true)} />
           <TextField type="number" size="small" margin="none" label="반품수량" placeholder="예: 20" value={qty} onChange={(event) => setQty(event.target.value)} />
           <Button variant="outlined" startIcon={<AddIcon />} onClick={() => void addManual()}>목록에 추가</Button>
         </Box>
@@ -420,6 +420,20 @@ export function ReturnDialog({ open, onClose, onRegistered }: {
         <Button onClick={onClose}>닫기</Button>
         <Button variant="contained" color="error" disabled={saving} onClick={confirm}>선택 항목 반품 확정</Button>
       </DialogActions>
+      <MasterPickerDialog
+        label="거래처"
+        open={clientPickerOpen}
+        search={searchClients}
+        onClose={() => setClientPickerOpen(false)}
+        onChange={setClient}
+      />
+      <MasterPickerDialog
+        label="원재료"
+        open={materialPickerOpen}
+        search={searchMaterials}
+        onClose={() => setMaterialPickerOpen(false)}
+        onChange={setMaterial}
+      />
       <ConfirmDialog open={ask != null} title="반품 확정" message={ask ?? ''} confirmLabel="반품 처리"
         onCancel={() => setAsk(null)} onConfirm={() => { setAsk(null); void submit(); }} />
     </Dialog>

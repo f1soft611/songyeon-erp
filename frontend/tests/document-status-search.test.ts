@@ -7,6 +7,16 @@ import {
 import type { DocumentStatusSearchValues } from '../src/pages/groupware/documents/status/types/documentStatusSearch.types';
 
 describe('document status search helpers', () => {
+  it('preserves the confirmed reference action filter', () => {
+    expect(toDocumentStatusFilters('', {
+      myParticipantType: 'REFERENCE',
+      myActionStatus: 'CONFIRMED',
+    })).toEqual({
+      myParticipantType: 'REFERENCE',
+      myActionStatus: 'CONFIRMED',
+    });
+  });
+
   it('maps trimmed inputs and date ranges to the existing filter names', () => {
     expect(toDocumentStatusFilters(' plan ', {
       electronicApprovalId: 41,

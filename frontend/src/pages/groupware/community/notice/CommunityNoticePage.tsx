@@ -38,8 +38,10 @@ import { NoticeSummaryPanel } from './components/NoticeSummaryPanel';
 import { deriveNoticeSummary } from './data/noticeSummary';
 import { toNoticeViewItems } from './data/noticeViewAdapter';
 import {
+  buildNoticeShareLink,
   downloadNoticeAttachment,
   fetchNoticePostDetail,
+  getSharedNoticePreview,
 } from './services/noticeBoardService';
 import type {
   NoticeEditorDraft,
@@ -55,21 +57,33 @@ type CommunityNoticePageProps = {
   selectedModule: ModuleItem;
   currentMenuName: string;
   content: PageContent;
+  requestedPostId?: number | null;
+  onRequestedPostClose?: () => void;
 };
 
 export function CommunityNoticePage({
   selectedModule,
   currentMenuName,
   content,
+  requestedPostId,
+  onRequestedPostClose,
 }: CommunityNoticePageProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const { showError, showSuccess } = useNotification();
-  const [dashboardPostId] = useState(() => {
+  const [initialDashboardPostId] = useState(() => {
     const value = Number(new URLSearchParams(window.location.search).get('dashboardPostId'));
     return Number.isSafeInteger(value) && value > 0 ? value : null;
   });
-  const dashboardNoticeOpened = useRef(false);
+  const dashboardPostId = requestedPostId === undefined ? initialDashboardPostId : requestedPostId;
+  const [noticeShareToken] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.getAll('share').length === 1 && searchParams.size === 1
+      ? searchParams.get('share')
+      : null;
+  });
+  const dashboardNoticeOpened = useRef<number | null>(null);
+  const sharedNoticeOpened = useRef(false);
   const hasCreatePermission = true;
   const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [pendingPinnedNotice, setPendingPinnedNotice] =
@@ -130,6 +144,16 @@ export function CommunityNoticePage({
     showError,
     showSuccess,
   });
+  const handleShareNotice = useCallback(async (noticeId: number) => {
+    try {
+      const link = await buildNoticeShareLink(noticeId);
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(link);
+      showSuccess('공지 공유 링크를 복사했습니다.');
+    } catch {
+      showError('공지 공유 링크를 복사하지 못했습니다.');
+    }
+  }, [showError, showSuccess]);
   const {
     handleAddComment,
     handleUpdateComment,
@@ -206,11 +230,34 @@ export function CommunityNoticePage({
   }, [loadNoticePosts]);
 
   useEffect(() => {
-    if (dashboardPostId === null || dashboardNoticeOpened.current || isInitialLoading || errorMessage) return;
-    dashboardNoticeOpened.current = true;
+    if (dashboardPostId === null) {
+      dashboardNoticeOpened.current = null;
+      return;
+    }
+    if (dashboardNoticeOpened.current === dashboardPostId || isInitialLoading || errorMessage) return;
+    dashboardNoticeOpened.current = dashboardPostId;
     const exists = [...noticeItems, ...pinnedNoticeItems].some((item) => item.id === dashboardPostId);
     void handleSelectNotice({ id: dashboardPostId, appendMissing: !exists });
-  }, [dashboardPostId, isInitialLoading, errorMessage, noticeItems, pinnedNoticeItems, handleSelectNotice]);
+  }, [noticeShareToken, dashboardPostId, isInitialLoading, errorMessage, noticeItems, pinnedNoticeItems, handleSelectNotice]);
+
+  useEffect(() => {
+    if (dashboardPostId !== null || !noticeShareToken || sharedNoticeOpened.current || isInitialLoading || errorMessage) return;
+    sharedNoticeOpened.current = true;
+    let active = true;
+    void getSharedNoticePreview(noticeShareToken)
+      .then((post) => {
+        if (active) {
+          return handleSelectNotice({
+            id: Number(post.postId),
+            appendMissing: true,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) showError('공유 공지를 불러오지 못했습니다.');
+      });
+    return () => { active = false; };
+  }, [dashboardPostId, noticeShareToken, isInitialLoading, errorMessage, handleSelectNotice, showError]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = useMemo(
     () => [
@@ -250,7 +297,10 @@ export function CommunityNoticePage({
 
   const selectedNoticePanel = selectedNotice ? (
     <PostDetailPanel
-      onClose={handleCloseNoticeDetail}
+      onClose={() => {
+        handleCloseNoticeDetail();
+        onRequestedPostClose?.();
+      }}
       isLoading={selectedNoticeLoadingId === selectedNoticeId}
       loadingLabel="공지사항 상세 불러오는 중"
     >
@@ -273,6 +323,8 @@ export function CommunityNoticePage({
         onDeleteCommentAttachment={handleDeleteCommentAttachment}
         serverItemRevision={serverItemRevision}
         onDelete={handleDeleteNotice}
+        onShare={handleShareNotice}
+        onOpenNotice={(id) => void handleSelectNotice({ id, appendMissing: true })}
         onTogglePinned={handleTogglePinned}
         onEdit={(item) => {
           const mappedAttachments = (item.attachmentDetails ?? []).map(
@@ -509,6 +561,8 @@ export function CommunityNoticePage({
                       onDeleteCommentAttachment={handleDeleteCommentAttachment}
                       serverItemRevision={serverItemRevision}
                       onDelete={handleDeleteNotice}
+                      onShare={handleShareNotice}
+                      onOpenNotice={(id) => void handleSelectNotice({ id, appendMissing: true })}
                       onTogglePinned={handleTogglePinned}
                       onEdit={async (item) => {
                         const mappedAttachments = (
@@ -610,7 +664,10 @@ export function CommunityNoticePage({
       </PageLoadBoundary>
 
       {selectedNotice && (
-        <PageAreaOverlay onClose={handleCloseNoticeDetail}>
+        <PageAreaOverlay onClose={() => {
+          handleCloseNoticeDetail();
+          onRequestedPostClose?.();
+        }}>
           {selectedNoticePanel}
         </PageAreaOverlay>
       )}

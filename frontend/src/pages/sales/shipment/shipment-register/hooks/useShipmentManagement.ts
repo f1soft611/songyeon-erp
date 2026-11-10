@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import { useNotification } from '../../../../../shared/context/NotificationContext';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { clientProductDetailValues, readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { restoreBlockedGridDeletes } from '../../../../../shared/utils/gridDelete';
 import { unknownClientMessage } from '../../../../co/master/item-master/utils/productBom';
 import { fetchOrderClientOptions, fetchOrderProducts } from '../../../order/order-register/services/salesOrder.service';
@@ -61,8 +62,10 @@ export function useShipmentManagement() {
   const [confirmDelete, setConfirmDelete] = useState(0);
   // 고른(오른쪽 클릭한) 줄에 지울 수 없는 줄이 있으면 [행 삭제]를 끈다
   const [selectionLocked, setSelectionLocked] = useState(false);
-  const [date, setDate] = useState(() => todayDash());
-  const [loadedDate, setLoadedDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 출고일 · 상세 조회 조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [session] = useState(() => readSearchSession('sales-shipment-register', { date: todayDash(), filter: NO_FILTER }));
+  const [date, setDate] = useState(session.date);
+  const [loadedDate, setLoadedDate] = useState(session.date);
   const [rows, setRows] = useState<ShipmentRow[]>([]);
   // F1-Grid 는 받은 목록을 표 안에 따로 들고 있어서, 줄 자체가 바뀌면 표를 새로 그린다
   const [version, setVersion] = useState(0);
@@ -81,7 +84,7 @@ export function useShipmentManagement() {
   const removedRef = useRef<Map<string, ShipmentRow>>(new Map());
   const clientNames = clients.map((client) => client.name);
   // 상세 조회(⌄)로 적용한 조건. 받은 출하 중 맞는 줄만 표에 둔다(다른 날짜를 조회하는 것과 같이 다룬다)
-  const [detailFilter, setDetailFilter] = useState<ShipmentDetailFilter>(NO_FILTER);
+  const [detailFilter, setDetailFilter] = useState<ShipmentDetailFilter>(session.filter);
   const detailFilterRef = useRef(detailFilter);
   detailFilterRef.current = detailFilter;
   const keepRemoved = () => {
@@ -111,6 +114,7 @@ export function useShipmentManagement() {
       setError('조회할 날짜를 먼저 선택해주세요');
       return;
     }
+    saveSearchSession('sales-shipment-register', { date: shipDate, filter: detailFilterRef.current });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -137,10 +141,10 @@ export function useShipmentManagement() {
 
   // 송연처럼 열면 오늘 출하를 바로 보여주고, 매출 거래처·품목 후보를 한 번 받는다(못 받으면 고르기 목록 없이)
   useEffect(() => {
-    void loadRows(todayDash());
+    void loadRows(session.date);
     fetchOrderClientOptions().then(setClients).catch(() => undefined);
     fetchOrderProducts().then(setProducts).catch(() => undefined);
-  }, [loadRows]);
+  }, [loadRows, session]);
 
   // 송연 "+ 출하 추가"·수주등록 가져오기: 저장 전 새 줄. 출고일은 조회 날짜(가져온 건은 물류출고일)
   const addRows = (orders?: PendingOrder[]) => {
@@ -369,6 +373,7 @@ export function useShipmentManagement() {
   };
 
   return {
+    savedDetailValues: clientProductDetailValues(session.filter),
     gridRef,
     date,
     setDate,

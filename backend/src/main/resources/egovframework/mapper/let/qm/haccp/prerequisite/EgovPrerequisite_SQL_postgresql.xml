@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 품질관리 - HACCP(선행) (송연 qsurvey.py). 2026-11-09 점검표 열기 · 임시저장 · 현황 · 양식 만들기.
+     빈 값(NULL)을 넣는 정수 칸은 jdbcType=INTEGER 를 적는다(안 적으면 글자로 보내 정수 칸에 넣지 못한다).
+     표는 송연 qdoc_* 그대로(20261109_001). 설문형만 본다(kind = '설문형'). 쓴 사람은 사번(employees.id) -->
+<mapper namespace="PrerequisiteDAO">
+
+    <!-- 설문형 양식 + 지금 판 + 지금 판의 질문 수 -->
+    <sql id="surveyFormColumns">
+        f.id AS "id",
+        f.name AS "name",
+        f.category AS "category",
+        f.bind_type AS "bindType",
+        COALESCE(f.active, 1) AS "active",
+        f.cycle AS "cycle",
+        v.id AS "versionId",
+        v.label AS "versionLabel",
+        v.survey_json AS "surveyJson",
+        (SELECT COUNT(*)::int FROM qdoc_item i WHERE i.version_id = v.id AND i.row_kind = 'single') AS "questions"
+    </sql>
+    <sql id="currentVersion">
+        LEFT JOIN LATERAL (
+            SELECT cv.id, cv.label, cv.survey_json
+              FROM qdoc_version cv
+             WHERE cv.form_id = f.id AND cv.is_current = 1
+             ORDER BY cv.id DESC
+             LIMIT 1
+        ) v ON TRUE
+    </sql>
+
+    <!-- 쓸 서류(송연 pick_forms): 살아 있고 질문이 있는 것. 질문이 없으면 골라도 체크할 것이 없다 -->
+    <select id="selectPickForms" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyFormRowVO">
+        SELECT *
+          FROM (
+            SELECT <include refid="surveyFormColumns"/>, f.sort_order AS "sortOrder"
+              FROM qdoc_form f
+              <include refid="currentVersion"/>
+             WHERE f.kind = '설문형'
+               AND COALESCE(f.active, 1) = 1
+          ) x
+         WHERE x."versionId" IS NOT NULL AND x."questions" &gt; 0
+         ORDER BY x."sortOrder", x."name"
+    </select>
+
+    <select id="selectSurveyForm" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyFormRowVO">
+        SELECT <include refid="surveyFormColumns"/>
+          FROM qdoc_form f
+          <include refid="currentVersion"/>
+         WHERE f.id = #{formId} AND f.kind = '설문형'
+    </select>
+
+    <select id="selectItems" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyItemVO">
+        SELECT i.id AS "id",
+               i.parent_id AS "parentId",
+               i.row_kind AS "rowKind",
+               i.label AS "label",
+               COALESCE(i.topic, '') AS "topic",
+               COALESCE(i.required, 1) AS "required",
+               i.sort_order AS "sortOrder"
+          FROM qdoc_item i
+         WHERE i.version_id = #{versionId}
+         ORDER BY i.sort_order, i.id
+    </select>
+
+    <select id="selectClientByCode" parameterType="string" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyClientVO">
+        SELECT c.id AS "id", c.client_code AS "clientCode", c.name AS "name"
+          FROM clients c
+         WHERE c.client_code = #{clientCode}
+    </select>
+
+    <select id="selectClientName" parameterType="int" resultType="string">
+        SELECT c.name FROM clients c WHERE c.id = #{clientId}
+    </select>
+
+    <!-- 그 기간에 이미 쓴 장(송연 _in_period). 같은 서류 · 같은 대상(날짜마다 서류는 대상 0) -->
+    <select id="selectRecordInPeriod" parameterType="map" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO">
+        SELECT r.id AS "id", r.status AS "status", r.doc_date AS "docDate"
+          FROM qdoc_record r
+         WHERE r.form_id = #{formId}
+           AND COALESCE(r.bind_id, 0) = #{bindId}
+           AND r.doc_date BETWEEN #{start} AND #{end}
+         ORDER BY r.id DESC
+         LIMIT 1
+    </select>
+
+    <select id="selectRecordOnDate" parameterType="map" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO">
+        SELECT r.id AS "id", r.status AS "status", r.doc_date AS "docDate"
+          FROM qdoc_record r
+         WHERE r.form_id = #{formId}
+           AND COALESCE(r.bind_id, 0) = #{bindId}
+           AND r.doc_date = #{docDate}
+         ORDER BY r.id DESC
+         LIMIT 1
+    </select>
+
+    <insert id="insertRecord" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO qdoc_record (form_id, version_id, bind_type, bind_id, doc_date, status, score, score_max, written_by, written_at)
+        VALUES (#{formId}, #{versionId}, #{bindType}, #{bindId,jdbcType=INTEGER}, #{docDate}, #{status}, #{score}, #{scoreMax}, #{writtenBy}, CURRENT_TIMESTAMP)
+    </insert>
+
+    <!-- 같은 기간 · 같은 날 장을 고친다. 판은 지금 판으로, 쓴 사람은 마지막으로 저장한 사람(송연과 같음). 반려 사유는 그대로 둔다 -->
+    <update id="updateRecord" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO">
+        UPDATE qdoc_record
+           SET version_id = #{versionId},
+               doc_date = #{docDate},
+               status = #{status},
+               score = #{score},
+               score_max = #{scoreMax},
+               written_by = #{writtenBy},
+               written_at = CURRENT_TIMESTAMP
+         WHERE id = #{id}
+    </update>
+
+    <delete id="deleteAnswers" parameterType="int">
+        DELETE FROM qdoc_answer WHERE record_id = #{recordId}
+    </delete>
+
+    <insert id="insertAnswer" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyAnswerVO">
+        INSERT INTO qdoc_answer (record_id, item_id, value_text, note, defect)
+        VALUES (#{recordId}, #{itemId}, #{valueText}, #{note}, #{defect})
+    </insert>
+
+    <!-- 쓴 장 + 서류 · 쓴 사람 이름 · 거래처 -->
+    <sql id="recordColumns">
+        r.id AS "id",
+        r.form_id AS "formId",
+        r.version_id AS "versionId",
+        r.bind_type AS "bindType",
+        r.bind_id AS "bindId",
+        r.doc_date AS "docDate",
+        r.status AS "status",
+        r.score AS "score",
+        r.score_max AS "scoreMax",
+        r.written_by AS "writtenBy",
+        we.name AS "writtenByNm",
+        TO_CHAR(r.written_at, 'YYYY-MM-DD HH24:MI') AS "writtenAt",
+        r.approved_by AS "approvedBy",
+        ae.name AS "approvedByNm",
+        TO_CHAR(r.approved_at, 'YYYY-MM-DD HH24:MI') AS "approvedAt",
+        r.reject_reason AS "rejectReason",
+        f.name AS "formName",
+        f.category AS "category",
+        f.cycle AS "cycle",
+        CASE WHEN r.bind_type = 'client' THEN COALESCE(c.name, '(지워진 거래처)') ELSE '' END AS "bindName",
+        c.client_code AS "clientCode"
+    </sql>
+    <sql id="recordJoins">
+          JOIN qdoc_form f ON f.id = r.form_id AND f.kind = '설문형'
+          LEFT JOIN employees we ON we.id = r.written_by
+          LEFT JOIN employees ae ON ae.id = r.approved_by
+          LEFT JOIN clients c ON r.bind_type = 'client' AND c.id = r.bind_id
+    </sql>
+
+    <!-- 현황 목록(송연 list_records): 점검일 최근 것 먼저, 최대 300줄 -->
+    <select id="selectRecords" parameterType="map" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO">
+        SELECT <include refid="recordColumns"/>
+          FROM qdoc_record r
+          <include refid="recordJoins"/>
+         WHERE 1 = 1
+        <if test="start != null and end != null">
+           AND r.doc_date BETWEEN #{start} AND #{end}
+        </if>
+        <if test="formId != null">
+           AND r.form_id = #{formId}
+        </if>
+         ORDER BY r.doc_date DESC, r.id DESC
+         LIMIT 300
+    </select>
+
+    <!-- 쓴 장 한 장(송연 get_record): 그 장이 쓰인 판으로 연다 -->
+    <select id="selectRecord" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyRecordVO">
+        SELECT <include refid="recordColumns"/>,
+               v.label AS "versionLabel",
+               v.survey_json AS "surveyJson"
+          FROM qdoc_record r
+          <include refid="recordJoins"/>
+          JOIN qdoc_version v ON v.id = r.version_id
+         WHERE r.id = #{recordId}
+    </select>
+
+    <select id="selectAnswers" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyAnswerVO">
+        SELECT a.record_id AS "recordId", a.item_id AS "itemId", a.value_text AS "valueText", a.note AS "note", a.defect AS "defect"
+          FROM qdoc_answer a
+         WHERE a.record_id = #{recordId}
+    </select>
+
+    <select id="countRecordsBetween" parameterType="map" resultType="int">
+        SELECT COUNT(*)::int FROM qdoc_record WHERE form_id = #{formId} AND doc_date BETWEEN #{start} AND #{end}
+    </select>
+
+    <select id="selectBindIdsBefore" parameterType="map" resultType="int">
+        SELECT DISTINCT bind_id FROM qdoc_record WHERE form_id = #{formId} AND bind_id IS NOT NULL AND doc_date &lt; #{before}
+    </select>
+
+    <select id="selectBindIdsBetween" parameterType="map" resultType="int">
+        SELECT DISTINCT bind_id FROM qdoc_record WHERE form_id = #{formId} AND bind_id IS NOT NULL AND doc_date BETWEEN #{start} AND #{end}
+    </select>
+
+    <!-- ================================================================ 양식 만들기(2026-11-09, 송연 qsurvey.py 양식 · 판 · 줄) -->
+
+    <!-- 양식 목록(송연 list_forms): 살아 있는 것 먼저, 그다음 순서 · 이름 -->
+    <select id="selectForms" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyFormRowVO">
+        SELECT <include refid="surveyFormColumns"/>,
+               (SELECT COUNT(*)::int FROM qdoc_item i WHERE i.version_id = v.id AND i.row_kind = 'group') AS "groups",
+               (SELECT COUNT(*)::int FROM qdoc_record r WHERE r.form_id = f.id) AS "records"
+          FROM qdoc_form f
+          <include refid="currentVersion"/>
+         WHERE f.kind = '설문형'
+         ORDER BY COALESCE(f.active, 1) DESC, f.sort_order, f.name
+    </select>
+
+    <!-- 이름 겹침: 기록형 · 설문형을 가리지 않는다(원본과 같음) -->
+    <select id="countFormName" parameterType="map" resultType="int">
+        SELECT COUNT(*)::int FROM qdoc_form WHERE name = #{name}
+        <if test="excludeId != null">
+           AND id &lt;&gt; #{excludeId}
+        </if>
+    </select>
+
+    <!-- 새 서류: 결재는 늘 받는다(needs_approval 1), 순서는 맨 뒤 -->
+    <insert id="insertForm" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyFormSaveVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO qdoc_form (name, category, kind, bind_type, food_type, needs_approval, active, sort_order, created_by, cycle)
+        VALUES (#{name}, #{category}, '설문형', #{bindType}, NULL, 1, 1,
+                (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM qdoc_form), #{createdBy}, #{cycle})
+    </insert>
+
+    <update id="updateForm" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyFormSaveVO">
+        UPDATE qdoc_form
+           SET name = #{name}, category = #{category}, bind_type = #{bindType}, cycle = #{cycle}, needs_approval = 1
+         WHERE id = #{id} AND kind = '설문형'
+    </update>
+
+    <update id="updateFormActive" parameterType="map">
+        UPDATE qdoc_form SET active = #{active} WHERE id = #{formId} AND kind = '설문형'
+    </update>
+
+    <select id="countRecordsByForm" parameterType="int" resultType="int">
+        SELECT COUNT(*)::int FROM qdoc_record WHERE form_id = #{formId}
+    </select>
+
+    <select id="countRecordsByVersion" parameterType="int" resultType="int">
+        SELECT COUNT(*)::int FROM qdoc_record WHERE version_id = #{versionId}
+    </select>
+
+    <select id="countVersions" parameterType="int" resultType="int">
+        SELECT COUNT(*)::int FROM qdoc_version WHERE form_id = #{formId}
+    </select>
+
+    <select id="selectCurrentVersion" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyVersionVO">
+        SELECT v.id AS "id", v.form_id AS "formId", v.label AS "label", v.memo AS "memo", v.survey_json AS "surveyJson"
+          FROM qdoc_version v
+         WHERE v.form_id = #{formId} AND v.is_current = 1
+         ORDER BY v.id DESC
+         LIMIT 1
+    </select>
+
+    <insert id="insertVersion" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyVersionVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO qdoc_version (form_id, label, memo, is_current, created_by, survey_json)
+        VALUES (#{formId}, #{label}, #{memo}, 1, #{createdBy}, #{surveyJson})
+    </insert>
+
+    <update id="clearCurrentVersion" parameterType="int">
+        UPDATE qdoc_version SET is_current = 0 WHERE form_id = #{formId}
+    </update>
+
+    <update id="updateVersionSurvey" parameterType="map">
+        UPDATE qdoc_version SET survey_json = #{surveyJson} WHERE id = #{versionId}
+    </update>
+
+    <select id="selectItemsForCopy" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyItemVO">
+        SELECT i.id AS "id", i.parent_id AS "parentId", i.sort_order AS "sortOrder", i.row_kind AS "rowKind", i.label AS "label",
+               i.answer_type AS "answerType", i.topic AS "topic", i.required AS "required", i.has_note AS "hasNote",
+               i.has_defect AS "hasDefect", i.options_json AS "optionsJson", i.score_json AS "scoreJson"
+          FROM qdoc_item i
+         WHERE i.version_id = #{versionId}
+         ORDER BY i.sort_order, i.id
+    </select>
+
+    <insert id="insertItem" parameterType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyItemVO" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO qdoc_item (version_id, parent_id, sort_order, row_kind, label, answer_type, topic, required, has_note, has_defect, options_json, score_json)
+        VALUES (#{versionId}, #{parentId,jdbcType=INTEGER}, #{sortOrder}, #{rowKind}, #{label}, #{answerType,jdbcType=VARCHAR}, #{topic,jdbcType=VARCHAR},
+                #{required,jdbcType=INTEGER}, #{hasNote,jdbcType=INTEGER}, #{hasDefect,jdbcType=INTEGER}, #{optionsJson,jdbcType=VARCHAR}, #{scoreJson,jdbcType=VARCHAR})
+    </insert>
+
+    <!-- 설문형 서류의 줄 하나(송연 _item_form): 판 · 서류 번호 -->
+    <select id="selectItem" parameterType="int" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyItemVO">
+        SELECT i.id AS "id", i.parent_id AS "parentId", i.sort_order AS "sortOrder", i.row_kind AS "rowKind", i.label AS "label",
+               COALESCE(i.topic, '') AS "topic", COALESCE(i.required, 1) AS "required", i.version_id AS "versionId", f.id AS "formId"
+          FROM qdoc_item i
+          JOIN qdoc_version v ON v.id = i.version_id
+          JOIN qdoc_form f ON f.id = v.form_id AND f.kind = '설문형'
+         WHERE i.id = #{itemId}
+    </select>
+
+    <select id="selectItemIdBySort" parameterType="map" resultType="int">
+        SELECT id FROM qdoc_item WHERE version_id = #{versionId} AND sort_order = #{sortOrder} ORDER BY id LIMIT 1
+    </select>
+
+    <update id="shiftItemsAfter" parameterType="map">
+        UPDATE qdoc_item SET sort_order = sort_order + 1 WHERE version_id = #{versionId} AND sort_order &gt; #{sortOrder}
+    </update>
+
+    <select id="maxItemSort" parameterType="int" resultType="int">
+        SELECT COALESCE(MAX(sort_order), 0)::int FROM qdoc_item WHERE version_id = #{versionId}
+    </select>
+
+    <update id="updateItem" parameterType="map">
+        UPDATE qdoc_item SET label = #{label}, topic = #{topic}, required = #{required} WHERE id = #{itemId}
+    </update>
+
+    <select id="selectChildIds" parameterType="int" resultType="int">
+        SELECT id FROM qdoc_item WHERE parent_id = #{parentId} ORDER BY sort_order DESC, id DESC
+    </select>
+
+    <delete id="deleteItem" parameterType="int">
+        DELETE FROM qdoc_item WHERE id = #{itemId}
+    </delete>
+
+    <select id="selectSiblings" parameterType="map" resultType="egovframework.let.qm.haccp.prerequisite.domain.model.SurveyItemVO">
+        SELECT i.id AS "id", i.sort_order AS "sortOrder"
+          FROM qdoc_item i
+         WHERE i.version_id = #{versionId}
+           AND COALESCE(i.parent_id, 0) = COALESCE(#{parentId,jdbcType=INTEGER}, 0)
+         ORDER BY i.sort_order, i.id
+    </select>
+
+    <update id="updateItemSort" parameterType="map">
+        UPDATE qdoc_item SET sort_order = #{sortOrder} WHERE id = #{itemId}
+    </update>
+</mapper>

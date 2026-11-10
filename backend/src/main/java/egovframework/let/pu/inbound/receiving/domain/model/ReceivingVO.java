@@ -54,6 +54,8 @@ public class ReceivingVO implements Serializable {
     private Double returnedQty;
     @Schema(description = "앞으로 더 반품할 수 있는 수량(반품 줄은 0)")
     private Double returnableQty;
+    @Schema(description = "이 원재료의 지금 재고(materials.stock_qty). 지우면 재고가 마이너스가 되는 입고를 막을 때 쓴다(2026-11-05)")
+    private Double stockQty;
     private Long poId;
     private String warehouse;
     @Schema(description = "창고코드(2026-10-26 저장하는 값)")

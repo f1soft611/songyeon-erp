@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { F1GridChanges } from '../../../../../shared/components/f1-grid';
 import { useNotification } from '../../../../../shared/context/NotificationContext';
+import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import type { CommonCodeItemRow } from '../../../master/common-code/types/commonCodeManagement.types';
 import {
   createDraftForm,
@@ -34,8 +35,9 @@ function toPayload(
   };
 }
 
-export function useDraftFormManagement() {
+export function useDraftFormManagement(initialFilters: DraftFormFilters = {}) {
   const { showSuccess } = useNotification();
+  const initialFiltersRef = useRef(initialFilters);
   const [rows, setRows] = useState<DraftFormRow[]>([]);
   const [categoryItems, setCategoryItems] = useState<CommonCodeItemRow[]>([]);
   const [cycleItems, setCycleItems] = useState<CommonCodeItemRow[]>([]);
@@ -48,19 +50,30 @@ export function useDraftFormManagement() {
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [gridKey, setGridKey] = useState(0);
-  const [appliedFilters, setAppliedFilters] = useState<DraftFormFilters>({});
+  const [appliedFilters, setAppliedFilters] = useState<DraftFormFilters>(initialFilters);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
+  const { start: startOptions, succeed: succeedOptions, fail: failOptions, ...optionsInitialLoad } = useInitialLoadState();
+  const loadVersion = useRef(0);
+  const optionsVersion = useRef(0);
 
   const loadRows = useCallback(
     async (
       filters: DraftFormFilters = {},
       options: { quiet?: boolean } = {},
     ) => {
+      const version = ++loadVersion.current;
       if (!options.quiet) setLoading(true);
+      start();
       setError('');
       try {
-        setRows(await fetchDraftForms(filters));
+        const nextRows = await fetchDraftForms(filters);
+        if (version !== loadVersion.current) return false;
+        setRows(nextRows);
+        succeed();
         return true;
       } catch (loadError) {
+        if (version !== loadVersion.current) return false;
+        fail(loadError);
         setError(
           loadError instanceof Error
             ? loadError.message
@@ -68,35 +81,45 @@ export function useDraftFormManagement() {
         );
         return false;
       } finally {
-        if (!options.quiet) setLoading(false);
+        if (version === loadVersion.current && !options.quiet) setLoading(false);
       }
     },
-    [],
+    [start, succeed, fail],
   );
 
   const loadOptions = useCallback(async () => {
+    const version = ++optionsVersion.current;
+    startOptions();
     setOptionsLoading(true);
     setOptionsLoaded(false);
     try {
       const options = await fetchDraftFormOptions();
+      if (version !== optionsVersion.current) return;
       setCategoryGroupId(options.categoryGroup?.id ?? '');
       setCategoryItems(options.categoryItems);
       setCycleItems(options.cycleItems);
       setUsers(options.users);
       setOptionsLoaded(true);
+      succeedOptions();
     } catch (loadError) {
+      if (version !== optionsVersion.current) return;
+      failOptions(loadError);
       setError(
         loadError instanceof Error
           ? loadError.message
           : '공통코드 또는 사용자 목록을 불러오지 못했습니다.',
       );
     } finally {
-      setOptionsLoading(false);
+      if (version === optionsVersion.current) setOptionsLoading(false);
     }
-  }, []);
+  }, [startOptions, succeedOptions, failOptions]);
 
   useEffect(() => {
-    void Promise.all([loadRows({}), loadOptions()]);
+    void Promise.all([loadRows(initialFiltersRef.current), loadOptions()]);
+    return () => {
+      ++loadVersion.current;
+      ++optionsVersion.current;
+    };
   }, [loadOptions, loadRows]);
 
   const applyFilters = useCallback(
@@ -168,6 +191,8 @@ export function useDraftFormManagement() {
   );
 
   return {
+    initialLoad,
+    optionsInitialLoad,
     rows,
     categoryItems,
     cycleItems,

@@ -182,7 +182,7 @@ export function TaxInvoicePage({ selectedModule, currentMenuName, content, bread
           <Tab value="batch" label="월단위 일괄발행" />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {!configured && (
           <Alert severity="warning">
             아직 전자세금계산서 발급업체(팝빌 등) API 키가 연결되지 않았어요.{' '}

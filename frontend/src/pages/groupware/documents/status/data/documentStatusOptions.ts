@@ -27,6 +27,7 @@ export const ACTION_STATUS_OPTIONS = [
   { value: 'APPROVED', label: '승인' },
   { value: 'REJECTED', label: '반려' },
   { value: 'RETURNED', label: '보완요청' },
+  { value: 'CONFIRMED', label: '확인완료' },
 ];
 
 export const DOCUMENT_TYPES = new Set(DOCUMENT_TYPE_OPTIONS.map(({ value }) => value));

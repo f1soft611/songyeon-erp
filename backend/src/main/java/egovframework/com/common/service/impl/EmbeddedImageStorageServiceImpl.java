@@ -2,6 +2,7 @@ package egovframework.com.common.service.impl;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -23,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriUtils;
 
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
@@ -33,12 +35,12 @@ import egovframework.com.common.domain.model.EmbeddedImageUploadVO;
 import egovframework.com.common.domain.repository.CommonFileDAO;
 import egovframework.com.common.service.EmbeddedImageStorageService;
 import io.minio.StatObjectResponse;
+import io.minio.errors.ErrorResponseException;
 
 @Service("embeddedImageStorageService")
 public class EmbeddedImageStorageServiceImpl implements EmbeddedImageStorageService {
 
     private static final long DEFAULT_MAX_FILE_SIZE = 10L * 1024L * 1024L;
-    private static final long MAX_PRESIGN_EXPIRY_SECONDS = 7L * 24L * 60L * 60L;
     private static final String TEMPORARY_PREFIX = "embedded-image-temp";
     private static final String TEMPORARY_TAG_KEY = "s-erp-temp-owner";
     private static final String TEMPORARY_TAG_VALUE = "embedded-image";
@@ -48,21 +50,16 @@ public class EmbeddedImageStorageServiceImpl implements EmbeddedImageStorageServ
     private final CommonFileDAO commonFileDAO;
     private final String bucketName;
     private final long maxFileSize;
-    private final long presignExpirySeconds;
 
     public EmbeddedImageStorageServiceImpl(
             MinioStorageService storageService,
             CommonFileDAO commonFileDAO,
             @Value("${storage.bucket:${STORAGE_BUCKET:document-attachments}}") String bucketName,
-            @Value("${storage.embeddedImageMaxFileSize:${STORAGE_EMBEDDED_IMAGE_MAX_FILE_SIZE:10485760}}") long maxFileSize,
-            @Value("${storage.presignExpirySeconds:${STORAGE_PRESIGN_EXPIRY_SECONDS:600}}") long presignExpirySeconds) {
+            @Value("${storage.embeddedImageMaxFileSize:${STORAGE_EMBEDDED_IMAGE_MAX_FILE_SIZE:10485760}}") long maxFileSize) {
         this.storageService = storageService;
         this.commonFileDAO = commonFileDAO;
         this.bucketName = StringUtils.hasText(bucketName) ? bucketName.trim() : "document-attachments";
         this.maxFileSize = maxFileSize > 0 ? maxFileSize : DEFAULT_MAX_FILE_SIZE;
-        this.presignExpirySeconds = presignExpirySeconds > 0
-                ? Math.min(presignExpirySeconds, MAX_PRESIGN_EXPIRY_SECONDS)
-                : 600L;
     }
 
     @Override
@@ -94,11 +91,52 @@ public class EmbeddedImageStorageServiceImpl implements EmbeddedImageStorageServ
         result.setFileName(fileName);
         result.setFileSize((long) bytes.length);
         result.setMimeType(mimeType);
-        result.setPreviewUrl(storageService.getPresignedObjectUrl(
-                bucketName, objectKey, (int) presignExpirySeconds));
+        result.setPreviewUrl("/api/v1/common/embedded-images/temp/" + uploadToken
+                + "?fileName=" + UriUtils.encode(fileName, StandardCharsets.UTF_8));
         result.setObjectKey(objectKey);
         result.setBucketName(bucketName);
         return result;
+    }
+
+    @Override
+    public void streamTemporaryImage(Long tenantId, String uploadToken, String fileName,
+            HttpServletResponse response) throws Exception {
+        requireTenant(tenantId);
+        if (!isCanonicalUuid(uploadToken) || !StringUtils.hasText(fileName)
+                || !safeFileName(fileName).equals(fileName) || fileName.contains("\\")
+                || ".".equals(fileName) || "..".equals(fileName)
+                || fileName.chars().anyMatch(Character::isISOControl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "임시 이미지 정보가 올바르지 않습니다.");
+        }
+        String objectKey = temporaryObjectKey(tenantId, uploadToken, fileName);
+        try {
+            StatObjectResponse metadata = storageService.stat(bucketName, objectKey);
+            String mimeType = normalizeMimeType(metadata.contentType());
+            long size = metadata.size();
+            if (!isSupportedMimeType(mimeType) || size <= 0 || size > maxFileSize) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "임시 이미지 메타데이터가 올바르지 않습니다.");
+            }
+            try (InputStream input = storageService.download(bucketName, objectKey)) {
+                response.setContentType(mimeType);
+                response.setContentLengthLong(size);
+                response.setHeader("Cache-Control", "private, no-store");
+                response.setHeader("Content-Disposition", "inline");
+                response.setHeader("X-Content-Type-Options", "nosniff");
+                ServletOutputStream output = response.getOutputStream();
+                byte[] buffer = new byte[8192];
+                int length;
+                while ((length = input.read(buffer)) != -1) {
+                    output.write(buffer, 0, length);
+                }
+                output.flush();
+            }
+        } catch (ErrorResponseException exception) {
+            String code = exception.errorResponse().code();
+            if ("NoSuchKey".equals(code) || "NoSuchObject".equals(code)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "임시 이미지를 찾을 수 없습니다.");
+            }
+            throw exception;
+        }
     }
 
     @Override

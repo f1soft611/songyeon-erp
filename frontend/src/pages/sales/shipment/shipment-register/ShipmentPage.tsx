@@ -57,8 +57,9 @@ export function ShipmentPage({
   const [clientPicker, setClientPicker] = useState<{ apply: (changes: Partial<ShipmentRow>) => void } | null>(null);
   const [productPicker, setProductPicker] = useState<{ apply: (changes: Partial<ShipmentRow>) => void } | null>(null);
   // 상세 조회(⌄): 고치는 중인 값과 [조회]로 적용한 값(조건 칩)
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  // 돌아온 경우 마지막으로 조회한 조건을 칩으로 다시 보인다(2026-11-04)
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
   // 로트선택 단추는 누를 때 표의 값을 다시 읽으므로, 칸은 표를 새로 그릴 때(version)만 새로 만들고 단추는 마지막 함수를 부른다
   const openLotRef = useRef(management.openLot);
   openLotRef.current = management.openLot;
@@ -137,7 +138,7 @@ export function ShipmentPage({
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={{ borderRadius: 1, border: '1px solid rgba(148,163,184,0.18)', boxShadow: 'none', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5 }}>
           {!management.loading && management.rows.length === 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>이 날짜에 등록된 출하 예정이 없습니다</Typography>

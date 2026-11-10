@@ -11,7 +11,13 @@
     <!-- 버전 기능 전에 products 에 적어둔 라벨 -->
     <select id="selectProductLabel" parameterType="string" resultType="egovframework.let.qm.label.domain.model.LabelVO">
         SELECT
-            food_type AS "foodType",
+            <!-- 2026-11-05 products.food_type 은 공통코드 FOOD_TYPE 코드다. 라벨에는 이름을 찍는다(코드가 아니면 글자 그대로) -->
+            COALESCE((SELECT i.item_nm
+                      FROM tb_common_code_item i
+                      JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'FOOD_TYPE'
+                      JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                      WHERE i.item_code = food_type
+                      LIMIT 1), food_type) AS "foodType",
             net_weight AS "netWeight",
             ingredients_text AS "ingredientsText",
             allergens AS "allergens",
@@ -43,7 +49,9 @@
             manufacture_report_no, packaging_material, shelf_life_months, shelf_life_unit, storage,
             layout, extra, is_current, created_at, created_by
         ) VALUES (
-            #{productCode}, #{versionLabel}, #{note}, #{foodType}, #{netWeight}, #{ingredientsText}, #{allergens},
+            #{productCode}, #{versionLabel}, #{note},
+            <!-- 2026-11-05 식품유형도 공통코드 FOOD_TYPE 코드로(제품 값은 이름으로 받는다). 맞는 코드가 없으면 빈 값 -->
+            (SELECT ft.item_code FROM tb_common_code_item ft JOIN tb_common_code_group ftg ON ftg.common_code_group_id = ft.group_id AND ftg.group_code = 'FOOD_TYPE' JOIN tb_tenant ftt ON ftt.tenant_id = ftg.tenant_id AND ftt.tenant_code = 'SONGYEON' WHERE NULLIF(TRIM(#{foodType, jdbcType=VARCHAR}), '') IS NOT NULL AND (ft.item_code = TRIM(#{foodType, jdbcType=VARCHAR}) OR ft.item_nm = TRIM(#{foodType, jdbcType=VARCHAR})) ORDER BY CASE WHEN ft.item_code = TRIM(#{foodType, jdbcType=VARCHAR}) THEN 0 ELSE 1 END, ft.sort_order, ft.item_code LIMIT 1), #{netWeight}, #{ingredientsText}, #{allergens},
             #{manufactureReportNo}, #{packagingMaterial}, #{shelfLifeMonths, jdbcType=INTEGER}, #{shelfLifeUnit},
             (SELECT sm.item_code FROM tb_common_code_item sm JOIN tb_common_code_group smg ON smg.common_code_group_id = sm.group_id AND smg.group_code = 'STORAGE_METHOD' JOIN tb_tenant smt ON smt.tenant_id = smg.tenant_id AND smt.tenant_code = 'SONGYEON' WHERE NULLIF(#{storage, jdbcType=VARCHAR}, '') IS NOT NULL AND (sm.item_code = #{storage, jdbcType=VARCHAR} OR sm.item_nm = #{storage, jdbcType=VARCHAR} OR (split_part(sm.item_nm, '(', 1) &lt;&gt; '' AND strpos(#{storage, jdbcType=VARCHAR}, split_part(sm.item_nm, '(', 1)) &gt; 0)) ORDER BY CASE WHEN sm.item_code = #{storage, jdbcType=VARCHAR} THEN 0 WHEN sm.item_nm = #{storage, jdbcType=VARCHAR} THEN 1 ELSE 2 END, sm.sort_order, sm.item_code LIMIT 1),
             #{layoutJson}, #{extraJson}, #{isCurrent, jdbcType=INTEGER}, #{createdAt}, #{createdBy}

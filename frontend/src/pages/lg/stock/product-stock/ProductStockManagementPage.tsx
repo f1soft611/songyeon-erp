@@ -68,8 +68,8 @@ export function ProductStockManagementPage({
   const lotColumns = useMemo(() => createProductStockLotColumns(), []);
   const detailFields = useMemo(() => [...toPageSearchFields(columns), SORT_FIELD], [columns]);
   // 상세 조회(⌄): 고치는 중인 값(detailValues)과 [조회]로 적용한 값(appliedDetailValues, 조건 칩)
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -129,7 +129,7 @@ export function ProductStockManagementPage({
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Card sx={{ ...cardSx, flex: openRows.length > 0 ? 1.1 : 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1.75, mb: 1 }}>
             {management.loaded && !management.loading && rows.length === 0 && (

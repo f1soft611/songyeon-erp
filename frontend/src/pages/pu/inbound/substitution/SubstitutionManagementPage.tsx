@@ -79,13 +79,10 @@ export function SubstitutionManagementPage({
         }
         onDefaultSearch={management.search}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
             <Typography sx={{ fontSize: 14, fontWeight: 700 }} aria-label="치환 요약">{summaryText(rows)}</Typography>
-            {management.loaded && !management.loading && rows.length === 0 && (
-              <Typography variant="body2" color="text.secondary">이 날짜에 생산확정된 건이 없습니다</Typography>
-            )}
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             바꾸면 원래 원재료의 재고가 그만큼 되돌아오고 바꾼 원재료에서 빠집니다.

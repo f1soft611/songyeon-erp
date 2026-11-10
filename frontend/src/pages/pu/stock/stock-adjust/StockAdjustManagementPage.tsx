@@ -89,7 +89,7 @@ export function StockAdjustManagementPage({
           <Tab value="whmove" label="창고이동" />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, overflow: 'auto' }}>
         {tab === 'material' && <MaterialAdjustTab refreshKey={management.materialRefresh} warehouses={warehouses} />}
         {tab === 'product' && <ProductAdjustTab />}
         {tab === 'whmove' && <WarehouseMoveTab />}

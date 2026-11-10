@@ -14,10 +14,14 @@ import SaveIcon from '@mui/icons-material/Save';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
+import { useInitialLoadState } from '../../../../shared/hooks/useInitialLoadState';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { useNotification } from '../../../../shared/context/NotificationContext';
+import { usePageSessionState } from '../../../../shared/hooks/usePageSessionState';
+import { useUnsavedChangesBeforeUnload } from '../../../../shared/hooks/useUnsavedChangesBeforeUnload';
 import type {
   MenuPermission,
   MenuTreeNode,
@@ -38,6 +42,10 @@ import type {
   MenuModuleOption,
   MenuPermissionDefinition,
 } from './types/menuManagement.types';
+import {
+  initialMenuManagementPageSession,
+  isMenuManagementPageSession,
+} from './menuManagementPageSession';
 
 type MenuManagementPageProps = {
   selectedModule: ModuleItem;
@@ -55,6 +63,12 @@ export function MenuManagementPage({
   selectedMenuPermissions,
 }: MenuManagementPageProps) {
   const { showSuccess } = useNotification();
+  const { state: pageSession, setState: setPageSession } = usePageSessionState(
+    'songyeon-erp:page:menu-management',
+    initialMenuManagementPageSession,
+    { version: 1, validate: isMenuManagementPageSession },
+  );
+  const initialPageSessionRef = useRef(pageSession);
   const [menus, setMenus] = useState<MenuManagementRow[]>([]);
   const [modules, setModules] = useState<MenuModuleOption[]>([]);
   const [roles, setRoles] = useState<RoleManagementRow[]>([]);
@@ -63,12 +77,13 @@ export function MenuManagementPage({
   );
   const [selectedModuleId, setSelectedModuleId] = useState<number>();
   const [selectedRoleId, setSelectedRoleId] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(pageSession.searchQuery);
   const [reloadToken, setReloadToken] = useState(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [dirty, setDirty] = useState(false);
+  useUnsavedChangesBeforeUnload(dirty);
   const hasRequiredSelection =
     Boolean(selectedModuleId) && Boolean(selectedRoleId);
   const filteredMenus = useMemo(() => {
@@ -88,6 +103,8 @@ export function MenuManagementPage({
   const [pendingPermissionReload, setPendingPermissionReload] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const menuLoadRequestIdRef = useRef(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
+  const [initializeRetry, setInitializeRetry] = useState(0);
   const menuPanelRef = useRef<{
     saveCurrentChanges: () => Promise<void>;
     deleteSelectedRows: () => void;
@@ -164,9 +181,9 @@ export function MenuManagementPage({
           label: '조회',
           icon: SearchIcon,
           visible: pageActionPermissions.read,
-          disabled: false,
+          disabled: saving,
           onClick: () => {
-            if (!selectedModuleId) return;
+            if (saving || !selectedModuleId) return;
             void requestRefresh(selectedModuleId, false, true);
           },
         },
@@ -178,6 +195,7 @@ export function MenuManagementPage({
         {
           label: '저장',
           icon: SaveIcon,
+          saving,
           visible: pageActionPermissions.write,
           disabled: !dirty || saving,
           onClick: async () => {
@@ -218,6 +236,7 @@ export function MenuManagementPage({
     }
 
     const requestId = ++menuLoadRequestIdRef.current;
+    start();
     if (showSkeleton) {
       setLoading(true);
     }
@@ -232,11 +251,13 @@ export function MenuManagementPage({
       ]);
       if (requestId !== menuLoadRequestIdRef.current) return false;
       setMenus(nextMenus);
+      succeed();
       if (nextPermissions) setPermissions(nextPermissions);
       setDirty(false);
       return true;
     } catch (requestError) {
       if (requestId !== menuLoadRequestIdRef.current) return false;
+      fail(requestError);
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -251,33 +272,50 @@ export function MenuManagementPage({
   }
 
   useEffect(() => {
+    let active = true;
     async function initialize() {
+      start();
       setError('');
       try {
-        const [modulesResult, permissionsResult] = await Promise.all([
+        const [modulesResult, permissionsResult, nextRoles] = await Promise.all([
           fetchModules(),
           fetchActivePermissions(),
+          fetchRoleRows(),
         ]);
+        if (!active) return;
+
         setModules(modulesResult);
         setPermissions(permissionsResult);
-
-        let nextRoles: RoleManagementRow[] = [];
-        try {
-          nextRoles = await fetchRoleRows();
-        } catch {
-          nextRoles = [];
-        }
         setRoles(nextRoles);
 
-        const firstModule = modulesResult[0];
-        setSelectedModuleId(firstModule?.moduleId);
-        if (firstModule && selectedRoleId) {
-          await loadMenus(firstModule.moduleId, false, true, selectedRoleId);
+        const savedSession = initialPageSessionRef.current;
+        const initialModule =
+          modulesResult.find(
+            (module) => module.moduleId === savedSession.selectedModuleId,
+          ) ?? modulesResult[0];
+        const initialRoleId = nextRoles.some(
+          (role) => role.id === savedSession.selectedRoleId,
+        )
+          ? savedSession.selectedRoleId
+          : '';
+
+        setSelectedModuleId(initialModule?.moduleId);
+        setSelectedRoleId(initialRoleId);
+        setPageSession((current) => ({
+          ...current,
+          selectedModuleId: initialModule?.moduleId,
+          selectedRoleId: initialRoleId,
+        }));
+
+        if (initialModule && initialRoleId) {
+          await loadMenus(initialModule.moduleId, false, true, initialRoleId);
         } else {
           setMenus([]);
+          succeed();
         }
       } catch (requestError) {
-        setMenus([]);
+        if (!active) return;
+        fail(requestError);
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -287,14 +325,20 @@ export function MenuManagementPage({
     }
 
     void initialize();
-  }, []);
+    return () => {
+      active = false;
+      ++menuLoadRequestIdRef.current;
+    };
+  // Initialization uses the session snapshot; selection changes load menus separately.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initializeRetry, start, succeed, fail]);
 
   const selectedModule = modules.find(
     (module) => module.moduleId === selectedModuleId,
   );
 
   function requestModuleChange(moduleId: number) {
-    if (loading || moduleId === selectedModuleId) return;
+    if (loading || saving || moduleId === selectedModuleId) return;
     if (dirty) {
       setPendingModuleId(moduleId);
       setPendingRoleId(selectedRoleId);
@@ -303,6 +347,7 @@ export function MenuManagementPage({
       return;
     }
     setSelectedModuleId(moduleId);
+    setPageSession((current) => ({ ...current, selectedModuleId: moduleId }));
     if (!selectedRoleId) {
       setMenus([]);
       setDirty(false);
@@ -319,7 +364,14 @@ export function MenuManagementPage({
   }
 
   function requestRoleChange(roleId: string) {
-    if (loading || roleId === selectedRoleId || !selectedModuleId) return;
+    if (
+      loading ||
+      saving ||
+      roleId === selectedRoleId ||
+      !selectedModuleId
+    ) {
+      return;
+    }
     if (dirty) {
       setPendingModuleId(selectedModuleId);
       setPendingRoleId(roleId);
@@ -328,6 +380,7 @@ export function MenuManagementPage({
       return;
     }
     setSelectedRoleId(roleId);
+    setPageSession((current) => ({ ...current, selectedRoleId: roleId }));
     if (!selectedModuleId || !roleId) {
       setMenus([]);
       setDirty(false);
@@ -347,29 +400,31 @@ export function MenuManagementPage({
     moduleId: number,
     bypassDirtyConfirmation = false,
     showSkeleton = false,
-  ) {
-    if (loading && showSkeleton) return Promise.resolve();
+  ): Promise<boolean> {
+    if (saving || (loading && showSkeleton)) return Promise.resolve(false);
     if (!selectedModuleId || !selectedRoleId) {
       setMenus([]);
       setError('');
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     if (dirty && !bypassDirtyConfirmation) {
       setPendingModuleId(moduleId);
       setPendingPermissionReload(false);
       setConfirmOpen(true);
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     return loadMenus(moduleId, false, false, selectedRoleId, showSkeleton).then(
       (didLoad) => {
         if (didLoad) {
           setReloadToken((current) => current + 1);
         }
+        return didLoad;
       },
     );
   }
 
   function confirmDiscardChanges() {
+    if (saving) return;
     const nextModuleId = pendingModuleId;
     const nextRoleId = pendingRoleId ?? selectedRoleId;
     const reloadPermissions = pendingPermissionReload;
@@ -383,6 +438,11 @@ export function MenuManagementPage({
     if (nextRoleId && nextRoleId !== selectedRoleId) {
       setSelectedRoleId(nextRoleId);
     }
+    setPageSession((current) => ({
+      ...current,
+      selectedModuleId: nextModuleId,
+      selectedRoleId: nextRoleId ?? '',
+    }));
     void loadMenus(
       nextModuleId,
       reloadPermissions,
@@ -416,6 +476,8 @@ export function MenuManagementPage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
+      <PageLoadBoundary {...initialLoad} label="메뉴 관리 정보"
+        onRetry={() => setInitializeRetry((current) => current + 1)}>
       <PageSearchArea
         searchField={
           <TextField
@@ -423,9 +485,18 @@ export function MenuManagementPage({
             margin="none"
             placeholder="메뉴명/코드 검색"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            disabled={saving}
+            onChange={(event) => {
+              if (saving) return;
+              const nextSearchQuery = event.target.value;
+              setSearchQuery(nextSearchQuery);
+              setPageSession((current) => ({
+                ...current,
+                searchQuery: nextSearchQuery,
+              }));
+            }}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && selectedModuleId) {
+              if (event.key === 'Enter' && selectedModuleId && !saving) {
                 event.preventDefault();
                 void requestRefresh(selectedModuleId, false, true);
               }
@@ -437,7 +508,11 @@ export function MenuManagementPage({
                   <IconButton
                     size="small"
                     aria-label="검색어 초기화"
-                    onClick={() => setSearchQuery('')}
+                    disabled={saving}
+                    onClick={() => {
+                      if (saving) return;
+                      setSearchQuery('');
+                    }}
                     edge="end"
                     sx={{ mr: 0.5, color: 'text.secondary' }}
                   >
@@ -609,6 +684,7 @@ export function MenuManagementPage({
         onCancel={() => setConfirmOpen(false)}
         onContinue={confirmDiscardChanges}
       />
+      </PageLoadBoundary>
     </Box>
   );
 }

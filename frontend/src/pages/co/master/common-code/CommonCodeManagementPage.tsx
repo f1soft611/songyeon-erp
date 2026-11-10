@@ -4,12 +4,15 @@ import ClearIcon from '@mui/icons-material/Clear';
 import SearchIcon from '@mui/icons-material/Search';
 import SaveIcon from '@mui/icons-material/Save';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
+import { useInitialLoadState } from '../../../../shared/hooks/useInitialLoadState';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import { useNotification } from '../../../../shared/context/NotificationContext';
 import { usePageSessionState } from '../../../../shared/hooks/usePageSessionState';
+import { useUnsavedChangesBeforeUnload } from '../../../../shared/hooks/useUnsavedChangesBeforeUnload';
 import type {
   ModuleItem,
   PageContent,
@@ -71,7 +74,9 @@ export function CommonCodeManagementPage({
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState(pageSession.searchQuery);
   const [panelDirty, setPanelDirty] = useState(false);
+  useUnsavedChangesBeforeUnload(panelDirty);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [commonCodeGridKey, setCommonCodeGridKey] = useState(0);
   const [refreshConfirmOpen, setRefreshConfirmOpen] = useState(false);
@@ -85,6 +90,7 @@ export function CommonCodeManagementPage({
     detailValues: Record<string, PageSearchFieldValue>;
   } | null>(null);
   const groupRequestIdRef = useRef(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
   const handleSelectedGroupChange = useCallback(
     (selectedGroupId: string) => {
       setPageSession((current) => {
@@ -155,6 +161,7 @@ export function CommonCodeManagementPage({
       showSkeleton?: boolean;
     } = {}) => {
       const requestId = ++groupRequestIdRef.current;
+      start();
       setError('');
       if (showSkeleton) {
         setPageLoading(true);
@@ -163,9 +170,11 @@ export function CommonCodeManagementPage({
         const result = await fetchCommonCodeGroups(filters);
         if (requestId === groupRequestIdRef.current) {
           setGroups(result);
+          succeed();
         }
       } catch (requestError) {
         if (requestId === groupRequestIdRef.current) {
+          fail(requestError);
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -179,7 +188,7 @@ export function CommonCodeManagementPage({
         }
       }
     },
-    [],
+    [start, succeed, fail],
   );
 
   useEffect(() => {
@@ -201,7 +210,8 @@ export function CommonCodeManagementPage({
   );
 
   const handleSaveChanges = useCallback(async () => {
-    if (!panelRef.current) return;
+    if (savingRef.current || !panelRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await panelRef.current.saveCurrentChanges();
@@ -212,6 +222,7 @@ export function CommonCodeManagementPage({
           : '공통코드 저장에 실패했습니다.',
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }, []);
@@ -247,6 +258,7 @@ export function CommonCodeManagementPage({
       searchQueryValue = searchQuery,
       detailValuesValue = pageSession.detailValues,
     ) => {
+      if (savingRef.current) return;
       if (panelDirty) {
           pendingSearchRef.current = {
             filters,
@@ -263,6 +275,7 @@ export function CommonCodeManagementPage({
   );
 
   const confirmRefresh = useCallback(() => {
+    if (savingRef.current) return;
     setRefreshConfirmOpen(false);
     setPanelDirty(false);
     setCommonCodeGridKey((current) => current + 1);
@@ -310,7 +323,7 @@ export function CommonCodeManagementPage({
           label: '조회',
           icon: SearchIcon,
           visible: pageActionPermissions.read,
-          disabled: false,
+          disabled: saving,
           onClick: requestRefresh,
         },
       ],
@@ -321,6 +334,7 @@ export function CommonCodeManagementPage({
         {
           label: '저장',
           icon: SaveIcon,
+          saving,
           visible: pageActionPermissions.write,
           disabled: !panelDirty || saving,
           onClick: () => {
@@ -350,6 +364,8 @@ export function CommonCodeManagementPage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
+      <PageLoadBoundary {...initialLoad} label="공통코드 목록"
+        onRetry={() => { void loadGroups({ filters: pageSession.appliedFilters, showSkeleton: true }).catch(() => undefined); }}>
       <PageSearchArea
         searchField={
           <TextField
@@ -357,7 +373,10 @@ export function CommonCodeManagementPage({
             margin="none"
             placeholder="그룹 코드/명/설명 검색"
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            disabled={saving}
+            onChange={(event) => {
+              if (!savingRef.current) setSearchQuery(event.target.value);
+            }}
             slotProps={{
               htmlInput: { 'aria-label': '공통코드 검색' },
               input: {
@@ -367,7 +386,10 @@ export function CommonCodeManagementPage({
                     size="small"
                     edge="end"
                     aria-label="공통코드 검색어 초기화"
-                    onClick={() => setSearchQuery('')}
+                    disabled={saving}
+                    onClick={() => {
+                      if (!savingRef.current) setSearchQuery('');
+                    }}
                     sx={{ p: 0.25 }}
                   >
                     <ClearIcon fontSize="small" />
@@ -397,9 +419,11 @@ export function CommonCodeManagementPage({
         appliedDetailValues={
           pageSession.searchMode === 'detail' ? pageSession.detailValues : {}
         }
-        onDetailValuesChange={setDetailValues}
+        onDetailValuesChange={(values) => {
+          if (!savingRef.current) setDetailValues(values);
+        }}
         onDetailSearch={handleDetailSearch}
-        detailLoading={pageLoading}
+        detailLoading={pageLoading || saving}
       />
       <PageMessageArea message={error} onClose={() => setError('')} />
       <CommonCodeManagementPanel
@@ -415,6 +439,7 @@ export function CommonCodeManagementPage({
         onError={setError}
         commonCodeGridKey={commonCodeGridKey}
         groupsLoading={pageLoading}
+        saving={saving}
         initialSelectedGroupId={pageSession.selectedGroupId}
         onSelectedGroupChange={handleSelectedGroupChange}
         initialSelectedGroupRowIds={pageSession.selectedGroupRowIds}
@@ -433,6 +458,7 @@ export function CommonCodeManagementPage({
         onCancel={() => setRefreshConfirmOpen(false)}
         onContinue={confirmRefresh}
       />
+      </PageLoadBoundary>
     </Box>
   );
 }

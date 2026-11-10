@@ -189,6 +189,16 @@ public class ReceivingServiceImpl extends EgovAbstractServiceImpl implements Rec
         if (row == null) {
             throw new IllegalArgumentException("입고 내역을 찾을 수 없습니다");
         }
+        // 2026-11-05 지우지 않는 입고: 반품이 걸린 입고(지우면 원래 입고 없는 반품이 남는다),
+        // 지우면 재고가 마이너스가 되는 입고(이미 써서 남은 재고가 입고 수량보다 적다). 반품 줄(수량 마이너스)은 지우면 재고가 늘어 해당 없음
+        if (nz(receivingDAO.selectReturnedQty(id)) > 0) {
+            throw new IllegalArgumentException("반품이 등록된 입고는 지울 수 없어요. 반품등록에서 반품을 먼저 지워주세요");
+        }
+        double qty = nz(row.getQty());
+        double stock = nz(row.getStockQty());
+        if (qty > 0 && stock < qty) {
+            throw new IllegalArgumentException("재고가 모자라 지울 수 없어요(현재 재고 " + fmtQty(stock) + ", 입고 수량 " + fmtQty(qty) + ")");
+        }
         receivingDAO.addMaterialStock(row.getMaterialCode(), -nz(row.getQty()));
         receivingDAO.deleteReceiving(id);
         // 입고줄이 사라지면 거기 붙어있던 서류도 같이 치운다. 안 그러면 주인 없는 파일만 쌓인다.

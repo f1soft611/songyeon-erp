@@ -5,6 +5,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
+import { SearchResultMessage } from '../../../../shared/components/SearchResultMessage';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { toPageSearchFields, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
@@ -50,8 +51,13 @@ export function ShipStatusManagementPage({
   const columns = useMemo(() => createShipStatusColumns(), []);
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
   // 상세 조회(⌄) 거래처 · 품목코드/명: 고치는 중인 값(detailValues)과 [조회]로 적용한 값(appliedDetailValues, 조건 칩)
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  // 돌아온 경우 마지막으로 조회한 거래처 · 품목코드/명을 칩으로 다시 보인다(2026-11-04)
+  const [savedDetail] = useState<Record<string, PageSearchFieldValue>>(() => ({
+    ...(query.clientName ? { clientName: query.clientName } : {}),
+    ...(query.productName ? { productName: query.productName } : {}),
+  }));
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(savedDetail);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(savedDetail);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -117,12 +123,12 @@ export function ShipStatusManagementPage({
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* 2026-11-04 S_ERP 현황 표준(SearchResultMessage): 조회가 끝나면 '조회 결과 총 N건입니다.' · 0건 안내, X 로 닫고 다시 조회하면 다시 보인다 */}
+      {management.searched && !management.loading && !management.error && <SearchResultMessage resultCount={management.rows.length} />}
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
-          {!management.loading && management.rows.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              {management.searched ? '이 기간에 출하확정된 기록이 없습니다' : '기간을 정하고 [조회] 를 눌러주세요'}
-            </Typography>
+          {!management.searched && !management.loading && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>기간을 정하고 [조회] 를 눌러주세요</Typography>
           )}
           <ShipStatusGrid rows={management.rows} columns={columns} loading={management.loading} />
         </Card>

@@ -345,6 +345,7 @@ export function useDocumentComposer(
               left.stageOrder - right.stageOrder ||
               left.participantOrder - right.participantOrder,
           )) {
+            if (line.participantType === 'FINAL_CONFIRMATION') continue;
             if (line.participantType === 'REFERENCE') {
               references.push(line.participantUserId);
               continue;
@@ -835,7 +836,7 @@ export function useDocumentComposer(
       const request = buildDraftRequest();
       if (!request) return;
       const saved = await saveDocumentDraft(request, draftIdRef.current);
-      imageSaveLifecycle.completeSave();
+      imageSaveLifecycle.completeSave({ keepPreviews: true });
       draftIdRef.current = saved.electronicApprovalId;
       setElectronicApprovalId(saved.electronicApprovalId);
       if (submit && saved.documentStatus !== 'DRAFT' && saved.documentStatus !== 'REVISION_REQUESTED') {

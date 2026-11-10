@@ -81,7 +81,11 @@ export const toNoticeCommentTree = (
           ? '[작성자에 의해 삭제 되었습니다.]'
           : (record.content ?? ''),
       isDeleted: record.deletedYn === 'Y',
-      isEditable: record.deletedYn !== 'Y',
+      // 2026-11-04 S_ERP 와 같이 내 댓글만(작성자 = 로그인 사번)
+      isEditable:
+        record.deletedYn !== 'Y' &&
+        Boolean(record.writerId) &&
+        record.writerId === getStoredAuth()?.userId,
       attachments: (record.attachments ?? []).map((file) => ({
         id: String(file.fileId ?? file.objectKey ?? file.fileName ?? ''),
         name: file.fileName ?? '첨부파일',

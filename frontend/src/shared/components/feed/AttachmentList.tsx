@@ -47,6 +47,10 @@ export function AttachmentList({
     <Box data-testid={testId} sx={{ display: 'grid', gap: 1 }}>
       {files.map((file, index) => {
         const iconMeta = getAttachmentIconMeta(file.name);
+        const hasImagePreview =
+          showImagePreview &&
+          file.mimeType?.startsWith('image/') &&
+          file.previewUrl?.startsWith('blob:');
 
         return (
           <Box
@@ -65,9 +69,8 @@ export function AttachmentList({
               overflow: 'hidden',
             }}
           >
-            {showImagePreview &&
-              file.mimeType?.startsWith('image/') &&
-              file.previewUrl?.startsWith('blob:') && (
+            {hasImagePreview && (
+              <>
                 <Box
                   component="img"
                   src={file.previewUrl}
@@ -80,6 +83,17 @@ export function AttachmentList({
                     flexShrink: 0,
                   }}
                 />
+                <Box
+                  aria-hidden="true"
+                  sx={{
+                    width: '1px',
+                    height: 24,
+                    mx: 1,
+                    bgcolor: 'divider',
+                    flexShrink: 0,
+                  }}
+                />
+              </>
               )}
             <Box
               sx={{

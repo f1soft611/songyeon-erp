@@ -2775,6 +2775,83 @@ describe('F1-GRID dirty indicator across column types', () => {
     expect(qtyCell).toHaveAttribute('data-dirty-cell', 'true');
   });
 
+  it('keeps an unchanged empty nullable number cell clean after edit commit', () => {
+    type NullableNumberRow = { id: string; expiryedCount: number | null };
+    const gridRef = createRef<F1GridRef<NullableNumberRow>>();
+    const nullableNumberRows: NullableNumberRow[] = [
+      { id: 'material-1', expiryedCount: null },
+    ];
+    const nullableNumberColumns: F1GridColumn<NullableNumberRow>[] = [
+      {
+        field: 'expiryedCount',
+        headerName: '소비기한 숫자',
+        type: 'number',
+        editable: true,
+      },
+    ];
+
+    render(
+      <F1Grid
+        ref={gridRef}
+        rows={nullableNumberRows}
+        columns={nullableNumberColumns}
+        rowKey="id"
+        editorPlugins={[{ canEdit: () => true }]}
+      />,
+    );
+
+    const countCell = screen.getByRole('gridcell');
+    fireEvent.doubleClick(countCell);
+    fireEvent.keyDown(screen.getByRole('spinbutton'), { key: 'Enter' });
+
+    expect(gridRef.current?.getRows()[0].expiryedCount).toBeNull();
+    expect(countCell).toHaveAttribute('data-dirty-cell', 'false');
+    expect(gridRef.current?.getChanges()).toEqual({
+      insertedRows: [],
+      updatedRows: [],
+      deletedRows: [],
+    });
+  });
+
+  it('keeps an explicitly entered zero distinct from an empty nullable number', () => {
+    type NullableNumberRow = { id: string; expiryedCount: number | null };
+    const gridRef = createRef<F1GridRef<NullableNumberRow>>();
+    const nullableNumberRows: NullableNumberRow[] = [
+      { id: 'material-1', expiryedCount: null },
+    ];
+    const nullableNumberColumns: F1GridColumn<NullableNumberRow>[] = [
+      {
+        field: 'expiryedCount',
+        headerName: '소비기한 숫자',
+        type: 'number',
+        editable: true,
+      },
+    ];
+
+    render(
+      <F1Grid
+        ref={gridRef}
+        rows={nullableNumberRows}
+        columns={nullableNumberColumns}
+        rowKey="id"
+        editorPlugins={[{ canEdit: () => true }]}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole('gridcell'));
+    fireEvent.change(screen.getByRole('spinbutton'), {
+      target: { value: '0' },
+    });
+    fireEvent.keyDown(screen.getByRole('spinbutton'), { key: 'Enter' });
+
+    expect(gridRef.current?.getRows()[0].expiryedCount).toBe(0);
+    expect(screen.getByRole('gridcell')).toHaveAttribute(
+      'data-dirty-cell',
+      'true',
+    );
+    expect(gridRef.current?.getChanges().updatedRows).toHaveLength(1);
+  });
+
   it('marks a checkbox cell dirty after a toggle', () => {
     render(
       <F1Grid

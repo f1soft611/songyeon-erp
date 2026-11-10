@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchStockStatus } from '../services/stockStatus.service';
 import type { StockStatusGridRow, StockStatusKind, StockStatusRow } from '../types/stockStatus.types';
 import { excelColumns, splitWarehouses, visibleRows, visibleTotal, warehouseQty } from '../utils/stockStatus';
@@ -9,10 +10,14 @@ const errorText = (error: unknown, fallback: string) =>
 
 // 재고현황 화면의 조회 · 탭 · 로트 펼침 · 엑셀 상태
 export function useStockStatusManagement() {
-  const [kind, setKind] = useState<StockStatusKind>('material');
-  const [date, setDate] = useState(() => todayDash());
-  const [query, setQuery] = useState('');
-  const [nonzero, setNonzero] = useState(true);
+  // 2026-11-04 마지막으로 조회한 기준일과 탭 · 검색어 · '재고 있는 것만'은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그대로 다시 연다
+  const [initial] = useState(() =>
+    readSearchSession('pu-stock-status', { date: todayDash(), kind: 'material' as StockStatusKind, query: '', nonzero: true }));
+  const [kind, setKind] = useState<StockStatusKind>(initial.kind);
+  const [date, setDate] = useState(initial.date);
+  const [appliedDate, setAppliedDate] = useState(initial.date);
+  const [query, setQuery] = useState(initial.query);
+  const [nonzero, setNonzero] = useState(initial.nonzero);
   const [rows, setRows] = useState<StockStatusRow[]>([]);
   const [warehouses, setWarehouses] = useState<string[]>([]);
   const [loadedDate, setLoadedDate] = useState('');
@@ -25,6 +30,7 @@ export function useStockStatusManagement() {
       setAlertText('기준일을 선택해주세요');
       return;
     }
+    setAppliedDate(day);
     setLoading(true);
     try {
       const data = await fetchStockStatus(day);
@@ -41,8 +47,12 @@ export function useStockStatusManagement() {
 
   // 화면을 열면 오늘 기준으로 바로 조회(송연 03-shell.js)
   useEffect(() => {
-    void load(todayDash());
-  }, [load]);
+    void load(initial.date);
+  }, [load, initial]);
+
+  useEffect(() => {
+    saveSearchSession('pu-stock-status', { date: appliedDate, kind, query, nonzero });
+  }, [appliedDate, kind, query, nonzero]);
 
   const search = () => void load(date);
 

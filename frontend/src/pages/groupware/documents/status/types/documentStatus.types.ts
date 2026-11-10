@@ -35,7 +35,8 @@ export type DocumentStatusActionStatus =
   | 'PENDING'
   | 'APPROVED'
   | 'REJECTED'
-  | 'RETURNED';
+  | 'RETURNED'
+  | 'CONFIRMED';
 
 export type DocumentStatusFilters = {
   scope?: DocumentApprovalScope;

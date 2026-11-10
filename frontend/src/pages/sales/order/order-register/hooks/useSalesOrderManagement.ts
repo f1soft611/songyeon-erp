@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import { useNotification } from '../../../../../shared/context/NotificationContext';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { clientProductDetailValues, readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { restoreBlockedGridDeletes } from '../../../../../shared/utils/gridDelete';
 import { unknownClientMessage } from '../../../../co/master/item-master/utils/productBom';
 import { finishOrderHandoff, useOrderHandoff } from '../orderHandoff';
@@ -42,7 +43,9 @@ export function useSalesOrderManagement() {
   const nextKeyRef = useRef(1);
   // 처음 불러온 값(수주 id → 저장 칸 글자). 제목줄 [저장]이 고친 줄을 찾는다
   const originalsRef = useRef<Map<number, string>>(new Map());
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 수주일 · 상세 조회 조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [session] = useState(() => readSearchSession('sales-order-register', { date: todayDash(), filter: NO_FILTER }));
+  const [date, setDate] = useState(session.date);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState<(() => void) | null>(null);
@@ -66,7 +69,7 @@ export function useSalesOrderManagement() {
   const deletedIdsRef = useRef<Set<number>>(new Set());
   const clientNames = clients.map((client) => client.name);
   // 상세 조회(⌄)로 적용한 조건. 받은 수주 중 맞는 줄만 표에 둔다(다른 날짜를 조회하는 것과 같이 다룬다)
-  const [detailFilter, setDetailFilter] = useState<OrderDetailFilter>(NO_FILTER);
+  const [detailFilter, setDetailFilter] = useState<OrderDetailFilter>(session.filter);
   const detailFilterRef = useRef(detailFilter);
   detailFilterRef.current = detailFilter;
   const keepRemoved = () => {
@@ -85,6 +88,7 @@ export function useSalesOrderManagement() {
       setError('조회할 날짜를 먼저 선택해주세요');
       return;
     }
+    saveSearchSession('sales-order-register', { date: orderDate, filter: detailFilterRef.current });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -110,6 +114,9 @@ export function useSalesOrderManagement() {
   const [flashId, setFlashId] = useState<number | null>(null);
   useEffect(() => {
     if (!handoff) return;
+    // 찾아온 수주가 상세 조회 조건에 가려지지 않게 조건은 비운다
+    detailFilterRef.current = NO_FILTER;
+    setDetailFilter(NO_FILTER);
     setDate(handoff.date);
     void loadRows(handoff.date);
     setFlashId(handoff.orderId);
@@ -124,7 +131,7 @@ export function useSalesOrderManagement() {
 
   // 송연처럼 열면 오늘 수주를 바로 보여주고(찾아온 수주가 있으면 그 날짜), 매출 거래처·품목 후보를 한 번 받는다(못 받으면 고르기 목록 없이)
   useEffect(() => {
-    if (!handoff) void loadRows(todayDash());
+    if (!handoff) void loadRows(session.date);
     fetchOrderClientOptions().then(setClients).catch(() => undefined);
     fetchOrderProducts().then(setProducts).catch(() => undefined);
     // 처음 열 때 한 번만
@@ -325,6 +332,7 @@ export function useSalesOrderManagement() {
   };
 
   return {
+    savedDetailValues: handoff ? {} : clientProductDetailValues(session.filter),
     gridRef,
     date,
     setDate,

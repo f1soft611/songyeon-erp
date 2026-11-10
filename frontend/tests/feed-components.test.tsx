@@ -22,6 +22,67 @@ import { PostDetailPanel } from '../src/shared/components/feed/PostDetailPanel';
 import { getApprovalSystemEventPresentation } from '../src/pages/groupware/documents/write/data/documentPresentation';
 
 describe('shared feed components', () => {
+  it('shows comment actions only when ownership explicitly allows editing', () => {
+    render(
+      <CommentThread
+        comments={[
+          {
+            id: 'other-comment',
+            author: '다른 작성자',
+            time: '오늘',
+            content: '<p>타인 댓글</p>',
+            isEditable: false,
+          },
+          {
+            id: 'own-comment',
+            author: '내 작성자',
+            time: '오늘',
+            content: '<p>내 댓글</p>',
+            isEditable: true,
+          },
+          {
+            id: 'unknown-comment',
+            author: '작성자 미확인',
+            time: '오늘',
+            content: '<p>작성자 정보 없음</p>',
+          },
+        ]}
+        showComposer={false}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: '댓글 메뉴 다른 작성자' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '댓글 메뉴 작성자 미확인' }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '댓글 메뉴 내 작성자' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps image previews and separates them from attachment names', () => {
+    render(
+      <AttachmentList
+        files={[
+          {
+            id: 'approval-image',
+            name: 'approve.png',
+            mimeType: 'image/png',
+            previewUrl: 'blob:approval-image',
+          },
+        ]}
+        mode="edit"
+      />,
+    );
+
+    const preview = screen.getByRole('img', { name: 'approve.png' });
+    expect(preview).toBeInTheDocument();
+    expect(preview.nextElementSibling).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByText('approve.png')).toBeInTheDocument();
+  });
+
   it.each([
     { mode: 'dark', isDark: undefined, dark: true },
     { mode: 'light', isDark: undefined, dark: false },
@@ -40,6 +101,7 @@ describe('shared feed components', () => {
               author: '작성자',
               time: '2026-10-20',
               content: '<p>테마 확인</p>',
+              isEditable: true,
               attachments: [{ id: 'file', name: 'parent.pdf' }],
               replies: [{
                 id: 'theme-reply',
@@ -465,10 +527,22 @@ describe('shared feed components', () => {
     );
 
     const badge = screen.getByTestId('system-event-badge');
+    const badgeLabel = screen.getByText(label, { selector: '.MuiChip-label' });
+    const authorName = screen.getByText('시스템', {
+      selector: '.MuiTypography-caption',
+    });
     expect(badge).toHaveTextContent(label);
     expect(badge).toHaveClass(`MuiChip-color${color[0].toUpperCase()}${color.slice(1)}`);
     expect(badge).toHaveClass(`MuiChip-${variant}`);
-    expect(badge).toHaveStyle({ borderRadius: '8px' });
+    expect(badge).toHaveStyle({ borderRadius: '8px', height: '20px' });
+    expect(badgeLabel).toHaveStyle({
+      fontSize: '0.75rem',
+      paddingLeft: '6px',
+      paddingRight: '6px',
+    });
+    expect(getComputedStyle(badgeLabel).fontSize).toBe(
+      getComputedStyle(authorName).fontSize,
+    );
     expect(screen.queryByRole('img', { name: '시스템 메시지' })).not.toBeInTheDocument();
     expect(screen.getByText('시스템 처리 내용')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '댓글 메뉴 시스템' })).not.toBeInTheDocument();
@@ -702,7 +776,13 @@ describe('shared feed components', () => {
     render(
       <CommentThread
         comments={[
-          { id: 1, author: '작성자', time: '방금', content: '<p>댓글</p>' },
+          {
+            id: 1,
+            author: '작성자',
+            time: '방금',
+            content: '<p>댓글</p>',
+            isEditable: true,
+          },
         ]}
         showComposer={false}
       />,
@@ -726,7 +806,13 @@ describe('shared feed components', () => {
     render(
       <CommentThread
         comments={[
-          { id: 1, author: '작성자', time: '방금', content: '<p>댓글</p>' },
+          {
+            id: 1,
+            author: '작성자',
+            time: '방금',
+            content: '<p>댓글</p>',
+            isEditable: true,
+          },
         ]}
         onEditComment={onEditComment}
         onDeleteComment={onDeleteComment}
@@ -756,6 +842,7 @@ describe('shared feed components', () => {
             author: '작성자',
             time: '방금',
             content: '<p>댓글</p>',
+            isEditable: true,
             attachments: [{ id: 'file-1', name: '자료.pdf' }],
           },
         ]}

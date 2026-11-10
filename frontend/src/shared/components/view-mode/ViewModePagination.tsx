@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Alert, Box, Button, CircularProgress, Stack } from '@mui/material';
+import { Alert, Box, Button, Stack } from '@mui/material';
+import { AppLoadingSpinner } from '../AppLoadingSpinner';
 
 type ViewModePaginationProps = {
   scrollRoot: Element | null;
@@ -80,7 +81,7 @@ export function ViewModePagination({
           aria-label={loadingLabel}
           sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}
         >
-          <CircularProgress size={22} />
+          <AppLoadingSpinner size={22} />
         </Box>
       ) : null}
     </Stack>

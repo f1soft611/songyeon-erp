@@ -57,10 +57,10 @@ export function createStockLedgerColumns({
       field: `u${i}`,
       headerName: '사용량',
       headerGroup: dayLabel(d),
-      width: 80,
-      headerAlign: 'center',
+      width: 100,
+      type: 'number',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => ledgerNum(row[`u${i}`] as number),
       getCellStyle: ({ row }) => ((row[`u${i}`] as number) > 0 ? { color: RED } : undefined),
     },
     {
@@ -68,7 +68,8 @@ export function createStockLedgerColumns({
       headerName: '발주량',
       headerGroup: dayLabel(d),
       width: 100,
-      headerAlign: 'center',
+      type: 'number',
+      decimalPlaces: 3,
       align: 'right',
       getCellStyle: () => ({ backgroundColor: GOLD }),
       renderCell: ({ row }) => {
@@ -115,7 +116,7 @@ export function createStockLedgerColumns({
     {
       field: 'name',
       headerName: kind === 'submaterial' ? '부자재' : '원재료',
-      width: 220,
+      width: 300,
       align: 'left',
       pinned: 'left',
       renderCell: ({ row }) => (
@@ -128,7 +129,7 @@ export function createStockLedgerColumns({
     {
       field: 'spec',
       headerName: '규격',
-      width: 110,
+      width: 250,
       align: 'left',
       renderCell: ({ row }) => row.spec || '',
     },

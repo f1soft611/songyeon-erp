@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import SearchIcon from '@mui/icons-material/Search';
-import { Button, Stack, TextField } from '@mui/material';
+import {
+  Button,
+  IconButton,
+  InputAdornment,
+  Stack,
+  TextField,
+  Tooltip,
+} from '@mui/material';
 import { MasterPickerDialog } from './MasterPickerDialog';
 import type {
   MasterPickerOption,
@@ -12,6 +19,7 @@ export function MasterPicker({
   value,
   search,
   onChange,
+  triggerMode = 'button',
   disabled = false,
   required = false,
   error = false,
@@ -39,31 +47,54 @@ export function MasterPicker({
           error={error}
           helperText={helperText}
           value={value ? `${value.code} · ${value.name}` : ''}
-          slotProps={{ input: { readOnly: true } }}
+          slotProps={{
+            input: {
+              readOnly: true,
+              endAdornment: triggerMode === 'icon' ? (
+                <InputAdornment position="end">
+                  <Tooltip title={`${label} 선택`}>
+                    <span>
+                      <IconButton
+                        aria-label={`${label} 선택`}
+                        disabled={disabled}
+                        edge="end"
+                        onClick={() => setOpen(true)}
+                        size="small"
+                      >
+                        <SearchIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
+                </InputAdornment>
+              ) : undefined,
+            },
+          }}
           sx={{
             '& .MuiInputBase-root': { height: 40, borderRadius: 1.5 },
             '& .MuiFormHelperText-root': { whiteSpace: 'nowrap' },
           }}
         />
-        <Button
-          type="button"
-          variant="contained"
-          disableElevation
-          disabled={disabled}
-          onClick={() => setOpen(true)}
-          aria-label={`${label} 선택`}
-          startIcon={<SearchIcon fontSize="small" />}
-          sx={{
-            flexShrink: 0,
-            minWidth: 76,
-            height: 40,
-            minHeight: 40,
-            borderRadius: 1.5,
-            fontWeight: 700,
-          }}
-        >
-          선택
-        </Button>
+        {triggerMode === 'button' && (
+          <Button
+            type="button"
+            variant="contained"
+            disableElevation
+            disabled={disabled}
+            onClick={() => setOpen(true)}
+            aria-label={`${label} 선택`}
+            startIcon={<SearchIcon fontSize="small" />}
+            sx={{
+              flexShrink: 0,
+              minWidth: 76,
+              height: 40,
+              minHeight: 40,
+              borderRadius: 1.5,
+              fontWeight: 700,
+            }}
+          >
+            선택
+          </Button>
+        )}
       </Stack>
       <MasterPickerDialog
         label={label}

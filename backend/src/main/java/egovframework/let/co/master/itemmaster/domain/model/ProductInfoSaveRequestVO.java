@@ -25,6 +25,9 @@ public class ProductInfoSaveRequestVO implements Serializable {
     @Schema(description = "보관방법")
     private String storage;
 
+    @Schema(description = "식품유형 코드(2026-11-05, 공통코드 FOOD_TYPE). 비우면 없음")
+    private String foodType;
+
     @Schema(description = "업체명 (거래처BOM 이름만). 2026-10-23 부터 저장에는 쓰지 않는다(clientCode 를 쓴다)")
     private String clientName;
 

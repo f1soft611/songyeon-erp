@@ -128,7 +128,7 @@ export function AccIoPage({ selectedModule, currentMenuName, content, breadcrumb
           <Tab value="출금" label={ACC_REPORTS.출금.tab} />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <TextField size="small" margin="none" type="date" value={start} onChange={(event) => setStart(event.target.value)} onKeyDown={enter} sx={{ width: 160 }}

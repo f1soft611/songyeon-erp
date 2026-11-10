@@ -15,6 +15,44 @@
         LIMIT 1
     </select>
 
+    <!-- 화면검수 관리 목록(2026-11-05): 사용 모듈 · 사용 메뉴 중 하위 메뉴가 없는 화면. 메뉴구분 = 부모 메뉴 이름.
+         마지막 이력은 history_id 가 가장 큰 줄. 표시 상태는 서비스가 정한다 -->
+    <select id="selectSummaryList" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewSummaryVO">
+        SELECT
+            MD.module_code                        AS "moduleCode"
+          , MD.module_nm                          AS "moduleName"
+          , M.menu_id                             AS "menuId"
+          , M.menu_code                           AS "menuCode"
+          , M.menu_nm                             AS "menuName"
+          , P.menu_nm                             AS "groupName"
+          , R.developer_name                      AS "developerName"
+          , TO_CHAR(R.review_date, 'YYYY-MM-DD')  AS "reviewDate"
+          , R.review_status                       AS "reviewStatus"
+          , H.to_status                           AS "lastToStatus"
+          , H.review_comment                      AS "lastComment"
+        FROM tb_menu M
+        JOIN tb_module MD
+          ON MD.module_id = M.module_id
+         AND MD.tenant_id = M.tenant_id
+         AND MD.use_at = 'Y'
+        LEFT JOIN tb_menu P
+          ON P.menu_id = M.parent_menu_id
+        LEFT JOIN tb_screen_review R
+          ON R.tenant_id = M.tenant_id
+         AND R.menu_id = M.menu_id
+        LEFT JOIN LATERAL (
+            SELECT X.to_status, X.review_comment
+            FROM tb_screen_review_history X
+            WHERE X.review_id = R.review_id
+            ORDER BY X.history_id DESC
+            LIMIT 1
+        ) H ON TRUE
+        WHERE M.tenant_id = #{tenantId}
+          AND M.use_at = 'Y'
+          AND NOT EXISTS (SELECT 1 FROM tb_menu C WHERE C.parent_menu_id = M.menu_id)
+        ORDER BY MD.sort_order, MD.module_id, COALESCE(P.sort_order, M.sort_order), COALESCE(P.menu_id, M.menu_id), M.sort_order, M.menu_id
+    </select>
+
     <select id="selectReview" parameterType="map" resultType="egovframework.let.system.screenreview.domain.model.ScreenReviewVO">
         SELECT
             A.review_id                                   AS "reviewId"

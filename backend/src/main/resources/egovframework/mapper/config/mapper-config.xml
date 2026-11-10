@@ -17,5 +17,11 @@
 		<typeAlias alias="ComDefaultCodeVO" type="egovframework.com.cmm.ComDefaultCodeVO" />
 		<typeAlias alias="comDefaultVO"		type="egovframework.com.cmm.ComDefaultVO" />
 	</typeAliases>
+
+	<!-- log4jdbc ResultSetSpy가 getObject(LocalDate/LocalDateTime.class)를 지원하지 않아 getDate/getTimestamp 기반 핸들러를 사용 -->
+	<typeHandlers>
+		<typeHandler javaType="java.time.LocalDate" handler="egovframework.com.cmm.LocalDateDateTypeHandler" />
+		<typeHandler javaType="java.time.LocalDateTime" handler="egovframework.com.cmm.LocalDateTimeTimestampTypeHandler" />
+	</typeHandlers>
     
 </configuration>

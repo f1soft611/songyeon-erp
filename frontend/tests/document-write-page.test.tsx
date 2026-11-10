@@ -2,6 +2,7 @@ import {
   act,
   fireEvent,
   render,
+  renderHook,
   screen,
   within,
   waitForElementToBeRemoved,
@@ -16,6 +17,7 @@ const composerApi = vi.hoisted(() => ({
   fetchDraftFormOptions: vi.fn(),
   fetchDraftForms: vi.fn(),
   fetchDraftFormTemplate: vi.fn(),
+  fetchDraftFormUsers: vi.fn(),
   fetchMyProfile: vi.fn(),
   saveDocumentDraft: vi.fn(),
   submitDocumentApproval: vi.fn(),
@@ -26,6 +28,9 @@ const composerApi = vi.hoisted(() => ({
   pinDocumentApproval: vi.fn(),
   unpinDocumentApproval: vi.fn(),
   getDocumentApprovalSummary: vi.fn(),
+  confirmDocumentReference: vi.fn(),
+  confirmDocumentFinalConfirmation: vi.fn(),
+  addDocumentReferences: vi.fn(),
   getDocumentApprovalDetail: vi.fn(),
   listApprovalComments: vi.fn(),
   fetchApprovalEmbeddedImageBlob: vi.fn(),
@@ -99,6 +104,7 @@ vi.mock(
   () => ({
     fetchDraftFormOptions: composerApi.fetchDraftFormOptions,
     fetchDraftForms: composerApi.fetchDraftForms,
+    fetchDraftFormUsers: composerApi.fetchDraftFormUsers,
   }),
 );
 
@@ -125,12 +131,17 @@ vi.mock(
     pinDocumentApproval: composerApi.pinDocumentApproval,
     unpinDocumentApproval: composerApi.unpinDocumentApproval,
     getDocumentApprovalSummary: composerApi.getDocumentApprovalSummary,
+    confirmDocumentReference: composerApi.confirmDocumentReference,
+    confirmDocumentFinalConfirmation: composerApi.confirmDocumentFinalConfirmation,
+    addDocumentReferences: composerApi.addDocumentReferences,
     getDocumentApprovalDetail: composerApi.getDocumentApprovalDetail,
+    getExternalLinkPreview: vi.fn(),
     listApprovalComments: composerApi.listApprovalComments,
     fetchApprovalEmbeddedImageBlob: composerApi.fetchApprovalEmbeddedImageBlob,
     fetchApprovalCommentAttachmentBlob:
       composerApi.fetchApprovalCommentAttachmentBlob,
     createApprovalComment: composerApi.createApprovalComment,
+    listApprovalCommentMentionUserIds: vi.fn(async () => []),
     updateApprovalComment: composerApi.updateApprovalComment,
     deleteApprovalComment: composerApi.deleteApprovalComment,
     uploadApprovalCommentAttachment: composerApi.uploadApprovalCommentAttachment,
@@ -160,6 +171,11 @@ import type {
   DocumentApprovalRecord,
   DocumentApprovalSummary,
 } from '../src/pages/groupware/documents/write/types/documentWrite.types';
+import { useDocumentWritePage } from '../src/pages/groupware/documents/write/hooks/useDocumentWritePage';
+import {
+  getApprovalSystemEventPresentation,
+  parseDocumentApprovalScope,
+} from '../src/pages/groupware/documents/write/data/documentPresentation';
 
 const muiTheme = createTheme();
 
@@ -422,6 +438,7 @@ const draftFormTemplate = {
 beforeEach(() => {
   vi.clearAllMocks();
   approvalLineTemplateApi.list.mockResolvedValue([]);
+  composerApi.fetchDraftFormUsers.mockResolvedValue([]);
   composerApi.fetchDraftFormOptions.mockResolvedValue({
     categoryGroup: null,
     categoryItems: [category],
@@ -483,6 +500,10 @@ beforeEach(() => {
     completedCount: 1,
     revisionRequestedCount: 1,
     rejectedCount: 0,
+    referenceConfirmationRequiredCount: 2,
+    referenceConfirmationItems: defaultDocumentRecords.slice(0, 2),
+    finalConfirmationRequiredCount: 1,
+    finalConfirmationItems: defaultDocumentRecords.slice(0, 1),
     notices: [
       {
         electronicApprovalId: 1,
@@ -528,6 +549,19 @@ beforeEach(() => {
   composerApi.processDocumentApprovalAction.mockResolvedValue({
     electronicApprovalId: 1,
     documentStatus: 'IN_PROGRESS',
+  });
+  composerApi.confirmDocumentReference.mockResolvedValue({
+    electronicApprovalId: 1,
+    actionStatus: 'CONFIRMED',
+  });
+  composerApi.confirmDocumentFinalConfirmation.mockReset().mockResolvedValue({
+    electronicApprovalId: 1,
+    actionStatus: 'CONFIRMED',
+    actionAt: '2026-11-02T02:00:00Z',
+  });
+  composerApi.addDocumentReferences.mockResolvedValue({
+    electronicApprovalId: 1,
+    addedCount: 1,
   });
   composerApi.listApprovalComments.mockResolvedValue({
     comments: [],
@@ -665,6 +699,21 @@ function installApprovalResizeObserverMock() {
 }
 
 describe('Document write page', () => {
+  it('opens the approval document requested by a notification', async () => {
+    render(
+      <DashboardContent
+        {...pageProps}
+        requestedApprovalId={29}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledWith(29);
+    });
+    expect(await screen.findByTestId('approval-document-body'))
+      .toHaveTextContent('본문 내용');
+  });
+
   it('business contact always confirms unchanged tab switches in both directions', async () => {
     render(<DocumentComposerDialog open onClose={vi.fn()} />);
     await waitForComposerReady();
@@ -3715,6 +3764,8 @@ describe('Document write page', () => {
         completedCount: 0,
         revisionRequestedCount: 0,
         rejectedCount: 0,
+        referenceConfirmationRequiredCount: 0,
+        referenceConfirmationItems: [],
         notices: [],
       });
       resolveDetail({
@@ -3787,6 +3838,88 @@ describe('Document write page', () => {
       }
     });
   });
+
+  it.each(['feed', 'panel'] as const)(
+    'keeps comments visible with replies initially collapsed in %s presentation',
+    async (presentation) => {
+      const feedData = toFeedRecord(defaultDocumentRecords[0], {
+        comments: [
+          {
+            commentId: 1001,
+            ownerId: 1,
+            content: '<p>상위 댓글</p>',
+            commentType: 'USER',
+            writerName: '댓글 작성자',
+            attachments: [],
+          },
+          {
+            commentId: 1002,
+            ownerId: 1,
+            parentCommentId: 1001,
+            content: '<p>접을 답글</p>',
+            commentType: 'USER',
+            writerName: '답글 작성자',
+            attachments: [],
+          },
+        ],
+      });
+      composerApi.listApprovalComments.mockResolvedValue({
+        comments: feedData.comments,
+        systemEvents: [],
+        resultCnt: 1,
+        hasPrevious: false,
+        nextBeforeCommentId: null,
+      });
+      const sharedProps = {
+        open: true,
+        electronicApprovalId: 1,
+        detailRefreshToken: 0,
+        onActionComplete: () => undefined,
+        onEditDocument: () => undefined,
+      };
+      render(
+        <ThemeProvider theme={muiTheme}>
+          {presentation === 'feed' ? (
+            <DocumentApprovalDetailFeed
+              {...sharedProps}
+              presentation="feed"
+              employeeId="emp-1"
+              feedItem={{
+                id: 1,
+                title: '문서 A',
+                kind: '기안서',
+                status: '결재진행중',
+                author: '김민수',
+                date: '2026.10.29',
+                summary: '문서 요약',
+                feedData,
+              }}
+            />
+          ) : (
+            <DocumentApprovalDetailFeed
+              {...sharedProps}
+              presentation="panel"
+              onClose={() => undefined}
+            />
+          )}
+        </ThemeProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByText('상위 댓글')).toBeInTheDocument();
+      });
+      expect(await screen.findByRole('textbox', { name: '댓글 입력' })).toBeInTheDocument();
+      const toggle = screen.getByRole('button', { name: '답글 1개' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText('접을 답글')).not.toBeInTheDocument();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('접을 답글')).toBeInTheDocument();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText('접을 답글')).not.toBeInTheDocument();
+      expect(screen.getByText('상위 댓글')).toBeInTheDocument();
+    },
+  );
 
   it('renders every filtered document as a complete feed card with comments and reactions', async () => {
     composerApi.listDocumentApprovals.mockImplementation(
@@ -4184,6 +4317,7 @@ describe('Document write page', () => {
     expect(composerApi.processDocumentApprovalAction).toHaveBeenCalledWith(1, {
       action: 'APPROVED', actionComment: '승인 의견',
     });
+    expect(onActionComplete).toHaveBeenCalledWith({ quiet: true });
     expect(screen.getByText('승인 액션 시스템 메시지')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -4616,6 +4750,8 @@ describe('Document write page', () => {
         1,
         '<p>피드 댓글</p>',
         undefined,
+        [],
+        false,
       ),
     );
     expect(within(firstCard).getByText('피드 댓글')).toBeInTheDocument();
@@ -6675,5 +6811,683 @@ describe('Document write page', () => {
         .getByRole('dialog', { name: '문서 작성' })
         .querySelector('.MuiDialogContent-root [role="alert"]'),
     ).toBeNull();
+  });
+
+  it('parses and selects reference-confirmation scope and exposes its pending count', async () => {
+    expect(parseDocumentApprovalScope('MY_REFERENCE_PENDING')).toBe(
+      'MY_REFERENCE_PENDING',
+    );
+    expect(parseDocumentApprovalScope('MY_PENDING')).toBe('MY_PENDING');
+
+    mockPaginatedDocumentLists();
+    const { result } = renderHook(() => useDocumentWritePage());
+    act(() => result.current.selectScope('MY_REFERENCE_PENDING'));
+
+    await waitFor(() =>
+      expect(composerApi.listDocumentApprovals).toHaveBeenLastCalledWith(
+        'MY_REFERENCE_PENDING',
+        undefined,
+        undefined,
+        false,
+        { offset: 0, limit: 20 },
+      ),
+    );
+    await waitFor(() =>
+      expect(result.current.referenceConfirmationRequiredCount).toBe(2),
+    );
+  });
+
+  it('presents reference confirmation with the completed success badge', () => {
+    expect(getApprovalSystemEventPresentation('REFERENCE_CONFIRMED')).toEqual({
+      label: '참조 확인',
+      color: 'success',
+      variant: 'filled',
+    });
+  });
+
+  it('parses final-confirmation scope and refreshes its separate count and list', async () => {
+      expect(parseDocumentApprovalScope('MY_FINAL_CONFIRMATION_PENDING')).toBe('MY_FINAL_CONFIRMATION_PENDING');
+      mockPaginatedDocumentLists();
+      const { result } = renderHook(() => useDocumentWritePage());
+      act(() => result.current.selectScope('MY_FINAL_CONFIRMATION_PENDING'));
+      await waitFor(() => {
+        expect(composerApi.listDocumentApprovals).toHaveBeenLastCalledWith(
+          'MY_FINAL_CONFIRMATION_PENDING', undefined, undefined, false, { offset: 0, limit: 20 },
+        );
+        expect(result.current.finalConfirmationRequiredCount).toBe(1);
+        expect(result.current.referenceConfirmationRequiredCount).toBe(2);
+      });
+      const previousListCalls = composerApi.listDocumentApprovals.mock.calls.length;
+      const previousSummaryCalls = composerApi.getDocumentApprovalSummary.mock.calls.length;
+      composerApi.getDocumentApprovalSummary.mockResolvedValue({
+        ...result.current.summary, finalConfirmationRequiredCount: 0, finalConfirmationItems: [],
+      });
+      act(() => result.current.refresh());
+      await waitFor(() => {
+        expect(result.current.finalConfirmationRequiredCount).toBe(0);
+        expect(composerApi.listDocumentApprovals.mock.calls.length).toBe(previousListCalls + 1);
+        expect(composerApi.getDocumentApprovalSummary.mock.calls.length).toBe(previousSummaryCalls + 1);
+      });
+    });
+
+    it('excludes the internal final-confirmation row when restoring the editable approval line', async () => {
+      const record = defaultDocumentRecords[0]!;
+      render(<DocumentComposerDialog open onClose={vi.fn()} initialDocument={toFeedRecord(record, {
+        documentStatus: 'REVISION_REQUESTED', isDrafter: true,
+        approvalLines: [
+          { electronicApprovalLineId: 1, stageOrder: 1, participantOrder: 1, participantType: 'APPROVAL',
+            participantUserId: 'emp-1', participantName: '홍길동', actionStatus: 'APPROVED' },
+          { electronicApprovalLineId: 2, stageOrder: 2, participantOrder: 1, participantType: 'APPROVAL',
+            participantUserId: 'emp-2', participantName: '김민수', actionStatus: 'RETURNED' },
+          { electronicApprovalLineId: 3, stageOrder: 3, participantOrder: 1, participantType: 'FINAL_CONFIRMATION',
+            participantUserId: 'emp-1', participantName: '홍길동', actionStatus: 'WAITING' },
+        ],
+      })} />);
+      await screen.findByRole('textbox', { name: '기안자' });
+      await act(async () => {
+        fireEvent.click(await screen.findByRole('button', { name: '결재선 설정' }));
+      });
+      const settings = screen.getByRole('dialog', { name: '결재선 설정' });
+      expect(within(settings).queryByRole('group', { name: '결재 3 홍길동' })).not.toBeInTheDocument();
+      expect(within(settings).getByRole('group', { name: '결재 2 김민수' })).toBeInTheDocument();
+    });
+
+  it('presents reference additions in the existing system timeline style', () => {
+    expect(getApprovalSystemEventPresentation('REFERENCE_ADDED')).toEqual({
+      label: '참조자 추가',
+      color: 'info',
+      variant: 'outlined',
+    });
+  });
+
+  it('adds selected references from the detail menu and refreshes the system timeline', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    const existingReference = {
+      electronicApprovalLineId: 121,
+      stageOrder: 1,
+      participantOrder: 1,
+      participantType: 'REFERENCE' as const,
+      participantUserId: 'emp-2',
+      participantName: '기존 참조자',
+      actionStatus: 'WAITING',
+    };
+    const initialDetail = toFeedRecord(record, {
+      approvalLines: [existingReference],
+    });
+    const refreshedDetail = toFeedRecord(record, {
+      approvalLines: [
+        existingReference,
+        {
+          ...existingReference,
+          electronicApprovalLineId: 122,
+          participantOrder: 2,
+          participantUserId: 'emp-3',
+          participantName: '새 참조자 A',
+        },
+        {
+          ...existingReference,
+          electronicApprovalLineId: 123,
+          participantOrder: 3,
+          participantUserId: 'emp-4',
+          participantName: '새 참조자 B',
+        },
+      ],
+    });
+    let resolveDetailRefresh!: (value: DocumentApprovalDetail) => void;
+    composerApi.getDocumentApprovalDetail.mockReset()
+      .mockResolvedValueOnce(initialDetail)
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveDetailRefresh = resolve;
+      }));
+    composerApi.fetchDraftFormUsers.mockResolvedValue([
+      {
+        userId: 'emp-2',
+        loginId: 2,
+        userNm: '기존 참조자',
+        departmentNm: '기획팀',
+        profileImage: null,
+        levelNm: null,
+      },
+      {
+        userId: 'emp-3',
+        loginId: 3,
+        userNm: '새 참조자 A',
+        departmentNm: '운영팀',
+        profileImage: null,
+        levelNm: null,
+      },
+      {
+        userId: 'emp-4',
+        loginId: 4,
+        userNm: '새 참조자 B',
+        departmentNm: '관리팀',
+        profileImage: null,
+        levelNm: null,
+      },
+    ]);
+    let additionSaved = false;
+    const systemEvent = {
+      commentId: 150,
+      ownerId: record.electronicApprovalId,
+      commentType: 'SYSTEM' as const,
+      eventType: 'REFERENCE_ADDED',
+      content: '작성자님이 참조자(새 참조자 A, 새 참조자 B)를 추가했습니다.',
+      writerName: '작성자',
+    };
+    composerApi.addDocumentReferences.mockImplementationOnce(async () => {
+      additionSaved = true;
+      return { electronicApprovalId: record.electronicApprovalId, addedCount: 2 };
+    });
+    composerApi.listApprovalComments.mockReset().mockImplementation(async () => ({
+      comments: [],
+      systemEvents: additionSaved ? [systemEvent] : [],
+      hasPrevious: false,
+      nextBeforeCommentId: null,
+      resultCnt: 0,
+    }));
+    const onActionComplete = vi.fn();
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={onActionComplete}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: '문서 상세' });
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '참조자 추가하기' }));
+    const picker = screen.getByRole('combobox', { name: '참조자 선택' });
+    fireEvent.mouseDown(picker);
+    expect(screen.queryByRole('option', { name: /기존 참조자/ })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('option', { name: /새 참조자 A/ }));
+    fireEvent.mouseDown(picker);
+    fireEvent.click(await screen.findByRole('option', { name: /새 참조자 B/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '참조자 추가', exact: true })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '참조자 추가', exact: true }));
+
+    await waitFor(() => {
+      expect(composerApi.addDocumentReferences).toHaveBeenCalledWith(
+        record.electronicApprovalId,
+        ['emp-3', 'emp-4'],
+      );
+      expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledTimes(2);
+      expect(onActionComplete).toHaveBeenCalledOnce();
+    });
+    expect(screen.getByTestId('post-detail-panel-content')).not.toHaveAttribute('role', 'status');
+    expect(screen.getByText(record.title)).toBeInTheDocument();
+    await act(async () => resolveDetailRefresh(refreshedDetail));
+    expect(await screen.findByText(systemEvent.content)).toBeInTheDocument();
+    expect(composerNotifications.showSuccess).toHaveBeenCalledWith('참조자를 추가했습니다.');
+  });
+
+  it('keeps reference selection visible and reports an add failure without refreshing', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset().mockResolvedValueOnce(
+      toFeedRecord(record, { approvalLines: [] }),
+    );
+    composerApi.fetchDraftFormUsers.mockResolvedValue([{
+      userId: 'emp-3',
+      loginId: 3,
+      userNm: '새 참조자 A',
+      departmentNm: '운영팀',
+      profileImage: null,
+      levelNm: null,
+    }]);
+    composerApi.addDocumentReferences.mockRejectedValueOnce(
+      new Error('참조자 추가 요청에 실패했습니다.'),
+    );
+    const onActionComplete = vi.fn();
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={onActionComplete}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: '문서 상세' });
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '참조자 추가하기' }));
+    const picker = screen.getByRole('combobox', { name: '참조자 선택' });
+    fireEvent.mouseDown(picker);
+    fireEvent.click(await screen.findByRole('option', { name: /새 참조자 A/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '참조자 추가', exact: true })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '참조자 추가', exact: true }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '참조자 추가 요청에 실패했습니다.',
+    );
+    expect(screen.getByRole('dialog', { name: '참조자 추가' })).toBeInTheDocument();
+    expect(screen.getByText('새 참조자 A')).toBeInTheDocument();
+    expect(composerApi.addDocumentReferences).toHaveBeenCalledWith(
+      record.electronicApprovalId,
+      ['emp-3'],
+    );
+    expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledOnce();
+    expect(onActionComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not report success or refresh when every selected reference was already added', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset().mockResolvedValueOnce(
+      toFeedRecord(record, { approvalLines: [] }),
+    );
+    composerApi.fetchDraftFormUsers.mockResolvedValue([{
+      userId: 'emp-3',
+      loginId: 3,
+      userNm: '새 참조자 A',
+      departmentNm: '운영팀',
+      profileImage: null,
+      levelNm: null,
+    }]);
+    composerApi.addDocumentReferences.mockResolvedValueOnce({
+      electronicApprovalId: record.electronicApprovalId,
+      addedCount: 0,
+    });
+    const onActionComplete = vi.fn();
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={onActionComplete}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: '문서 상세' });
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '참조자 추가하기' }));
+    const picker = screen.getByRole('combobox', { name: '참조자 선택' });
+    fireEvent.mouseDown(picker);
+    fireEvent.click(await screen.findByRole('option', { name: /새 참조자 A/ }));
+    fireEvent.click(screen.getByRole('button', { name: '참조자 추가', exact: true }));
+
+    expect(await screen.findByText('선택한 사용자는 이미 문서에 참여하고 있습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '참조자 추가' })).toBeInTheDocument();
+    expect(composerNotifications.showSuccess).not.toHaveBeenCalled();
+    expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledOnce();
+    expect(onActionComplete).not.toHaveBeenCalled();
+  });
+
+  it.each(['COMPLETED', 'REJECTED'] as const)(
+    'confirms the drafter final line on a %s document without normal approval actions',
+    async (documentStatus) => {
+      const record = defaultDocumentRecords[0]!;
+      const line = {
+        electronicApprovalLineId: 151, stageOrder: 6, participantOrder: 1,
+        participantType: 'FINAL_CONFIRMATION' as const,
+        participantUserId: 'emp-1', participantName: '내부 최종확인 참여자',
+        actionStatus: 'PENDING',
+      };
+      composerApi.getDocumentApprovalDetail.mockReset()
+        .mockResolvedValueOnce(toFeedRecord(record, { documentStatus, isDrafter: true, approvalLines: [line] }))
+        .mockResolvedValueOnce(toFeedRecord(record, {
+          documentStatus, isDrafter: true, approvalLines: [{ ...line, actionStatus: 'CONFIRMED' }],
+        }));
+      let finish!: () => void;
+      composerApi.confirmDocumentFinalConfirmation.mockReturnValueOnce(new Promise<void>((resolve) => { finish = resolve; }));
+      composerApi.listApprovalComments.mockResolvedValue({
+        comments: [], systemEvents: [], hasPrevious: false, nextBeforeCommentId: null, resultCnt: 0,
+      });
+      const onActionComplete = vi.fn();
+      render(<DocumentApprovalDetailFeed open electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()} onActionComplete={onActionComplete} onEditDocument={vi.fn()} detailRefreshToken={0} />);
+      const button = await screen.findByRole('button', { name: '최종확인', exact: true });
+      expect(screen.queryByRole('button', { name: '승인', exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '반려', exact: true })).not.toBeInTheDocument();
+      expect(screen.queryByText('내부 최종확인 참여자')).not.toBeInTheDocument();
+      composerApi.listApprovalComments.mockResolvedValue({
+        comments: [], hasPrevious: false, nextBeforeCommentId: null, resultCnt: 0,
+        systemEvents: [{
+          commentId: 501, ownerId: record.electronicApprovalId, commentType: 'SYSTEM',
+          eventType: 'FINAL_CONFIRMATION_CONFIRMED', content: '기안자가 최종 확인을 완료했습니다.',
+          writerName: '기안자', createdAt: '2026-11-02T02:00:00Z',
+        }],
+      });
+      fireEvent.click(button);
+      expect(button).toBeDisabled();
+      await act(async () => finish());
+      await waitFor(() => {
+        expect(composerApi.confirmDocumentFinalConfirmation).toHaveBeenCalledWith(record.electronicApprovalId);
+        expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledTimes(2);
+        expect(composerApi.listApprovalComments).toHaveBeenCalledTimes(2);
+        expect(onActionComplete).toHaveBeenCalledOnce();
+        expect(onActionComplete).toHaveBeenCalledWith({ quiet: true });
+        expect(screen.queryByRole('button', { name: '최종확인', exact: true })).not.toBeInTheDocument();
+      });
+      expect(await screen.findByText('기안자가 최종 확인을 완료했습니다.')).toBeInTheDocument();
+      expect(screen.getAllByText(documentStatus === 'COMPLETED' ? '승인' : '반려').length).toBeGreaterThan(0);
+      expect(composerApi.processDocumentApprovalAction).not.toHaveBeenCalled();
+      expect(composerApi.confirmDocumentReference).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { isDrafter: false },
+    { participantUserId: 'emp-2' },
+    { actionStatus: 'WAITING' },
+    { actionStatus: 'CONFIRMED' },
+    { documentStatus: 'IN_PROGRESS' },
+    { documentStatus: 'REVISION_REQUESTED' },
+    { documentType: 'BUSINESS_CONTACT' },
+  ])('does not expose ineligible final-confirmation actions: %j', async (patch) => {
+    const record = defaultDocumentRecords[0]!;
+    composerApi.getDocumentApprovalDetail.mockReset().mockResolvedValueOnce(toFeedRecord(record, {
+      documentStatus: 'COMPLETED', isDrafter: true,
+      ...(patch.documentStatus ? { documentStatus: patch.documentStatus } : {}),
+      ...(patch.documentType ? { documentType: patch.documentType } : {}),
+      ...(patch.isDrafter === false ? { isDrafter: false } : {}),
+      approvalLines: [{
+        electronicApprovalLineId: 151, stageOrder: 6, participantOrder: 1,
+        participantType: 'FINAL_CONFIRMATION', participantUserId: patch.participantUserId ?? 'emp-1',
+        participantName: '내부 참여자', actionStatus: patch.actionStatus ?? 'PENDING',
+      }],
+    } as Partial<DocumentApprovalFeedRecord>));
+    render(<DocumentApprovalDetailFeed open electronicApprovalId={record.electronicApprovalId}
+      onClose={vi.fn()} onActionComplete={vi.fn()} onEditDocument={vi.fn()} detailRefreshToken={0} />);
+    await screen.findByRole('heading', { name: '문서 상세' });
+    expect(screen.queryByRole('button', { name: '최종확인', exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '승인', exact: true })).not.toBeInTheDocument();
+  });
+
+  it('keeps final-confirmation failures visible without refreshing as success', async () => {
+    const record = defaultDocumentRecords[0]!;
+    composerApi.getDocumentApprovalDetail.mockReset().mockResolvedValue(toFeedRecord(record, {
+      documentStatus: 'COMPLETED', isDrafter: true,
+      approvalLines: [{
+        electronicApprovalLineId: 151, stageOrder: 6, participantOrder: 1,
+        participantType: 'FINAL_CONFIRMATION', participantUserId: 'emp-1',
+        participantName: '기안자', actionStatus: 'PENDING',
+      }],
+    }));
+    composerApi.confirmDocumentFinalConfirmation.mockRejectedValueOnce(new Error('최종확인 권한이 없습니다.'));
+    const onActionComplete = vi.fn();
+    render(<DocumentApprovalDetailFeed open electronicApprovalId={record.electronicApprovalId}
+      onClose={vi.fn()} onActionComplete={onActionComplete} onEditDocument={vi.fn()} detailRefreshToken={0} />);
+    fireEvent.click(await screen.findByRole('button', { name: '최종확인', exact: true }));
+    expect(await screen.findByText('최종확인 권한이 없습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '최종확인', exact: true })).toBeEnabled();
+    expect(onActionComplete).not.toHaveBeenCalled();
+    expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledOnce();
+  });
+
+  it('confirms only the authenticated employee reference and reloads detail and comments', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    const referenceLine = {
+      electronicApprovalLineId: 121,
+      stageOrder: 1,
+      participantOrder: 1,
+      participantType: 'REFERENCE' as const,
+      participantUserId: 'emp-1',
+      participantName: '홍길동',
+      actionStatus: 'WAITING',
+    };
+    const unconfirmedDetail = toFeedRecord(record, {
+      approvalLines: [referenceLine],
+    });
+    const confirmedDetail = toFeedRecord(record, {
+      approvalLines: [{ ...referenceLine, actionStatus: 'CONFIRMED' }],
+    });
+    composerApi.getDocumentApprovalDetail.mockReset();
+    composerApi.getDocumentApprovalDetail
+      .mockResolvedValueOnce(unconfirmedDetail)
+      .mockResolvedValueOnce(confirmedDetail);
+    let resolveConfirmation!: (value: {
+      electronicApprovalId: number;
+      actionStatus: string;
+    }) => void;
+    composerApi.confirmDocumentReference.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfirmation = resolve;
+      }),
+    );
+    const onActionComplete = vi.fn();
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={onActionComplete}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    const confirmButton = await screen.findByRole('button', {
+      name: '확인',
+      exact: true,
+    });
+    fireEvent.click(confirmButton);
+    expect(confirmButton).toBeDisabled();
+
+    await act(async () => {
+      resolveConfirmation({
+        electronicApprovalId: record.electronicApprovalId,
+        actionStatus: 'CONFIRMED',
+      });
+    });
+
+    await waitFor(() => {
+      expect(composerApi.confirmDocumentReference).toHaveBeenCalledWith(
+        record.electronicApprovalId,
+      );
+      expect(composerApi.getDocumentApprovalDetail).toHaveBeenCalledTimes(2);
+      expect(composerApi.listApprovalComments).toHaveBeenCalledTimes(2);
+      expect(onActionComplete).toHaveBeenCalledOnce();
+      expect(onActionComplete).toHaveBeenCalledWith({ quiet: true });
+    });
+    expect(
+      screen.queryByRole('button', { name: '확인', exact: true }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not offer reference confirmation to a different authenticated employee', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset();
+    composerApi.getDocumentApprovalDetail.mockResolvedValueOnce(
+      toFeedRecord(record, {
+        approvalLines: [{
+          electronicApprovalLineId: 122,
+          stageOrder: 1,
+          participantOrder: 1,
+          participantType: 'REFERENCE',
+          participantUserId: 'emp-2',
+          participantName: '김민수',
+          actionStatus: 'WAITING',
+        }],
+      }),
+    );
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={vi.fn()}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: '문서 상세' });
+    expect(
+      screen.queryByRole('button', { name: '확인', exact: true }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not offer reference confirmation to an approval participant', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset();
+    composerApi.getDocumentApprovalDetail.mockResolvedValueOnce(
+      toFeedRecord(record, {
+        approvalLines: [{
+          electronicApprovalLineId: 125,
+          stageOrder: 1,
+          participantOrder: 1,
+          participantType: 'APPROVAL',
+          participantUserId: 'emp-1',
+          participantName: '홍길동',
+          actionStatus: 'PENDING',
+        }],
+      }),
+    );
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={vi.fn()}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    await screen.findByRole('heading', { name: '문서 상세' });
+    expect(
+      screen.queryByRole('button', { name: '확인', exact: true }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('allows an unconfirmed reference to confirm a sent business contact', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset();
+    composerApi.getDocumentApprovalDetail.mockResolvedValueOnce(
+      toFeedRecord(record, {
+        documentType: 'BUSINESS_CONTACT',
+        documentStatus: 'COMPLETED',
+        approvalLines: [{
+          electronicApprovalLineId: 126,
+          stageOrder: 1,
+          participantOrder: 1,
+          participantType: 'REFERENCE',
+          participantUserId: 'emp-1',
+          participantName: '홍길동',
+          actionStatus: 'WAITING',
+        }],
+      }),
+    );
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={vi.fn()}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', { name: '확인', exact: true }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['draft document', 'DRAFT', 'DRAFTING'],
+    ['unsupported document type', 'PENDING', 'EXPENSE_RESOLUTION'],
+  ] as const)(
+    'does not offer reference confirmation for a %s',
+    async (_reason, documentStatus, documentType) => {
+      const record = defaultDocumentRecords[0];
+      if (!record) throw new Error('Missing reference document fixture.');
+      composerApi.getDocumentApprovalDetail.mockReset();
+      composerApi.getDocumentApprovalDetail.mockResolvedValueOnce(
+        toFeedRecord(record, {
+          documentStatus,
+          documentType,
+          approvalLines: [{
+            electronicApprovalLineId: 124,
+            stageOrder: 1,
+            participantOrder: 1,
+            participantType: 'REFERENCE',
+            participantUserId: 'emp-1',
+            participantName: '홍길동',
+            actionStatus: 'WAITING',
+          }],
+        }),
+      );
+
+      render(
+        <DocumentApprovalDetailFeed
+          open
+          electronicApprovalId={record.electronicApprovalId}
+          onClose={vi.fn()}
+          onActionComplete={vi.fn()}
+          onEditDocument={vi.fn()}
+          detailRefreshToken={0}
+        />,
+      );
+
+      await screen.findByRole('heading', { name: '문서 상세' });
+      expect(
+        screen.queryByRole('button', { name: '확인', exact: true }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it('shows reference-confirmation failures in the detail flow', async () => {
+    const record = defaultDocumentRecords[0];
+    if (!record) throw new Error('Missing reference document fixture.');
+    composerApi.getDocumentApprovalDetail.mockReset();
+    composerApi.getDocumentApprovalDetail.mockResolvedValueOnce(
+      toFeedRecord(record, {
+        approvalLines: [{
+          electronicApprovalLineId: 123,
+          stageOrder: 1,
+          participantOrder: 1,
+          participantType: 'REFERENCE',
+          participantUserId: 'emp-1',
+          participantName: '홍길동',
+          actionStatus: 'WAITING',
+        }],
+      }),
+    );
+    composerApi.confirmDocumentReference.mockRejectedValueOnce(
+      new Error('참조 확인 요청에 실패했습니다.'),
+    );
+
+    render(
+      <DocumentApprovalDetailFeed
+        open
+        electronicApprovalId={record.electronicApprovalId}
+        onClose={vi.fn()}
+        onActionComplete={vi.fn()}
+        onEditDocument={vi.fn()}
+        detailRefreshToken={0}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole('button', { name: '확인', exact: true }),
+    );
+
+    expect(
+      await screen.findByRole('alert'),
+    ).toHaveTextContent('참조 확인 요청에 실패했습니다.');
   });
 });

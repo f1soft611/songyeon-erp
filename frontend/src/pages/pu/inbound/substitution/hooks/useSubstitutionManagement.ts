@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchDetail, fetchMaterials, fetchSchedules } from '../services/materialSubstitution.service';
 import type { SubstitutionDetail, SubstitutionMaterial, SubstitutionSchedule } from '../types/materialSubstitution.types';
 import { applyCount } from '../utils/materialSubstitution';
@@ -10,7 +11,9 @@ const errorText = (error: unknown, fallback: string) =>
 // 재료 치환등록 화면의 생산일자 · 목록 · 상세보기 상태. 마지막 요청의 응답만 쓴다
 export function useSubstitutionManagement() {
   const requestIdRef = useRef(0);
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 생산일자는 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 날로 다시 부른다
+  const [initial] = useState(() => readSearchSession('pu-substitution', { date: todayDash() }));
+  const [date, setDate] = useState(initial.date);
   const [rows, setRows] = useState<SubstitutionSchedule[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -23,6 +26,7 @@ export function useSubstitutionManagement() {
       setAlertText('날짜를 골라주세요');
       return;
     }
+    saveSearchSession('pu-substitution', { date: day });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -37,10 +41,10 @@ export function useSubstitutionManagement() {
     }
   }, []);
 
-  // 송연과 같이 화면을 열면 오늘 것을 바로 조회한다
+  // 송연과 같이 화면을 열면 오늘 것(돌아온 경우 마지막으로 조회한 날)을 바로 조회한다
   useEffect(() => {
-    void load(todayDash());
-  }, [load]);
+    void load(initial.date);
+  }, [load, initial]);
 
   const search = () => void load(date);
 

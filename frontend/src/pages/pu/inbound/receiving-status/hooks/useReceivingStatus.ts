@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchReceivings } from '../../receiving-register/services/receiving.service';
 import type { PageSearchFieldValue } from '../../../../../shared/components/page-search/searchFields';
 import type { InQuery, Receiving, StatusRow } from '../../receiving-register/types/receiving.types';
@@ -8,7 +9,8 @@ import { IN_STATUS_EXCEL_COLUMNS, applyInStatusDetail, errorText, monthStart, no
 // 입고현황 화면: 기간 안에 들어온 것을 한 줄씩(반품 포함). 열면 바로 부른다. 마지막 요청의 응답만 쓴다
 export function useReceivingStatus(onError: (text: string) => void) {
   const requestRef = useRef(0);
-  const [query, setQuery] = useState<InQuery>(() => ({ start: monthStart(), end: todayDash(), clientQ: '', materialQ: '', kind: '' }));
+  const [query, setQuery] = useState<InQuery>(() => // 2026-11-04 마지막으로 조회한 조건(탭 세션)으로 다시 연다
+    readSearchSession('pu-receiving-status', { start: monthStart(), end: todayDash(), clientQ: '', materialQ: '', kind: '' }));
   const queryRef = useRef(query);
   queryRef.current = query;
   const [records, setRecords] = useState<Receiving[] | null>(null);
@@ -20,6 +22,7 @@ export function useReceivingStatus(onError: (text: string) => void) {
       onError('조회 기간을 선택해주세요');
       return;
     }
+    saveSearchSession('pu-receiving-status', current);
     const requestId = ++requestRef.current;
     setLoading(true);
     try {

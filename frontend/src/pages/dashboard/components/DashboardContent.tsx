@@ -21,6 +21,7 @@ import { RoleManagementPage } from '../../settings/system/roles/RoleManagementPa
 import { CommonCodeManagementPage } from '../../co/master/common-code/CommonCodeManagementPage';
 import { DraftFormManagementPage } from '../../co/workflow/form/DraftFormManagementPage';
 import { F1GridTestPage } from '../../settings/system/f1-grid-test/F1GridTestPage';
+import { ScreenReviewManagementPage } from '../../settings/system/screen-reviews/ScreenReviewManagementPage';
 import { F1GridDocsPage } from '../../f1-grid-docs/F1GridDocsPage';
 import DashboardHomePage from '../home/DashboardHomePage';
 import { BoxTypeManagementPage } from '../../co/master/box-type/BoxTypeManagementPage';
@@ -57,8 +58,12 @@ import { StockLedgerManagementPage } from '../../pu/stock/stock-ledger/StockLedg
 import { StockAdjustManagementPage } from '../../pu/stock/stock-adjust/StockAdjustManagementPage';
 import { StockStatusManagementPage } from '../../pu/stock/stock-status/StockStatusManagementPage';
 import { DocumentBoxManagementPage } from '../../pu/document/document-box/DocumentBoxManagementPage';
-import { TemperatureMonitorPage } from '../../qm/temperature/TemperatureMonitorPage';
-import { LabelRegisterPage } from '../../qm/labelregister/LabelRegisterPage';
+import { TemperatureMonitorPage } from '../../qm/temperature/temp-monitor/TemperatureMonitorPage';
+import { LabelRegisterManagementPage } from '../../qm/label/label-register/LabelRegisterManagementPage';
+import { LabelRequestManagementPage } from '../../qm/label/label-request/LabelRequestManagementPage';
+import { LabelFormatManagementPage } from '../../qm/label/label-format/LabelFormatManagementPage';
+import { ProductInspectionManagementPage } from '../../qm/inspection/product-inspection/ProductInspectionManagementPage';
+import { PrerequisiteManagementPage } from '../../qm/haccp/prerequisite/PrerequisiteManagementPage';
 import { RecipeWritePage } from '../../rd/recipe/RecipeWritePage';
 import { RecipeSharePage } from '../../rd/recipeshare/RecipeSharePage';
 import { RecipeLogPage } from '../../rd/recipelog/RecipeLogPage';
@@ -92,6 +97,10 @@ type DashboardContentProps = {
   onDashboardScopeChange?: (scope: DocumentApprovalScope | null) => void;
   sharedDocumentId?: number | string | null;
   onSharedDocumentClose?: () => void;
+  requestedApprovalId?: number | null;
+  onRequestedApprovalClose?: () => void;
+  requestedPostId?: number | null;
+  onRequestedPostClose?: () => void;
 };
 
 export function ComingSoonPage({
@@ -196,6 +205,10 @@ export function DashboardContent({
   onDashboardScopeChange,
   sharedDocumentId,
   onSharedDocumentClose,
+  requestedApprovalId,
+  requestedPostId,
+  onRequestedPostClose,
+  onRequestedApprovalClose,
 }: DashboardContentProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -230,6 +243,8 @@ export function DashboardContent({
   if (selectedModule.id === 'groupware' && currentPageKey === 'write') {
     return (
       <DocumentWritePage
+        requestedApprovalId={requestedApprovalId}
+        onRequestedApprovalClose={onRequestedApprovalClose}
         sharedDocumentId={sharedDocumentId}
         onSharedDocumentClose={onSharedDocumentClose}
         selectedModule={selectedModule}
@@ -247,6 +262,8 @@ export function DashboardContent({
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
+        requestedPostId={requestedPostId}
+        onRequestedPostClose={onRequestedPostClose}
       />
     );
   }
@@ -324,6 +341,19 @@ export function DashboardContent({
         breadcrumbItems={breadcrumbItems}
         selectedMenuPermissions={selectedMenuPermissions}
         isTenantAdmin={isTenantAdmin}
+      />
+    );
+  }
+
+  // 환경설정 > 시스템 관리 > 화면검수 관리 (화면ID ST_SCREEN_REVIEWS, 2026-11-05)
+  if (selectedModule.id === 'settings' && currentPageKey === 'screen-reviews') {
+    return (
+      <ScreenReviewManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
       />
     );
   }
@@ -835,10 +865,11 @@ export function DashboardContent({
     );
   }
 
-  // 송연 품질관리 > 라벨등록 (송연 label.py · 07-label.js · 25~27)
-  if (selectedModule.id === 'qm' && currentPageKey === 'label-register') {
+  // 송연 품질관리 > 라벨관리 > 라벨등록 · 표시사항 요청 · 라벨양식 (송연 label.py · 07-label.js · 25~27)
+  // 2026-11-05 중분류를 두고 라벨등록의 탭 두 개를 화면으로 나눴다(화면ID LBLabelRegisterView · LBLabelRequestView · LBLabelFormatView)
+  if (selectedModule.id === 'qm' && currentPageKey === 'LBLabelRegisterView') {
     return (
-      <LabelRegisterPage
+      <LabelRegisterManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}
@@ -848,10 +879,60 @@ export function DashboardContent({
     );
   }
 
-  // 송연 품질관리 > 실시간 온도 (송연 temperature.py · 13-delivery-statement.js 209~ · 14-temperature.js)
-  if (selectedModule.id === 'qm' && currentPageKey === 'temp-monitor') {
+  if (selectedModule.id === 'qm' && currentPageKey === 'LBLabelRequestView') {
+    return (
+      <LabelRequestManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  if (selectedModule.id === 'qm' && currentPageKey === 'LBLabelFormatView') {
+    return (
+      <LabelFormatManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  // 송연 품질관리 > 온도관리 > 실시간 온도 (화면ID TMTempMonitorView, 송연 temperature.py · 13-delivery-statement.js 209~ · 14-temperature.js)
+  if (selectedModule.id === 'qm' && currentPageKey === 'TMTempMonitorView') {
     return (
       <TemperatureMonitorPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  // 송연 품질관리 > 품질검사 > 제품검사 (화면ID QIProductInspectionView, 송연 qdoc-spec.html · 41-qdoc-spec.js · 42-qdoc-pspec.js). 2026-11-06 화면만
+  if (selectedModule.id === 'qm' && currentPageKey === 'QIProductInspectionView') {
+    return (
+      <ProductInspectionManagementPage
+        selectedModule={selectedModule}
+        currentMenuName={currentMenuName}
+        content={content}
+        breadcrumbItems={breadcrumbItems}
+        selectedMenuPermissions={selectedMenuPermissions}
+      />
+    );
+  }
+
+  // 송연 품질관리 > HACCP > HACCP(선행) (화면ID HCPrerequisiteView, 송연 qdoc-survey.html · 43-qdoc-survey.js). 2026-11-06 화면만
+  if (selectedModule.id === 'qm' && currentPageKey === 'HCPrerequisiteView') {
+    return (
+      <PrerequisiteManagementPage
         selectedModule={selectedModule}
         currentMenuName={currentMenuName}
         content={content}

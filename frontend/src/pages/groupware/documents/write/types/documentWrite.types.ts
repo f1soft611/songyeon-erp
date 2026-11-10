@@ -20,6 +20,8 @@ export type ApprovalDocumentStatus =
 export type DocumentApprovalScope =
   | 'ALL'
   | 'MY_PENDING'
+  | 'MY_REFERENCE_PENDING'
+  | 'MY_FINAL_CONFIRMATION_PENDING'
   | 'IN_PROGRESS'
   | 'DRAFT'
   | 'COMPLETED'
@@ -93,6 +95,8 @@ export type DocumentWritePageProps = {
   content: PageContent;
   dashboardScope?: DocumentApprovalScope | null;
   onDashboardScopeChange?: (scope: DocumentApprovalScope | null) => void;
+  requestedApprovalId?: number | null;
+  onRequestedApprovalClose?: () => void;
   sharedDocumentId?: number | string | null;
   onSharedDocumentClose?: () => void;
 };
@@ -180,6 +184,11 @@ export type DocumentApprovalPinState = {
   pinned: boolean;
 };
 
+export type DocumentApprovalReferenceAddResult = {
+  electronicApprovalId: number;
+  addedCount: number;
+};
+
 export type DocumentApprovalSummary = {
   actionRequiredCount: number;
   inProgressCount: number;
@@ -187,14 +196,18 @@ export type DocumentApprovalSummary = {
   completedCount: number;
   revisionRequestedCount: number;
   rejectedCount: number;
+  referenceConfirmationRequiredCount: number;
+  finalConfirmationRequiredCount: number;
   notices: DocumentApprovalRecord[];
+  referenceConfirmationItems: DocumentApprovalRecord[];
+  finalConfirmationItems: DocumentApprovalRecord[];
 };
 
 export type DocumentApprovalLine = {
   electronicApprovalLineId: number;
   stageOrder: number;
   participantOrder: number;
-  participantType: 'APPROVAL' | 'AGREEMENT' | 'REFERENCE';
+  participantType: 'APPROVAL' | 'AGREEMENT' | 'REFERENCE' | 'FINAL_CONFIRMATION';
   participantUserId: string;
   participantName: string;
   participantDepartmentName?: string | null;

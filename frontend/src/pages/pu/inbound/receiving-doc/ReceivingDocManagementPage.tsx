@@ -111,13 +111,9 @@ export function ReceivingDocManagementPage({
         onDetailSearch={docs.applyDetail}
         detailLoading={docs.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-            <Typography sx={{ fontSize: 14, fontWeight: 700 }}>품목별 서류</Typography>
-            {docs.summary && !docs.loading && docs.rows.length === 0 && (
-              <Typography variant="body2" color="text.secondary">{docs.missingOnly ? '서류가 빠진 품목이 없습니다' : '이 조건에 맞는 입고내역이 없습니다'}</Typography>
-            )}
             <FormControlLabel
               sx={{ ml: 'auto', mr: 0 }}
               control={<Checkbox size="small" checked={docs.missingOnly} onChange={(event) => docs.setMissingOnly(event.target.checked)} />}

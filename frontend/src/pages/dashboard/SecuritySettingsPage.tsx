@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { changeMyPassword } from './services/profileSettings.service';
 import { logout } from '../../shared/services/authService';
+import { AppSaveButton } from '../../shared/components/AppSaveButton';
 
 function SecuritySettingsPage() {
   const navigate = useNavigate();
@@ -113,13 +114,16 @@ function SecuritySettingsPage() {
               spacing={1}
               sx={{ justifyContent: 'flex-end' }}
             >
-              <Button
+              <AppSaveButton
                 variant="contained"
                 onClick={handleSubmit}
+                saving={saving}
+                savingLabel="변경 중..."
+                progressLabel="비밀번호 변경 중"
                 disabled={saving}
               >
-                {saving ? '변경 중...' : '변경'}
-              </Button>
+                변경
+              </AppSaveButton>
               <Button variant="outlined" onClick={() => navigate(-1)}>
                 취소
               </Button>

@@ -39,11 +39,8 @@ public class AuthenticInterceptor extends WebContentInterceptor {
 	@Override
 	public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws ServletException {
 
-		String requestURI = request.getRequestURI();
-
-		// ✅ /auth/refresh는 인터셉터 제외 (맨 위에 추가!)
-		if (requestURI.startsWith("/auth/refresh")) {
-			return true;  // 바로 통과
+		if ("/auth/refresh".equals(request.getServletPath())) {
+			return true;
 		}
 
 		LoginVO loginVO = (LoginVO) EgovUserDetailsHelper.getAuthenticatedUser();

@@ -12,8 +12,9 @@ import type {
   LabelBomAllergens, LabelCompanyInfo, LabelFormat, LabelInfo, LabelMark, LabelTemplate, LabelVersion,
 } from './label.types';
 import {
-  buildLabelHTML, buildLabelPrintDocument, LABEL_CSS, LABEL_STD_FIELDS, labelPrintDateKr, missingLabelItems, sanitizeLabelHtml, type LabelSheet,
+  buildLabelHTML, buildLabelPrintDocument, LABEL_CSS, LABEL_STD_FIELDS, labelInfoWithCodeNames, labelPrintDateKr, missingLabelItems, sanitizeLabelHtml, type LabelSheet,
 } from './labelHtml';
+import { useCommonCodeOptions } from '../common-code/useCommonCodeOptions';
 
 // 라벨 창 — 인쇄 전용 (송연 shared/components/LabelForm, 기존 07-label.js openLabelForm printMode).
 // 생산관리 > 라벨출력, 생산확정의 🏷️ 라벨에서 연다. 라벨등록(고치기)은 그 화면을 옮길 때 더한다.
@@ -153,12 +154,16 @@ function LabelPrintDialogBody({ target, onClose }: { target: LabelPrintTarget; o
   // 양식을 고르면 그 양식의 종이 크기, 기본 양식이면 버전에 적힌 크기
   const size = format?.paper ? `${format.paper.w}x${format.paper.h}` : sizeSelect;
   const recycle = markId ? { mark_id: parseInt(markId, 10), width_mm: parseFloat(markWidth) || undefined } : null;
+  // 버전의 식품유형 · 보관방법은 공통코드 코드라, 보이는 칸 · 인쇄에는 공통코드 이름을 쓴다(2026-11-05)
+  const foodTypeOptions = useCommonCodeOptions('FOOD_TYPE');
+  const storageOptions = useCommonCodeOptions('STORAGE_METHOD');
+  const shown = labelInfoWithCodeNames(info, foodTypeOptions, storageOptions);
   const sheet: LabelSheet = {
     code,
     name,
     mfgDate,
     // 양식에만 있는 항목은 앞뒤 공백을 떼고 넣는다(송연 readLabelForm)
-    info: { ...info, extra: Object.fromEntries(Object.entries({ ...(info.extra || {}), ...extra }).map(([k, v]) => [k, String(v ?? '').trim()])) },
+    info: { ...shown, extra: Object.fromEntries(Object.entries({ ...(info.extra || {}), ...extra }).map(([k, v]) => [k, String(v ?? '').trim()])) },
     companyInfo: company,
     format,
     recycle,
@@ -228,7 +233,7 @@ function LabelPrintDialogBody({ target, onClose }: { target: LabelPrintTarget; o
             <Typography sx={metaSx}>인쇄 전용으로 열었습니다. 라벨 내용은 품질관리 &gt; 라벨등록에서 고칩니다. 회사 정보와 주의사항은 모든 라벨에 공통으로 들어갑니다.</Typography>
             <TextField {...lockedField} label="제품명" value={name} />
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1.25 }}>
-              <TextField {...lockedField} label="식품유형" value={info.foodType || ''} />
+              <TextField {...lockedField} label="식품유형" value={shown.foodType || ''} />
               <TextField {...lockedField} label="내용량" value={info.netWeight || ''} />
               <Box sx={{ gridColumn: '1 / -1' }}>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 0.25 }}>제조년월일</Typography>
@@ -247,7 +252,7 @@ function LabelPrintDialogBody({ target, onClose }: { target: LabelPrintTarget; o
                 <TextField {...lockedField} label="소비기한(제조일로부터)" value={info.shelfLifeMonths ?? ''} />
                 <TextField {...lockedField} label="단위" value={info.shelfLifeMonths ? (info.shelfLifeUnit || '월') : ''} sx={{ width: 70, flex: '0 0 70px' }} />
               </Box>
-              <TextField {...lockedField} label="보관방법" value={info.storage || ''} />
+              <TextField {...lockedField} label="보관방법" value={shown.storage || ''} />
               <TextField {...lockedField} label="포장재질(내면)" value={info.packagingMaterial || ''} sx={{ gridColumn: '1 / -1' }} />
             </Box>
             <Box>

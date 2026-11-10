@@ -14,6 +14,12 @@ public interface EmbeddedImageStorageService extends EmbeddedImageDocumentStorag
 
     EmbeddedImageUploadVO uploadTemporaryImage(Long tenantId, MultipartFile file) throws Exception;
 
+    void streamTemporaryImage(
+            Long tenantId,
+            String uploadToken,
+            String fileName,
+            HttpServletResponse response) throws Exception;
+
             void deleteTemporaryImage(Long tenantId, String uploadToken, String fileName) throws Exception;
 
             void completeOwnerSave(

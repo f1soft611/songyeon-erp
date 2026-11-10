@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchVendors } from '../../../../co/master/material-master/services/materialMaster.service';
 import { fetchLedger, fetchStockAsOf, registerLedgerOrders } from '../services/stockLedger.service';
 import type { DraftItem, LedgerFilter, LedgerGridRow, LedgerKind, LedgerRow } from '../types/stockLedger.types';
@@ -13,11 +14,16 @@ const errorText = (error: unknown, fallback: string) =>
 // 수불대장 화면의 조회 · 발주량 칸 · 발주 등록 · 재고 내려받기 상태. 열면 오늘 것을 바로 보여준다. 마지막 요청의 응답만 쓴다
 export function useStockLedgerManagement() {
   const requestIdRef = useRef(0);
-  const [kind, setKind] = useState<LedgerKind>('material');
-  const [start, setStart] = useState(() => todayDash());
-  const [end, setEnd] = useState(() => todayDash());
-  const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<LedgerFilter>('used');
+  // 2026-11-04 마지막으로 조회한 기간과 탭 · 검색어 · 보기는 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그대로 다시 연다
+  const [initial] = useState(() => readSearchSession('pu-stock-ledger', {
+    start: todayDash(), end: todayDash(), kind: 'material' as LedgerKind, query: '', mode: 'used' as LedgerFilter,
+  }));
+  const [kind, setKind] = useState<LedgerKind>(initial.kind);
+  const [start, setStart] = useState(initial.start);
+  const [end, setEnd] = useState(initial.end);
+  const [applied, setApplied] = useState({ start: initial.start, end: initial.end });
+  const [query, setQuery] = useState(initial.query);
+  const [mode, setMode] = useState<LedgerFilter>(initial.mode);
   const [exportDate, setExportDate] = useState('');
   const [dates, setDates] = useState<string[]>([]);
   const [rows, setRows] = useState<LedgerRow[]>([]);
@@ -38,6 +44,7 @@ export function useStockLedgerManagement() {
       setAlertText('종료일이 시작일보다 빠를 수 없어요');
       return;
     }
+    setApplied({ start: from, end: to });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -54,10 +61,13 @@ export function useStockLedgerManagement() {
   }, []);
 
   useEffect(() => {
-    const today = todayDash();
-    void load(today, today);
+    void load(initial.start, initial.end);
     fetchVendors().then((list) => setVendors(list.map((v) => v.name).filter(Boolean))).catch(() => undefined);
-  }, [load]);
+  }, [load, initial]);
+
+  useEffect(() => {
+    saveSearchSession('pu-stock-ledger', { ...applied, kind, query, mode });
+  }, [applied, kind, query, mode]);
 
   const search = () => void load(start, end);
 

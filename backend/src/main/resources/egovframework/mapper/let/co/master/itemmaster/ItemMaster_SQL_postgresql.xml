@@ -10,6 +10,8 @@
         <result property="spec" column="spec"/>
         <result property="storage" column="storage"/>
         <result property="storageNm" column="storage_nm"/>
+        <result property="foodType" column="food_type"/>
+        <result property="foodTypeNm" column="food_type_nm"/>
         <result property="clientName" column="client_name"/>
         <result property="clientCode" column="client_code"/>
         <result property="discontinued" column="discontinued"/>
@@ -57,6 +59,14 @@
              JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
              WHERE i.item_code = p.storage
              LIMIT 1) AS storage_nm,
+            <!-- 2026-11-05 식품유형: 저장은 공통코드 FOOD_TYPE 코드, 이름은 공통코드에서 -->
+            p.food_type,
+            (SELECT i.item_nm
+             FROM tb_common_code_item i
+             JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'FOOD_TYPE'
+             JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+             WHERE i.item_code = p.food_type
+             LIMIT 1) AS food_type_nm,
             <!-- 2026-10-23 products 는 거래처코드(client_code)를 저장한다. 화면에는 거래처마스터 이름(client_name) -->
             p.client_code,
             (SELECT c.name FROM clients c WHERE c.client_code = p.client_code LIMIT 1) AS client_name,
@@ -103,6 +113,7 @@
         UPDATE products
         SET name = #{name},
             storage = #{storage, jdbcType=VARCHAR},
+            food_type = #{foodType, jdbcType=VARCHAR}, <!-- 2026-11-05 식품유형 코드 -->
             client_code = #{clientCode, jdbcType=VARCHAR} <!-- 2026-10-23 거래처코드 -->
         WHERE code = #{code}
     </update>
@@ -310,6 +321,17 @@
         SELECT i.item_code
         FROM tb_common_code_item i
         JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'STORAGE_METHOD'
+        JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+        WHERE COALESCE(i.use_at, 'Y') = 'Y'
+          AND COALESCE(g.use_at, 'Y') = 'Y'
+        ORDER BY i.sort_order, i.item_code
+    </select>
+
+    <!-- 2026-11-05 식품유형: 공통코드 FOOD_TYPE 의 사용 중 코드 -->
+    <select id="selectFoodTypeCodes" resultType="string">
+        SELECT i.item_code
+        FROM tb_common_code_item i
+        JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'FOOD_TYPE'
         JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
         WHERE COALESCE(i.use_at, 'Y') = 'Y'
           AND COALESCE(g.use_at, 'Y') = 'Y'

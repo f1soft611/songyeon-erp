@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { JSONContent } from '@tiptap/core';
 import type { Editor } from '@tiptap/react';
 import type { RichTextEditorImage } from './richTextEditor.types';
+import { apiGetBlob } from '../../services/apiClient';
 
 export type TemporaryRichTextImage = {
   uploadToken: string;
@@ -39,7 +40,29 @@ export function useRichTextEditorSaveLifecycle({
   onImageUploadError,
 }: UseRichTextEditorSaveLifecycleOptions) {
   const temporaryImages = useRef(new Map<string, TemporaryRichTextImage>());
+  const previewUrls = useRef(new Map<string, string>());
+  const active = useRef(true);
   const [uploadingCount, setUploadingCount] = useState(0);
+
+  const releasePreview = (uploadToken: string) => {
+    const url = previewUrls.current.get(uploadToken);
+    if (url) URL.revokeObjectURL(url);
+    previewUrls.current.delete(uploadToken);
+  };
+
+  const releaseAllPreviews = () => {
+    for (const token of previewUrls.current.keys()) releasePreview(token);
+  };
+
+  useEffect(() => {
+    active.current = true;
+    const urls = previewUrls.current;
+    return () => {
+      active.current = false;
+      urls.forEach((url) => URL.revokeObjectURL(url));
+      urls.clear();
+    };
+  }, []);
 
   const uploadImageWithSession = async (file: File) => {
     const uploaded = await uploadImage(file);
@@ -51,6 +74,31 @@ export function useRichTextEditorSaveLifecycle({
         fileName,
       });
     }
+    if (uploaded.src?.startsWith('/api/v1/common/embedded-images/temp/')) {
+      try {
+        const blob = await apiGetBlob(uploaded.src);
+        const objectUrl = URL.createObjectURL(blob);
+        if (!active.current) {
+          URL.revokeObjectURL(objectUrl);
+          throw new Error('이미지 편집이 종료되었습니다.');
+        }
+        if (uploaded.uploadToken) {
+          releasePreview(uploaded.uploadToken);
+          previewUrls.current.set(uploaded.uploadToken, objectUrl);
+        }
+        return { ...uploaded, src: objectUrl };
+      } catch (error) {
+        if (uploaded.uploadToken && fileName) {
+          try {
+            await deleteTemporaryImage({ uploadToken: uploaded.uploadToken, fileName });
+            temporaryImages.current.delete(uploaded.uploadToken);
+          } catch {
+            // Keep failed cleanup in the session for cancel/save cleanup.
+          }
+        }
+        throw error;
+      }
+    }
     return uploaded;
   };
 
@@ -60,13 +108,18 @@ export function useRichTextEditorSaveLifecycle({
     const fileName = temporaryImage?.fileName || image.alt?.trim();
     if (!fileName) return;
     const upload = { uploadToken: image.uploadToken, fileName };
-    await deleteTemporaryImage(upload);
+    try {
+      await deleteTemporaryImage(upload);
+    } finally {
+      releasePreview(image.uploadToken);
+    }
     temporaryImages.current.delete(image.uploadToken);
   };
 
   const cleanupTemporaryImages = async () => {
     const uploads = Array.from(temporaryImages.current.values());
     await Promise.allSettled(uploads.map(deleteTemporaryImage));
+    releaseAllPreviews();
     temporaryImages.current.clear();
   };
 
@@ -107,6 +160,9 @@ export function useRichTextEditorSaveLifecycle({
     uploadingCount,
     getSnapshot,
     cleanupTemporaryImages,
-    completeSave: () => temporaryImages.current.clear(),
+    completeSave: (options?: { keepPreviews?: boolean }) => {
+      if (!options?.keepPreviews) releaseAllPreviews();
+      temporaryImages.current.clear();
+    },
   };
 }

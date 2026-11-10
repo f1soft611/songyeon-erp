@@ -254,7 +254,7 @@ describe('Archive dashboard page', () => {
 
   it('restores the executed query and detailed criteria after server defaults load', async () => {
     window.sessionStorage.setItem(
-      's-erp:page:community-archive',
+      'songyeon-erp:page:community-archive',
       JSON.stringify({
         version: 1,
         value: {

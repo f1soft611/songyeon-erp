@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Card, CardContent, TextField } from '@mui/material';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SearchIcon from '@mui/icons-material/Search';
@@ -8,6 +8,7 @@ import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { toPageSearchFields, type PageSearchField, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { downloadExcel, todayDash } from '../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../shared/utils/searchSession';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { PricingDetailDialog } from './components/PricingDetailDialog';
 import { PricingGrid, createPricingColumns } from './components/PricingGrid';
@@ -37,6 +38,8 @@ const DIFF_FIELD: PageSearchField = {
   options: DIFF_OPTIONS.filter((option) => option.value !== ''),
 };
 const textOf = (value: PageSearchFieldValue | undefined) => (typeof value === 'string' ? value : '');
+const diffOptionOf = (value: PageSearchFieldValue | undefined) =>
+  (DIFF_OPTIONS.find((option) => option.value === value)?.value ?? '') as DiffOption;
 
 type PricingManagementPageProps = {
   selectedModule: ModuleItem;
@@ -47,12 +50,16 @@ type PricingManagementPageProps = {
 };
 
 export function PricingManagementPage({ selectedModule, currentMenuName, content, breadcrumbItems, selectedMenuPermissions }: PricingManagementPageProps) {
-  const [search, setSearch] = useState('');
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  // 2026-11-04 검색어와 마지막으로 조회한 상세조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그대로 다시 보인다
+  const [saved] = useState(() =>
+    readSearchSession<{ search: string; detailValues: Record<string, PageSearchFieldValue> }>('sales-pricing', { search: '', detailValues: {} }));
+  const [search, setSearch] = useState(saved.search);
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
   // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
-  const [client, setClient] = useState('');
-  const [diffOption, setDiffOption] = useState<DiffOption>('');
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
+  const [client, setClient] = useState(() => textOf(saved.detailValues.clientName).trim());
+  const [diffOption, setDiffOption] = useState<DiffOption>(() => diffOptionOf(saved.detailValues.diffOption));
+  useEffect(() => saveSearchSession('sales-pricing', { search, detailValues: appliedDetailValues }), [search, appliedDetailValues]);
   const management = usePricingManagement(search);
 
   const permissions = {
@@ -121,12 +128,12 @@ export function PricingManagementPage({ selectedModule, currentMenuName, content
         onDetailSearch={(values) => {
           setAppliedDetailValues(values);
           setClient(textOf(values.clientName).trim());
-          setDiffOption((DIFF_OPTIONS.find((option) => option.value === values.diffOption)?.value ?? '') as DiffOption);
+          setDiffOption(diffOptionOf(values.diffOption));
         }}
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={{ borderRadius: 1, border: '1px solid rgba(148,163,184,0.18)', boxShadow: 'none', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <CardContent sx={{ p: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', '&:last-child': { pb: 2 } }}>
             <PricingGrid rows={visibleRows} columns={columns} loading={management.loading} />

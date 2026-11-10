@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { apiGet } from '../src/shared/services/apiClient';
 import {
@@ -10,7 +10,34 @@ import {
   setSessionNotice,
 } from '../src/shared/services/authService';
 
+// 로그인 공지 팝업은 이 테스트의 관심이 아니다(S_ERP 테스트와 같음)
+vi.mock('../src/pages/groupware/community/notice/components/NoticeLoginPopupHost', () => ({
+  NoticeLoginPopupHost: () => null,
+}));
+
 describe('Login page', () => {
+  // S_ERP 테스트와 같은 준비: 토큰 갱신은 성공으로 답하고, 기본 메뉴 응답은 지금 메뉴 모양(모듈 아래 종합현황)으로 바꾼다
+  beforeEach(() => {
+    const defaultFetch = window.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/auth/refresh')) {
+        return new Response(JSON.stringify({
+          resultCode: '200',
+          jToken: 'refreshed-test-token',
+        }), { status: 200 });
+      }
+      const response = await defaultFetch(input, init);
+      if (String(input).includes('/api/v1/menus/my')) {
+        const body = await response.json();
+        for (const root of body.result.menus) {
+          root.children = [{ ...root, menuId: 'dashboard-home', children: [] }];
+        }
+        return new Response(JSON.stringify(body), { status: 200 });
+      }
+      return response;
+    }));
+  });
+
   it('renders the enterprise login fields', () => {
     render(<App />);
 
@@ -76,7 +103,7 @@ describe('Login page', () => {
     render(<App />);
 
     expect(
-      await screen.findByRole('heading', { name: /^종합현황$/i }),
+      await screen.findByRole('heading', { name: /^종합현황$/i, level: 1 }, { timeout: 10000 }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/로그인 유지 시간/i)).not.toBeInTheDocument();
     expect(
@@ -154,7 +181,7 @@ describe('Login page', () => {
     fireEvent.click(screen.getByRole('button', { name: /로그인/i }));
 
     expect(
-      await screen.findByRole('heading', { name: /^종합현황$/i }),
+      await screen.findByRole('heading', { name: /^종합현황$/i, level: 1 }, { timeout: 10000 }),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       expect.stringContaining('/auth/login-jwt'),

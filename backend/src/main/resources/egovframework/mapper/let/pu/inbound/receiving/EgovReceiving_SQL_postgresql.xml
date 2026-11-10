@@ -23,7 +23,8 @@
             COALESCE(r.is_return, 0) AS "isReturn",
             r.return_reason AS "returnReason",
             r.return_of_id AS "returnOfId",
-            (SELECT COALESCE(SUM(ABS(r2.qty)), 0) FROM material_receiving r2 WHERE r2.return_of_id = r.id) AS "returnedQty"
+            (SELECT COALESCE(SUM(ABS(r2.qty)), 0) FROM material_receiving r2 WHERE r2.return_of_id = r.id) AS "returnedQty",
+            (SELECT COALESCE(m.stock_qty, 0) FROM materials m WHERE m.code = r.material_code LIMIT 1) AS "stockQty" <!-- 2026-11-05 지울 수 있는지 화면이 미리 본다 -->
         FROM material_receiving r
         <where>
             <if test="date != null">r.receive_date = #{date}</if>
@@ -109,7 +110,9 @@
     </update>
 
     <select id="selectForCancel" parameterType="long" resultType="egovframework.let.pu.inbound.receiving.domain.model.ReceivingVO">
-        SELECT material_code AS "materialCode", qty AS "qty" FROM material_receiving WHERE id = #{id}
+        SELECT r.material_code AS "materialCode", r.qty AS "qty",
+            (SELECT COALESCE(m.stock_qty, 0) FROM materials m WHERE m.code = r.material_code LIMIT 1) AS "stockQty"
+        FROM material_receiving r WHERE r.id = #{id}
     </select>
 
     <delete id="deleteReceiving" parameterType="long">

@@ -2,6 +2,7 @@ import {
   AppBar,
   Avatar,
   Box,
+  Button,
   CircularProgress,
   IconButton,
   ListItemIcon,
@@ -11,12 +12,13 @@ import {
   Tooltip,
   Typography,
   useTheme,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 import MenuOutlined from '@mui/icons-material/MenuOutlined';
 import MenuOpenOutlined from '@mui/icons-material/MenuOpenOutlined';
-import NotificationsOutlined from '@mui/icons-material/NotificationsOutlined';
 import ReplayOutlined from '@mui/icons-material/ReplayOutlined';
 import TuneOutlined from '@mui/icons-material/TuneOutlined';
 import ManageAccountsOutlined from '@mui/icons-material/ManageAccountsOutlined';
@@ -38,6 +40,10 @@ import {
   fetchMyMenus,
   hydrateModuleDescriptors,
 } from './services/menuService';
+import {
+  fetchMenuFavorites,
+} from './services/menuFavorite.service';
+import type { MenuFavoritesResponse } from './types/menuFavorite.types';
 import { fetchModuleRows } from '../settings/system/modules/services/moduleManagement.service';
 import { DashboardSidebar } from './components/DashboardSidebar';
 import { DashboardContent } from './components/DashboardContent';
@@ -52,10 +58,13 @@ import { parseDocumentApprovalScope } from '../groupware/documents/write/data/do
 import { parseDocumentShareLink } from '../groupware/documents/write/data/documentShareLink';
 import type { DocumentApprovalScope } from '../groupware/documents/write/types/documentWrite.types';
 import { NotFoundPage } from '../errors/NotFoundPage';
-import {
-  clearPageSessionState,
-  usePageSessionState,
-} from '../../shared/hooks/usePageSessionState';
+import { NotificationCenter } from '../../shared/components/NotificationCenter';
+import { UnifiedSearch } from '../../shared/components/search/UnifiedSearch';
+import { UnifiedSearchPage } from '../search/UnifiedSearchPage';
+import { MessageCenter } from '../../shared/components/MessageCenter';
+import { MessageInboxPage } from '../groupware/messages/MessageInboxPage';
+import { NotificationInboxPage } from '../groupware/notifications/NotificationInboxPage';
+import { clearPageSessionState } from '../../shared/hooks/usePageSessionState';
 
 const themeOptions = [
   { value: 'light', label: '밝은 테마' },
@@ -156,9 +165,46 @@ type RecentMenuEntry = {
   visitedAt: number;
 };
 
-const RECENT_MENU_SESSION_KEY = 'songyeon-erp:recent-menu-history';
+// 2026-11-04 S_ERP 20261103_003 최근 사용 메뉴 PC 유지: 탭 세션이 아니라 이 PC 브라우저(localStorage)에 둔다. 로그아웃해도 지우지 않는다
+const RECENT_MENU_STORAGE_KEY = 'songyeon-erp:recent-menu-history';
 const COMMON_CODE_PAGE_SESSION_KEY = 'songyeon-erp:page:common-code-management';
 const RECENT_MENU_LIMIT = 5;
+
+const readRecentMenus = (): RecentMenuEntry[] => {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  for (const storageName of ['localStorage', 'sessionStorage'] as const) {
+    try {
+      const rawValue = window[storageName].getItem(RECENT_MENU_STORAGE_KEY);
+      if (!rawValue) {
+        continue;
+      }
+      const parsedValue: unknown = JSON.parse(rawValue);
+      if (!Array.isArray(parsedValue)) {
+        continue;
+      }
+      return parsedValue.filter((value: unknown): value is RecentMenuEntry => {
+        if (!value || typeof value !== 'object') {
+          return false;
+        }
+        const entry = value as Partial<RecentMenuEntry>;
+        return typeof entry.menuId === 'string'
+          && typeof entry.moduleId === 'string'
+          && typeof entry.label === 'string'
+          && typeof entry.path === 'string'
+          && typeof entry.visitedAt === 'number'
+          && Number.isFinite(entry.visitedAt)
+          && (entry.moduleName === undefined || typeof entry.moduleName === 'string')
+          && (entry.breadcrumbPath === undefined || typeof entry.breadcrumbPath === 'string');
+      }).slice(0, RECENT_MENU_LIMIT);
+    } catch {
+      // Try the legacy session history if persistent storage is unavailable or invalid.
+    }
+  }
+  return [];
+};
 
 const writeRecentMenus = (items: RecentMenuEntry[]) => {
   if (typeof window === 'undefined') {
@@ -166,10 +212,11 @@ const writeRecentMenus = (items: RecentMenuEntry[]) => {
   }
 
   try {
-    window.sessionStorage.setItem(
-      RECENT_MENU_SESSION_KEY,
+    window.localStorage.setItem(
+      RECENT_MENU_STORAGE_KEY,
       JSON.stringify(items),
     );
+    window.sessionStorage.removeItem(RECENT_MENU_STORAGE_KEY);
   } catch {
     // Ignore storage errors; the user still gets the current page flow.
   }
@@ -184,13 +231,15 @@ function DashboardPage() {
   );
   const [menusLoading, setMenusLoading] = useState(true);
   const [menusError, setMenusError] = useState(false);
+  const [favorites, setFavorites] = useState<MenuFavoritesResponse>({
+    folders: [],
+    favorites: [],
+  });
+  const [favoritesSelected, setFavoritesSelected] = useState(false);
+  const [favoritesMessage, setFavoritesMessage] = useState('');
   const [menusReloadToken, setMenusReloadToken] = useState(0);
   const lastRecordedMenuRef = useRef('');
-  const {
-    state: recentMenuState,
-    setState: setRecentMenuState,
-    resetState: resetRecentMenuState,
-  } = usePageSessionState<RecentMenuEntry[]>(RECENT_MENU_SESSION_KEY, []);
+  const [recentMenuState, setRecentMenuState] = useState(readRecentMenus);
   const defaultModule = moduleItems[0];
   const defaultMenuId = defaultModule?.menus[0]?.id ?? '';
   const emptyModule: ModuleItem = {
@@ -232,6 +281,15 @@ function DashboardPage() {
         setModuleItems(
           buildModuleItems(hydrateModuleDescriptors(sourceModules, moduleRows)),
         );
+        fetchMenuFavorites()
+          .then(setFavorites)
+          .catch((cause: unknown) => {
+            if (!cancelled) {
+              setFavoritesMessage(
+                cause instanceof Error ? cause.message : '즐겨찾기를 불러오지 못했습니다.',
+              );
+            }
+          });
       })
       .catch(() => {
         if (!cancelled) {
@@ -252,6 +310,19 @@ function DashboardPage() {
   const dashboardScope = parseDocumentApprovalScope(
     new URLSearchParams(location.search).get('dashboardScope'),
   );
+  // 2026-11-04 S_ERP 알림 → 문서(approvalId) · 종합현황 → 공지(dashboardPostId) 바로 열기
+  const approvalIdParam = new URLSearchParams(location.search).get('approvalId');
+  const parsedApprovalId = approvalIdParam && /^\d+$/.test(approvalIdParam)
+    ? Number(approvalIdParam)
+    : null;
+  const requestedApprovalId = parsedApprovalId !== null
+    && Number.isSafeInteger(parsedApprovalId)
+    && parsedApprovalId > 0
+    ? parsedApprovalId
+    : null;
+  const postIdParam = new URLSearchParams(location.search).get('dashboardPostId');
+  const parsedPostId = postIdParam && /^[1-9]\d*$/.test(postIdParam) ? Number(postIdParam) : null;
+  const requestedPostId = parsedPostId !== null && Number.isSafeInteger(parsedPostId) ? parsedPostId : null;
   const updateDashboardScope = (scope: DocumentApprovalScope | null) => {
     const searchParams = new URLSearchParams(location.search);
     if (scope) searchParams.set('dashboardScope', scope);
@@ -263,6 +334,8 @@ function DashboardPage() {
     );
   };
   const effectivePath = resolveLegacyRoutePath(location.pathname);
+  // 2026-11-04 S_ERP 통합검색: /search 는 메뉴가 아닌 고정 화면(최근 사용 메뉴에도 남기지 않는다)
+  const isSearchPage = normalizeRoutePath(effectivePath) === '/search';
   const theme = useTheme();
   const [themeMenuAnchor, setThemeMenuAnchor] = useState<HTMLElement | null>(
     null,
@@ -337,7 +410,8 @@ function DashboardPage() {
       return true;
     }
 
-    const validPaths = new Set<string>(['/']);
+    // 2026-11-04 S_ERP 알림함 · 쪽지함: 메뉴가 아니라 상단 바 아이콘으로 여는 고정 화면
+    const validPaths = new Set<string>(['/', '/groupware/notifications', '/groupware/messages', '/search']);
     moduleItems.forEach((module) => {
       validPaths.add(normalizeRoutePath(module.path ?? `/${module.id}`));
 
@@ -390,6 +464,7 @@ function DashboardPage() {
   const isDarkTheme = themeMode === 'dark';
 
   const handleModuleChange = (moduleId: string) => {
+    setFavoritesSelected(false);
     const nextModule =
       moduleItems.find((module) => module.id === moduleId) ?? moduleItems[0];
     if (!nextModule) {
@@ -408,6 +483,28 @@ function DashboardPage() {
   const handleMenuSelect = (menuId: string) => {
     const targetPath = getMenuRoutePath(selectedModule, menuId);
     navigate(targetPath);
+  };
+
+  const refreshFavorites = async () => {
+    const response = await fetchMenuFavorites();
+    setFavorites(response);
+    setFavoritesMessage('');
+  };
+
+  const retryFavorites = async () => {
+    try {
+      await refreshFavorites();
+    } catch (cause) {
+      setFavoritesMessage(
+        cause instanceof Error ? cause.message : '즐겨찾기를 불러오지 못했습니다.',
+      );
+    }
+  };
+
+  const handleFavoriteMenuSelect = (moduleId: string, menuId: string) => {
+    const module = moduleItems.find((item) => item.id === moduleId);
+    if (!module) return;
+    navigate(getMenuRoutePath(module, menuId));
   };
 
   const handleRecentMenuSelect = (path: string) => {
@@ -431,7 +528,6 @@ function DashboardPage() {
   };
 
   const handleLogout = () => {
-    resetRecentMenuState();
     clearPageSessionState(COMMON_CODE_PAGE_SESSION_KEY);
     logout();
     navigate('/login', { replace: true });
@@ -500,6 +596,7 @@ function DashboardPage() {
   useEffect(() => {
     if (
       menusLoading ||
+      isSearchPage ||
       !hasAccessibleMenu ||
       !selectedModule.id ||
       selectedMenuId === 'empty-access'
@@ -650,11 +747,18 @@ function DashboardPage() {
             selectedModuleId={selectedModuleId}
             selectedModule={selectedModule}
             expandedItemIds={expandedItemIds}
-            selectedMenuId={selectedMenuId}
+            selectedMenuId={isSearchPage ? '' : selectedMenuId}
             recentMenuItems={recentMenuState}
             onModuleChange={handleModuleChange}
             onMenuSelect={handleMenuSelect}
             onRecentMenuSelect={handleRecentMenuSelect}
+            favorites={favorites}
+            favoritesSelected={favoritesSelected}
+            onFavoritesSelect={() => setFavoritesSelected(true)}
+            onFavoritesMore={() => setFavoritesSelected(true)}
+            onFavoriteMenuSelect={handleFavoriteMenuSelect}
+            onFavoritesRefresh={refreshFavorites}
+            onFavoritesError={setFavoritesMessage}
             isMenuPanelCollapsed={isMenuPanelCollapsed}
             isMobile={isMobile}
             isMobileMenuOpen={isMobileMenuOpen}
@@ -684,14 +788,17 @@ function DashboardPage() {
                     bgcolor: theme.palette.background.paper,
                     color: theme.palette.text.primary,
                     borderBottom: `1px solid ${theme.palette.divider}`,
-                    height: 'var(--dashboard-header-height)',
+                    // S_ERP 4d6becc1(통합검색): 좁은 화면에서 검색창이 다음 줄로 내려가면 상단 바도 함께 늘어난다
+                    minHeight: 'var(--dashboard-header-height)',
+                    height: 'auto',
                     boxSizing: 'border-box',
                   }}
                 >
                   <Box
                     sx={{
                       px: { xs: 1, md: 3 },
-                      height: '100%',
+                      minHeight: 'var(--dashboard-header-height)',
+                      py: 1,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -724,21 +831,42 @@ function DashboardPage() {
                           <MenuOpenOutlined fontSize="small" />
                         )}
                       </IconButton>
+                      <Snackbar
+                        open={Boolean(favoritesMessage)}
+                        autoHideDuration={null}
+                        onClose={() => setFavoritesMessage('')}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                      >
+                        <Alert
+                          severity="error"
+                          onClose={() => setFavoritesMessage('')}
+                          action={
+                            <Button color="inherit" size="small" onClick={() => void retryFavorites()}>
+                              다시 시도
+                            </Button>
+                          }
+                        >
+                          {favoritesMessage}
+                        </Alert>
+                      </Snackbar>
                       <Typography
                         variant="h6"
                         component="h1"
                         sx={{ fontWeight: 700 }}
                       >
-                        {hasAccessibleMenu ? currentMenu.name : ''}
+                        {isSearchPage ? '통합검색' : hasAccessibleMenu ? currentMenu.name : ''}
                       </Typography>
                     </Box>
 
+                    <Box sx={{ ml: { xs: 0, sm: 'auto' }, width: { xs: '100%', sm: 'auto' }, order: { xs: 3, sm: 0 } }}>
+                      <UnifiedSearch />
+                    </Box>
                     <Box
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 1,
-                        ml: 'auto',
+                        ml: { xs: 'auto', sm: 0 },
                         minWidth: 0,
                         flexWrap: 'wrap',
                         justifyContent: 'flex-end',
@@ -821,12 +949,8 @@ function DashboardPage() {
                           </MenuItem>
                         ))}
                       </Menu>
-                      <IconButton
-                        aria-label="notifications"
-                        sx={{ color: theme.palette.text.secondary }}
-                      >
-                        <NotificationsOutlined fontSize="small" />
-                      </IconButton>
+                      <NotificationCenter />
+                      <MessageCenter />
                       <IconButton
                         aria-label="프로필 메뉴 열기"
                         onClick={(event) =>
@@ -976,7 +1100,13 @@ function DashboardPage() {
                   </Box>
                 </AppBar>
 
-                {hasAccessibleMenu ? (
+                {isSearchPage ? (
+                  <UnifiedSearchPage />
+                ) : effectivePath === '/groupware/notifications' ? (
+                  <NotificationInboxPage />
+                ) : effectivePath === '/groupware/messages' ? (
+                  <MessageInboxPage />
+                ) : hasAccessibleMenu ? (
                 // 화면검수 패널이 열리면 오른쪽 칸에 붙고 본문 폭이 줄어든다(2026-11-02)
                 <ScreenReviewDock reviewer={profile.name?.trim() || profile.userId || ''}>
                   <DashboardContent
@@ -1000,6 +1130,22 @@ function DashboardPage() {
                       'PLATFORM_ADMIN',
                       'ADMIN',
                     ].includes((profile.roleName ?? '').trim().toUpperCase())}
+                    requestedApprovalId={requestedApprovalId}
+                    requestedPostId={requestedPostId}
+                    onRequestedPostClose={() => {
+                      const params = new URLSearchParams(location.search);
+                      params.delete('dashboardPostId');
+                      navigate({ pathname: location.pathname, search: params.toString(), hash: location.hash }, { replace: true });
+                    }}
+                    onRequestedApprovalClose={() => {
+                      const params = new URLSearchParams(location.search);
+                      params.delete('approvalId');
+                      navigate({
+                        pathname: location.pathname,
+                        search: params.toString(),
+                        hash: location.hash,
+                      }, { replace: true });
+                    }}
                   />
                 </ScreenReviewDock>
                 ) : (

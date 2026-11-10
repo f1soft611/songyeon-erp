@@ -38,6 +38,7 @@ type WarehouseManagementPanelProps = {
   onError?: (message: string) => void;
   warehouseGridKey?: number;
   warehouseGridLoading?: boolean;
+  saving?: boolean;
 };
 
 export type WarehouseManagementPanelHandle = {
@@ -71,12 +72,13 @@ export const WarehouseManagementPanel = forwardRef<
     onError,
     warehouseGridKey = 0,
     warehouseGridLoading = false,
+    saving = false,
   },
   ref,
 ) {
   const gridRef = useRef<F1GridRef<WarehouseManagementRow>>(null);
   const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
-  const completedOperationsRef = useRef(new Set<string>());
+  const completedOperationsRef = useRef(new Map<string, string>());
 
   const filteredWarehouses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -103,7 +105,7 @@ export const WarehouseManagementPanel = forwardRef<
       field: 'warehouseName',
       headerName: '창고명',
       flex: 1,
-      editable: (row) => canEditWarehouseName(row),
+      editable: (row) => !saving && canEditWarehouseName(row),
       headerAlign: 'center',
       align: 'left',
     },
@@ -112,7 +114,7 @@ export const WarehouseManagementPanel = forwardRef<
       headerName: '사용 여부',
       flex: 0.8,
       type: 'checkbox',
-      editable: true,
+      editable: !saving,
       headerCheckbox: true,
       align: 'center',
       headerAlign: 'center',
@@ -162,6 +164,11 @@ export const WarehouseManagementPanel = forwardRef<
     useAt: row.use ? 'Y' : 'N',
   });
 
+  const toOperationSignature = useCallback((value: unknown) => {
+    if (value == null) return '';
+    return JSON.stringify(value);
+  }, []);
+
   const saveCurrentChanges = useCallback(() => {
     if (saveInFlightRef.current) {
       return saveInFlightRef.current;
@@ -183,24 +190,60 @@ export const WarehouseManagementPanel = forwardRef<
 
         for (const row of nextChanges.insertedRows) {
           const operationKey = `create:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
-          await onCreateWarehouse(toPayload(row));
-          completedOperationsRef.current.add(operationKey);
+          const payload = toPayload(row);
+          const nextSignature = toOperationSignature(payload);
+          const completedSignature =
+            completedOperationsRef.current.get(operationKey);
+          if (completedSignature === nextSignature) continue;
+          if (completedSignature != null) {
+            throw new Error(
+              '저장 후 재조회가 완료되기 전 신규 창고를 다시 수정했습니다. 조회 후 다시 저장해 주세요.',
+            );
+          }
+          await onCreateWarehouse(payload);
+          completedOperationsRef.current.set(operationKey, nextSignature);
         }
 
         for (const row of nextChanges.updatedRows) {
           const operationKey = `update:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
-          await onUpdateWarehouse(row.id, toPayload(row));
-          completedOperationsRef.current.add(operationKey);
+          if (String(row.id).startsWith('new-warehouse-')) {
+            const createOperationKey = `create:${row.id}`;
+            const createSignature =
+              completedOperationsRef.current.get(createOperationKey);
+            if (createSignature != null) {
+              const payload = toPayload(row);
+              const nextSignature = toOperationSignature(payload);
+              if (createSignature !== nextSignature) {
+                throw new Error(
+                  '저장 후 재조회가 완료되기 전 신규 창고를 다시 수정했습니다. 조회 후 다시 저장해 주세요.',
+                );
+              }
+              continue;
+            }
+          }
+          const payload = toPayload(row);
+          const nextSignature = toOperationSignature(payload);
+          if (completedOperationsRef.current.get(operationKey) === nextSignature)
+            continue;
+          await onUpdateWarehouse(row.id, payload);
+          completedOperationsRef.current.set(operationKey, nextSignature);
         }
 
         for (const row of nextChanges.deletedRows) {
           const operationKey = `delete:${row.id}`;
-          if (completedOperationsRef.current.has(operationKey)) continue;
+          if (completedOperationsRef.current.get(operationKey) === 'deleted')
+            continue;
           if (!String(row.id).startsWith('new-warehouse-')) {
             await onDeleteWarehouse(String(row.id));
-            completedOperationsRef.current.add(operationKey);
+            completedOperationsRef.current.set(operationKey, 'deleted');
+            continue;
+          }
+
+          const createOperationKey = `create:${row.id}`;
+          if (completedOperationsRef.current.has(createOperationKey)) {
+            throw new Error(
+              '저장 후 재조회가 완료되기 전 신규 창고를 삭제할 수 없습니다. 조회 후 다시 시도해 주세요.',
+            );
           }
         }
 
@@ -243,6 +286,7 @@ export const WarehouseManagementPanel = forwardRef<
     onDeleteWarehouse,
     onError,
     onWarehousesSaved,
+    toOperationSignature,
     onUpdateWarehouse,
   ]);
 
@@ -251,11 +295,12 @@ export const WarehouseManagementPanel = forwardRef<
     () => ({
       saveCurrentChanges,
       deleteSelectedRows: () => {
+        if (saving) return;
         gridRef.current?.deleteSelectedRows();
       },
       exportCurrentRows,
     }),
-    [exportCurrentRows, saveCurrentChanges],
+    [exportCurrentRows, saveCurrentChanges, saving],
   );
 
   return (
@@ -321,15 +366,16 @@ export const WarehouseManagementPanel = forwardRef<
               minRowHeight={32}
               maxRowHeight={320}
               showCheckbox={false}
-              createRow={createWarehouseRow}
+              createRow={saving ? undefined : createWarehouseRow}
               editorPlugins={[
                 {
                   id: 'warehouse-grid-editor',
                   enabled: true,
-                  canEdit: () => true,
+                  canEdit: () => !saving,
                 },
               ]}
               beforeEdit={({ row, field }) => {
+                if (saving) return false;
                 if (field === 'warehouseName' && !canEditWarehouseName(row)) {
                   return false;
                 }
@@ -338,9 +384,9 @@ export const WarehouseManagementPanel = forwardRef<
               canExportExcel={canExportExcel}
               excelFileName="warehouse-management-export"
               loading={warehouseGridLoading}
-              allowAddRowInContextMenu={true}
+              allowAddRowInContextMenu={!saving}
               allowDuplicateRowInContextMenu={false}
-              allowDeleteRowInContextMenu={true}
+              allowDeleteRowInContextMenu={!saving}
               onChangesChange={(changes) => {
                 onDirtyChange?.(
                   (changes?.insertedRows?.length ?? 0) > 0 ||

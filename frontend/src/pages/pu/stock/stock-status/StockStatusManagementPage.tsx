@@ -5,13 +5,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import { SearchResultMessage } from '../../../../shared/components/SearchResultMessage';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { MaterialLotPanel } from './components/MaterialLotPanel';
 import { StockStatusGrid, createStockStatusColumns } from './components/StockStatusGrid';
 import { useStockStatusManagement } from './hooks/useStockStatusManagement';
 import type { StockStatusKind } from './types/stockStatus.types';
-import { emptyText, ssPrice } from './utils/stockStatus';
+import { ssPrice } from './utils/stockStatus';
 
 type StockStatusManagementPageProps = {
   selectedModule: ModuleItem;
@@ -121,7 +122,9 @@ export function StockStatusManagementPage({
           sx={{ mr: 0, '& .MuiFormControlLabel-label': { fontSize: 13, whiteSpace: 'nowrap' } }}
         />
       </PageSearchArea>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* 2026-11-04 S_ERP 현황 표준(SearchResultMessage): 조회가 끝나면(탭 · 검색어 · 재고 0 제외로 거른 줄 수) '조회 결과 총 N건입니다.' · 0건 안내, X 로 닫고 다시 조회하면 다시 보인다 */}
+      {loadedDate && !management.loading && <SearchResultMessage resultCount={management.gridRows.length} />}
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 1 }}>
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
@@ -134,9 +137,6 @@ export function StockStatusManagementPage({
               <Typography sx={{ fontWeight: 700, fontSize: 15 }} aria-label="재고금액 합계">{loadedDate ? `${ssPrice(management.total)}원` : '-'}</Typography>
             </Box>
           </Box>
-          {loadedDate && !management.loading && management.gridRows.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>{emptyText(management.kind)}</Typography>
-          )}
           <StockStatusGrid rows={management.gridRows} columns={columns} loading={management.loading} warehouses={warehouses} />
           {openRow && loadedDate && (
             <MaterialLotPanel code={openRow.code} name={openRow.name || ''} date={loadedDate} onClose={() => management.setOpenCode(null)} />

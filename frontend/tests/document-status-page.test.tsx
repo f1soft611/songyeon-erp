@@ -222,7 +222,7 @@ describe('document status page', () => {
     fireEvent.click(screen.getByRole('button', { name: '조회' }));
     await waitFor(() => expect(getListRequests()).toBe(2));
     expect(getListRequest().get('keyword')).toBe('Updated plan');
-    expect(window.sessionStorage.getItem('s-erp:page:document-status'))
+    expect(window.sessionStorage.getItem('songyeon-erp:page:document-status'))
       .toContain('Updated plan');
 
     fireEvent.click(screen.getByRole('button', { name: '조회' }));
@@ -377,7 +377,7 @@ describe('document status page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('잠시 후 다시 시도해 주세요.');
     expect(getListRequests()).toBe(0);
     expect(
-      window.sessionStorage.getItem('s-erp:page:document-status'),
+      window.sessionStorage.getItem('songyeon-erp:page:document-status'),
     ).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '검색 기본값 다시 불러오기' }));
 
@@ -389,7 +389,7 @@ describe('document status page', () => {
 
   it('restores the last applied quick and detailed search when returning to the page', async () => {
     window.sessionStorage.setItem(
-      's-erp:page:document-status',
+      'songyeon-erp:page:document-status',
       JSON.stringify({
         version: 1,
         value: {
@@ -419,7 +419,7 @@ describe('document status page', () => {
 
   it('restores a required date for a legacy session before the first query', async () => {
     window.sessionStorage.setItem(
-      's-erp:page:document-status',
+      'songyeon-erp:page:document-status',
       JSON.stringify({
         version: 1,
         value: {
@@ -535,8 +535,16 @@ describe('document status page', () => {
   }, 15000);
 
   it('restores the default submitted date after resetting conditions', async () => {
+    const openDetailSearch = () => {
+      const toggle = screen.getByRole('button', {
+        name: /상세 검색 (열기|닫기)/,
+      });
+      if (toggle.getAttribute('aria-expanded') === 'false') {
+        fireEvent.click(toggle);
+      }
+    };
     window.sessionStorage.setItem(
-      's-erp:page:document-status',
+      'songyeon-erp:page:document-status',
       JSON.stringify({
         version: 1,
         value: { keyword: 'old', detailValues: { title: 'Old title' } },
@@ -549,7 +557,8 @@ describe('document status page', () => {
     );
     const firstRender = renderDocumentStatusPage();
     expect(await screen.findByText(/조회 결과가 없습니다/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '검색 조건 초기화' }));
+    openDetailSearch();
+    fireEvent.click(screen.getByRole('button', { name: '초기화' }));
 
     await waitFor(() => {
       expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
@@ -559,7 +568,7 @@ describe('document status page', () => {
     expect(getListRequest().has('keyword')).toBe(false);
     await waitFor(() => {
       expect(JSON.parse(
-        window.sessionStorage.getItem('s-erp:page:document-status') ?? '{}',
+        window.sessionStorage.getItem('songyeon-erp:page:document-status') ?? '{}',
       )).toEqual({
         version: 1,
         value: {
@@ -568,7 +577,7 @@ describe('document status page', () => {
         },
       });
     });
-    fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
+    openDetailSearch();
     expect(screen.getByLabelText('결재신청일 시작일'))
       .toHaveValue(SYSTEM_DATE_RANGE.from);
     expect(screen.getByLabelText('결재신청일 종료일'))
@@ -584,7 +593,7 @@ describe('document status page', () => {
     expect(getListRequest().get('submittedAtTo')).toBe(SYSTEM_DATE_RANGE.to);
     expect(getListRequest().has('title')).toBe(false);
     expect(getListRequest().has('keyword')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: '상세 검색 열기' }));
+    openDetailSearch();
     expect(screen.getByLabelText('결재신청일 시작일'))
       .toHaveValue(SYSTEM_DATE_RANGE.from);
     expect(screen.getByLabelText('결재신청일 종료일'))
@@ -686,6 +695,34 @@ describe('document status page', () => {
     await waitFor(() =>
       expect(getListRequests()).toBeGreaterThan(previousListRequests),
     );
+  });
+
+  it('refreshes quietly and keeps the document detail open after a detail action', async () => {
+    renderDocumentStatusPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'EA-20261010-0001 상세 보기' }));
+    await screen.findByTestId('page-area-overlay');
+
+    const feedProps = vi.mocked(DocumentApprovalDetailFeed).mock.calls.at(-1)?.[0];
+    if (!feedProps) throw new Error('Detail panel props were not captured.');
+    const previousListRequests = getListRequests();
+    let resolveRefresh!: (value: { resultList: DocumentStatusRow[]; totalRowCount: number }) => void;
+    api.get.mockImplementation((path: string) =>
+      path.includes('/documents/search?')
+        ? new Promise((resolve) => { resolveRefresh = resolve; })
+        : Promise.resolve({}),
+    );
+
+    act(() => feedProps.onActionComplete({ quiet: true }));
+
+    await waitFor(() =>
+      expect(getListRequests()).toBeGreaterThan(previousListRequests),
+    );
+    expect(screen.getByTestId('page-area-overlay')).toBeInTheDocument();
+    expect(screen.getByRole('grid', { name: '문서현황' })).not.toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('gridcell', { name: 'Annual plan' })).toBeInTheDocument();
+
+    await act(async () => resolveRefresh({ resultList: [row], totalRowCount: 1 }));
+    expect(screen.getByRole('gridcell', { name: 'Annual plan' })).toBeInTheDocument();
   });
 
   it('loads all matching status rows without paging parameters', async () => {
@@ -833,7 +870,8 @@ describe('document status page', () => {
       message.compareDocumentPosition(screen.getByRole('grid', { name: '문서현황' }))
         & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(within(message).getByRole('button', { name: '검색 조건 초기화' })).toBeInTheDocument();
+    expect(within(message).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(within(message).queryByRole('button', { name: '검색 조건 초기화' })).not.toBeInTheDocument();
   });
 
   it('hides the empty result message while refreshing and after rows arrive', async () => {
@@ -847,7 +885,7 @@ describe('document status page', () => {
 
     let resolveList!: (value: { resultList: DocumentStatusRow[]; totalRowCount: number }) => void;
     api.get.mockImplementation(() => new Promise((resolve) => { resolveList = resolve; }));
-    fireEvent.click(screen.getByRole('button', { name: '검색 조건 초기화' }));
+    fireEvent.click(screen.getByRole('button', { name: '조회' }));
     await waitFor(() => expect(getListRequests()).toBe(2));
     expect(screen.queryByText(/조회 결과가 없습니다/)).not.toBeInTheDocument();
     expect(getListRequest().get('submittedAtFrom')).toBe(SYSTEM_DATE_RANGE.from);
@@ -855,6 +893,6 @@ describe('document status page', () => {
 
     await act(async () => resolveList({ resultList: [row], totalRowCount: 1 }));
     await screen.findByRole('gridcell', { name: 'Annual plan' });
-    expect(screen.queryByText(/조회 결과가 없습니다/)).not.toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('조회 결과 총 1건입니다.');
   });
 });

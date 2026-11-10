@@ -16,6 +16,7 @@ import type { MasterPickerOption } from '../../../../shared/components/master-pi
 import type { F1GridChanges, F1GridRef, F1GridValidationError } from '../../../../shared/components/f1-grid';
 import { todayDash } from '../../../../shared/utils/excelFile';
 import { restoreBlockedGridDeletes } from '../../../../shared/utils/gridDelete';
+import { readSearchSession, saveSearchSession } from '../../../../shared/utils/searchSession';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { clientPickerOptions, productPickerOptions } from '../../../sales/order/order-register/utils/salesOrder';
 import { SalesRegisterGrid, createSalesRegisterColumns } from './components/SalesRegisterGrid';
@@ -64,12 +65,14 @@ export function SalesRegisterManagementPage({
   selectedMenuPermissions,
 }: SalesRegisterManagementPageProps) {
   const [defaults] = useState(defaultDetailValues);
-  const management = useSalesRegisterManagement(toQuery(defaults, ''));
+  // 2026-11-04 마지막으로 조회한 조건(거래처 · 상세 조회)은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('sl-sales-register', { keyword: '', detailValues: defaults }, { keyword: '', detailValues: {} }));
+  const management = useSalesRegisterManagement(toQuery(saved.detailValues, saved.keyword));
   const { clients, products } = management;
   const gridRef = useRef<F1GridRef<ShippableRow>>(null);
-  const [client, setClient] = useState('');
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
+  const [client, setClient] = useState(saved.keyword);
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
   const [clientPicker, setClientPicker] = useState<PickerState>(null);
   const [productPicker, setProductPicker] = useState<PickerState>(null);
   // 저장하지 않은 새 줄을 버려도 되는지 묻는 동안 기다리는 조회 조건
@@ -95,6 +98,7 @@ export function SalesRegisterManagementPage({
 
   const reload = (values: Record<string, PageSearchFieldValue>) => {
     setAppliedDetailValues(values);
+    saveSearchSession('sl-sales-register', { keyword: client, detailValues: values });
     void management.loadRows(toQuery(values, client));
   };
   // 저장하지 않은 새 줄이 있으면 먼저 묻는다
@@ -194,7 +198,7 @@ export function SalesRegisterManagementPage({
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
       <PageMessageArea message={management.notice} severity="success" onClose={() => management.setNotice('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
             {management.loaded && !management.loading && management.rows.length === 0 && (

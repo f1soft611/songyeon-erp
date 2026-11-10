@@ -7,10 +7,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
+import { SearchResultMessage } from '../../../../shared/components/SearchResultMessage';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import { toPageSearchFields, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
+import { readSearchSession, saveSearchSession } from '../../../../shared/utils/searchSession';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { SalesStatusGrid, createSalesStatusColumns } from './components/SalesStatusGrid';
 import { useSalesStatusManagement } from './hooks/useSalesStatusManagement';
@@ -47,16 +49,19 @@ export function SalesStatusManagementPage({
 }: SalesStatusManagementPageProps) {
   const canDelete = Boolean(selectedMenuPermissions?.delete);
   const [defaults] = useState(defaultSalesDetailValues);
-  const management = useSalesStatusManagement(toSalesQuery(defaults, ''), canDelete);
-  const [client, setClient] = useState('');
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
+  // 2026-11-04 마지막으로 조회한 조건(거래처 · 상세 조회)은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('sl-sales-status', { keyword: '', detailValues: defaults }, { keyword: '', detailValues: {} }));
+  const management = useSalesStatusManagement(toSalesQuery(saved.detailValues, saved.keyword), canDelete);
+  const [client, setClient] = useState(saved.keyword);
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
 
   const columns = useMemo(() => createSalesStatusColumns(), []);
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
 
   const requestReload = (values = appliedDetailValues) => management.guard(() => {
     setAppliedDetailValues(values);
+    saveSearchSession('sl-sales-status', { keyword: client, detailValues: values });
     void management.loadRows(toSalesQuery(values, client));
   });
 
@@ -110,7 +115,9 @@ export function SalesStatusManagementPage({
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.notice} severity="success" onClose={() => management.setNotice('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* 2026-11-04 S_ERP 현황 표준(SearchResultMessage): 조회가 끝나면 '조회 결과 총 N건입니다.' · 0건 안내, X 로 닫고 다시 조회하면 다시 보인다 */}
+      {management.loaded && !management.loading && <SearchResultMessage resultCount={management.rows.length} />}
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
             <Typography variant="body2" aria-label="판매현황 요약" sx={{ ml: 'auto', fontWeight: 700 }}>{management.summary}</Typography>

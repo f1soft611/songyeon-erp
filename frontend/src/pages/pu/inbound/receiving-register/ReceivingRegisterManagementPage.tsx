@@ -19,7 +19,7 @@ import { ReceivingHistoryGrid, createReceivingHistoryColumns } from './component
 import { useReceivingDeleteSave } from './hooks/useReceivingDeleteSave';
 import { useReceivingHistory } from './hooks/useReceivingHistory';
 import { fetchReceivings } from './services/receiving.service';
-import { HISTORY_EXCEL_COLUMNS, errorText, formatMoney, periodQuery, type DayPeriod } from './utils/receiving';
+import { HISTORY_EXCEL_COLUMNS, errorText, formatMoney, periodQuery, receivingDeleteBlockReason, type DayPeriod } from './utils/receiving';
 
 type ReceivingRegisterManagementPageProps = {
   selectedModule: ModuleItem;
@@ -60,7 +60,7 @@ export function ReceivingRegisterManagementPage({
   const { period, client } = history;
   const deleteSave = useReceivingDeleteSave(
     'receiving',
-    { gridRef: history.gridRef, setDirty: history.setDirty, reload: () => history.load(period, client) },
+    { gridRef: history.gridRef, setDirty: history.setDirty, reload: () => history.load(period, client), blockReason: receivingDeleteBlockReason },
     setAlertText,
     setNotice,
   );
@@ -162,7 +162,7 @@ export function ReceivingRegisterManagementPage({
         onDetailSearch={(values) => applyPeriod(toPeriod(values.receiveDate))}
         detailLoading={history.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
             <Typography sx={{ fontSize: 14, fontWeight: 700 }}>입고내역</Typography>
@@ -177,7 +177,10 @@ export function ReceivingRegisterManagementPage({
             loading={history.loading}
             gridKey={history.version}
             gridRef={history.gridRef}
+            canCreate={Boolean(selectedMenuPermissions?.create)}
             canDelete={canDelete}
+            onAddRow={() => history.setRegisterOpen(true)}
+            onDeleteBlocked={setAlertText}
             onChangesChange={deleteSave.refreshDirty}
           />
         </Card>

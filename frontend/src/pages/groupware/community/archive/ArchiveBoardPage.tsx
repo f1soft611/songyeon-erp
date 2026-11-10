@@ -65,7 +65,7 @@ const FILE_TYPE_VALUES: ArchiveFileType[] = [
   'VIDEO',
   'ARCHIVE',
 ];
-const ARCHIVE_SEARCH_SESSION_KEY = 's-erp:page:community-archive';
+const ARCHIVE_SEARCH_SESSION_KEY = 'songyeon-erp:page:community-archive';
 const ARCHIVE_SEARCH_SESSION_VERSION = 1;
 
 const DETAIL_FIELDS: PageSearchField[] = [

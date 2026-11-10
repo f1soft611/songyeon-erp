@@ -2,6 +2,10 @@ package egovframework.let.groupware.approval.domain.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -104,13 +108,190 @@ class DocumentApprovalMapperTest {
         for (String sql : Arrays.asList(pageSql, countSql)) {
             assertThat(sql)
                     .contains("m.tenant_id = ?", "m.deleted_yn = 'N'", "m.drafter_id = ?",
-                            "l.participant_user_id = ?", "m.document_type = ?",
+                            "l.participant_user_id = ?", "l.participant_type IN ('APPROVAL', 'AGREEMENT')",
+                            "m.document_type = ?",
                             "m.electronic_approval_id = ?")
                     .doesNotContain("tb_electronic_approval_pin", "p.user_id");
         }
         assertThat(pageSql)
                 .contains("ORDER BY m.updated_at DESC, m.electronic_approval_id DESC")
                 .contains("LIMIT ? OFFSET ?");
+    }
+
+    @Test
+    void referencePendingScopeFiltersStatusAndWriteListsByCurrentActor() throws Exception {
+        Configuration configuration = new Configuration();
+        parseMapper(configuration, "egovframework/mapper/let/groupware/approval/DocumentApproval_SQL_postgresql.xml");
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", 4L);
+        params.put("drafterId", "login-author");
+        params.put("participantUserId", "101");
+        params.put("scope", "MY_REFERENCE_PENDING");
+        params.put("offset", 0);
+        params.put("limit", 20);
+
+        for (String statement : Arrays.asList(
+                "selectRelatedDocumentList",
+                "selectRelatedDocumentPage",
+                "countRelatedDocuments",
+                "selectRelatedDocumentWritePage",
+                "countRelatedWriteDocuments")) {
+            BoundSql boundSql = configuration
+                    .getMappedStatement("DocumentApprovalDAO." + statement)
+                    .getBoundSql(params);
+            String sql = boundSql.getSql().replaceAll("\\s+", " ");
+            assertThat(sql).as("%s applies the authenticated pending-reference filters", statement)
+                    .contains("m.tenant_id = ?", "m.deleted_yn = 'N'",
+                            "l.participant_user_id = ?", "l.participant_type = 'REFERENCE'",
+                            "l.action_status IS NULL", "m.document_status != 'DRAFT'",
+                            "m.document_type IN ('DRAFTING', 'BUSINESS_CONTACT')");
+            assertThat(boundSql.getParameterMappings())
+                    .extracting(ParameterMapping::getProperty)
+                    .contains("tenantId", "participantUserId");
+        }
+    }
+
+    @Test
+    void referenceConfirmationSummaryQueriesCountDistinctAndListOnlyUnconfirmedNonDraftDocuments()
+            throws Exception {
+        Configuration configuration = new Configuration();
+        parseMapper(configuration, "egovframework/mapper/let/groupware/approval/DocumentApproval_SQL_postgresql.xml");
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", 4L);
+        params.put("participantUserId", "101");
+
+        BoundSql countBoundSql = configuration
+                .getMappedStatement("DocumentApprovalDAO.selectReferenceConfirmationRequiredCount")
+                .getBoundSql(params);
+        BoundSql itemsBoundSql = configuration
+                .getMappedStatement("DocumentApprovalDAO.selectReferenceConfirmationItems")
+                .getBoundSql(params);
+
+        String countSql = countBoundSql.getSql().replaceAll("\\s+", " ");
+        String itemsSql = itemsBoundSql.getSql().replaceAll("\\s+", " ");
+        for (String sql : Arrays.asList(countSql, itemsSql)) {
+            assertThat(sql)
+                    .contains("m.tenant_id = ?", "m.deleted_yn = 'N'",
+                            "l.participant_user_id = ?", "l.participant_type = 'REFERENCE'",
+                            "l.action_status IS NULL", "m.document_status != 'DRAFT'",
+                            "m.document_type IN ('DRAFTING', 'BUSINESS_CONTACT')");
+        }
+        assertThat(countSql).contains("COUNT(DISTINCT m.electronic_approval_id)");
+        for (BoundSql boundSql : Arrays.asList(countBoundSql, itemsBoundSql)) {
+            assertThat(boundSql.getParameterMappings())
+                    .extracting(ParameterMapping::getProperty)
+                    .contains("tenantId", "participantUserId");
+        }
+    }
+
+    @Test
+    void finalConfirmationScopeAndSummaryAreTenantAndDrafterScoped() throws Exception {
+        Configuration configuration = new Configuration();
+        parseMapper(configuration, "egovframework/mapper/let/groupware/approval/DocumentApproval_SQL_postgresql.xml");
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", 4L);
+        params.put("drafterId", "login-author");
+        params.put("participantUserId", "101");
+        params.put("scope", "MY_FINAL_CONFIRMATION_PENDING");
+        params.put("offset", 0);
+        params.put("limit", 20);
+
+        for (String statement : Arrays.asList(
+                "selectRelatedDocumentList",
+                "selectRelatedDocumentPage",
+                "countRelatedDocuments",
+                "selectRelatedDocumentWritePage",
+                "countRelatedWriteDocuments")) {
+            String sql = configuration.getMappedStatement("DocumentApprovalDAO." + statement)
+                    .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+            assertThat(sql).as("%s filters internal pending confirmation rows", statement)
+                    .contains("m.tenant_id = ?", "m.deleted_yn = 'N'",
+                            "l.participant_user_id = ?", "l.participant_type = 'FINAL_CONFIRMATION'",
+                            "l.action_status = 'PENDING'",
+                            "m.document_status IN ('COMPLETED', 'REJECTED')",
+                            "m.document_type = 'DRAFTING'");
+        }
+
+        for (String statement : Arrays.asList(
+                "selectFinalConfirmationRequiredCount", "selectFinalConfirmationItems")) {
+            String sql = configuration.getMappedStatement("DocumentApprovalDAO." + statement)
+                    .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+            assertThat(sql)
+                    .contains("m.tenant_id = ?", "m.deleted_yn = 'N'",
+                            "l.participant_user_id = ?", "l.participant_type = 'FINAL_CONFIRMATION'",
+                            "l.action_status = 'PENDING'",
+                            "m.document_status IN ('COMPLETED', 'REJECTED')",
+                            "m.document_type = 'DRAFTING'");
+        }
+    }
+
+    @Test
+    void finalConfirmationRowsDoNotEnterRegularApprovalCountsOrNotices() throws Exception {
+        Configuration configuration = new Configuration();
+        parseMapper(configuration, "egovframework/mapper/let/groupware/approval/DocumentApproval_SQL_postgresql.xml");
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", 4L);
+        params.put("drafterId", "login-author");
+        params.put("participantUserId", "101");
+
+        for (String statement : Arrays.asList("selectDocumentApprovalSummary", "selectApprovalNotices")) {
+            String sql = configuration.getMappedStatement("DocumentApprovalDAO." + statement)
+                    .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+            assertThat(sql).as("%s excludes internal confirmation from regular approval work", statement)
+                    .contains("participant_type IN ('APPROVAL', 'AGREEMENT')");
+        }
+    }
+
+    @Test
+    void legacyFinalConfirmationInsertUsesLockedDrafterAndOnlyActiveDraftingDocuments() throws Exception {
+        Configuration configuration = new Configuration();
+        parseMapper(configuration, "egovframework/mapper/let/groupware/approval/DocumentApproval_SQL_postgresql.xml");
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", 4L);
+        params.put("electronicApprovalId", 77L);
+
+        String sql = configuration
+                .getMappedStatement("DocumentApprovalDAO.insertFinalConfirmationLineForExistingDocument")
+                .getBoundSql(params).getSql().replaceAll("\\s+", " ");
+        assertThat(sql)
+                .contains("m.tenant_id = ?", "m.electronic_approval_id = ?",
+                        "m.document_type = 'DRAFTING'",
+                        "m.document_status IN ('COMPLETED', 'REJECTED')",
+                        "la.login_code = m.drafter_id",
+                        "u.login_id = la.login_id",
+                        "CAST(u.user_id AS varchar)",
+                        "COALESCE(MAX(l.stage_order), 0) + 1",
+                        "existing_confirmation.participant_type = 'FINAL_CONFIRMATION'",
+                        "'PENDING', CURRENT_TIMESTAMP");
+    }
+
+    @Test
+    void finalConfirmationMigrationAllowsDrafterAndConfirmationParticipantRowsTogether() throws Exception {
+        // 송연은 S_ERP 20261029_001 · 20261030_006 · 20261102_003 을 합친 20261104_004 (다시 적용해도 같도록 IF NOT EXISTS)
+        Path backendDirectory = Paths.get("DATABASE", "20261104");
+        Path docsDirectory = Paths.get("..", "docs", "database", "20261104");
+        String migrationName = "20261104_004_approval_reference_final_confirmation.sql";
+        String rollbackName = "20261104_004_rollback.sql";
+        assertThat(Files.readAllBytes(backendDirectory.resolve(migrationName)))
+                .isEqualTo(Files.readAllBytes(docsDirectory.resolve(migrationName)));
+        assertThat(Files.readAllBytes(backendDirectory.resolve(rollbackName)))
+                .isEqualTo(Files.readAllBytes(docsDirectory.resolve(rollbackName)));
+
+        String migration = new String(
+                Files.readAllBytes(backendDirectory.resolve(migrationName)), StandardCharsets.UTF_8);
+        assertThat(migration)
+                .contains("DROP CONSTRAINT IF EXISTS uq_electronic_approval_line_participant",
+                        "CREATE UNIQUE INDEX uq_electronic_approval_line_participant",
+                        "WHERE participant_type <> 'FINAL_CONFIRMATION'",
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_electronic_approval_line_final_confirmation",
+                        "WHERE participant_type = 'FINAL_CONFIRMATION'");
+        String rollback = new String(
+                Files.readAllBytes(backendDirectory.resolve(rollbackName)), StandardCharsets.UTF_8);
+        assertThat(rollback)
+                .contains("DROP INDEX IF EXISTS public.uq_electronic_approval_line_participant",
+                        "DROP INDEX IF EXISTS public.uq_electronic_approval_line_final_confirmation",
+                        "ADD CONSTRAINT uq_electronic_approval_line_participant",
+                        "UNIQUE (tenant_id, electronic_approval_id, participant_user_id)");
     }
 
     @Test

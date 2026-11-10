@@ -166,7 +166,7 @@ export function StockLedgerManagementPage({
           sx={(theme) => ({ width: 170, ...sideFieldSx(theme) })}
         />
       </PageSearchArea>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mb: 1 }}>
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>

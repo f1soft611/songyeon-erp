@@ -5,6 +5,8 @@ import type { ProductRegisterBody, ProductRegisterForm } from '../types/productR
 // 영업관리 > 제품등록 화면 규칙(보관방법 코드 · 빈 입력값 · 등록할 때 보낼 내용)
 // 보관방법(2026-10-23): 공통코드 STORAGE_METHOD. 제품에는 코드로 저장한다
 export const STORAGE_METHOD_GROUP = 'STORAGE_METHOD';
+// 식품유형(2026-11-05): 공통코드 FOOD_TYPE. 제품에는 코드로 저장한다(제품검사의 검사항목을 가르는 기준)
+export const FOOD_TYPE_GROUP = 'FOOD_TYPE';
 
 // 견적 등에서 넘어온 글자를 보관방법 코드로 바꾼다: 코드 그대로 · 이름이 같으면 그 코드 ·
 // 이름의 앞말(실온 · 냉장 · 냉동)이 들어 있으면 그 코드('냉장보관(0℃~10℃)' → 냉장). 맞는 게 없으면 빈 값
@@ -27,6 +29,7 @@ export const EMPTY_PRODUCT_FORM: ProductRegisterForm = {
   spec: '',
   productType: '',
   storage: '',
+  foodType: '',
   clientCode: '',
 };
 
@@ -38,6 +41,7 @@ export function buildRegisterBody(form: ProductRegisterForm, rows: BomEditRow[])
     spec: orNull(form.spec),
     productType: orNull(form.productType),
     storage: orNull(form.storage),
+    foodType: orNull(form.foodType),
     clientCode: orNull(form.clientCode),
     bom: rows
       .filter((row) => row.materialName.trim() && row.ratioPercent !== null)

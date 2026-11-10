@@ -95,6 +95,63 @@ class DocumentApprovalStatusServiceImplTest {
     }
 
     @Test
+    void referencePendingScopeUsesAuthenticatedTenantAndParticipant() throws Exception {
+        DocumentApprovalListQueryVO query = new DocumentApprovalListQueryVO();
+        DocumentApprovalStatusListItemVO completedReference = new DocumentApprovalStatusListItemVO();
+        completedReference.setElectronicApprovalId(77L);
+        when(approvalDAO.selectRelatedDocumentPage(anyMap()))
+                .thenReturn(Collections.singletonList(completedReference));
+        when(approvalDAO.countRelatedDocuments(anyMap())).thenReturn(1L);
+
+        DocumentApprovalListPageVO page = service.searchDocuments(author, "MY_REFERENCE_PENDING", query);
+
+        assertThat(page.getResultList()).containsExactly(completedReference);
+        verify(approvalDAO).selectRelatedDocumentPage(argThat(params ->
+                "MY_REFERENCE_PENDING".equals(params.get("scope"))
+                        && Long.valueOf(4L).equals(params.get("tenantId"))
+                        && "101".equals(params.get("participantUserId"))));
+        verify(approvalDAO).countRelatedDocuments(argThat(params ->
+                "MY_REFERENCE_PENDING".equals(params.get("scope"))
+                        && Long.valueOf(4L).equals(params.get("tenantId"))
+                        && "101".equals(params.get("participantUserId"))));
+    }
+
+    @Test
+    void confirmedReferenceFilterKeepsAuthenticatedActorScope() throws Exception {
+        DocumentApprovalListQueryVO query = new DocumentApprovalListQueryVO();
+        query.setMyParticipantType("REFERENCE");
+        query.setMyActionStatus("CONFIRMED");
+        when(approvalDAO.selectRelatedDocumentPage(anyMap())).thenReturn(Collections.emptyList());
+        when(approvalDAO.countRelatedDocuments(anyMap())).thenReturn(0L);
+
+        service.searchDocuments(author, "ALL", query);
+
+        verify(approvalDAO).selectRelatedDocumentPage(argThat(params ->
+                "REFERENCE".equals(params.get("myParticipantType"))
+                        && "CONFIRMED".equals(params.get("myActionStatus"))
+                        && Long.valueOf(4L).equals(params.get("tenantId"))
+                        && "101".equals(params.get("participantUserId"))));
+        verify(approvalDAO).countRelatedDocuments(argThat(params ->
+                "REFERENCE".equals(params.get("myParticipantType"))
+                        && "CONFIRMED".equals(params.get("myActionStatus"))
+                        && Long.valueOf(4L).equals(params.get("tenantId"))
+                        && "101".equals(params.get("participantUserId"))));
+    }
+
+    @Test
+    void myPendingScopeRemainsAvailable() throws Exception {
+        when(approvalDAO.selectRelatedDocumentPage(anyMap())).thenReturn(Collections.emptyList());
+        when(approvalDAO.countRelatedDocuments(anyMap())).thenReturn(0L);
+
+        service.searchDocuments(author, "MY_PENDING", new DocumentApprovalListQueryVO());
+
+        verify(approvalDAO).selectRelatedDocumentPage(argThat(params ->
+                "MY_PENDING".equals(params.get("scope"))
+                        && Long.valueOf(4L).equals(params.get("tenantId"))
+                        && "101".equals(params.get("participantUserId"))));
+    }
+
+    @Test
     void acceptsDocumentNumberAsAnExactSearchAndSortField() throws Exception {
         DocumentApprovalListQueryVO query = new DocumentApprovalListQueryVO();
         query.setDocumentNo(" EA-20261010-0001 ");

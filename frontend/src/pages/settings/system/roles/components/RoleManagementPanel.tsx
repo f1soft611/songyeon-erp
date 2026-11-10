@@ -23,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SyntheticEvent,
 } from 'react';
 import {
   F1Grid,
@@ -35,6 +36,7 @@ import { UnsavedChangesConfirmDialog } from '../../../../../shared/components/Un
 import type { RoleManagementRow } from '../types/roleManagement.types';
 import {
   assignUserToRole,
+  fetchRoleRows,
   fetchRoleUserRows,
   removeUserFromRole,
   type RoleSavePayload,
@@ -53,9 +55,12 @@ type RoleManagementPanelProps = {
     roleId: string,
     payload: RoleSavePayload,
   ) => Promise<void> | void;
-  onRolesSaved?: (options?: { silent?: boolean }) => Promise<void> | void;
+  onRolesSaved?: (options?: {
+    silent?: boolean;
+  }) => Promise<'applied' | 'stale' | void> | void;
   onSaveSuccess?: (message: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
   onError?: (message: string) => void;
   roleGridKey?: number;
   roleGridLoading?: boolean;
@@ -63,6 +68,9 @@ type RoleManagementPanelProps = {
 
 export type RoleManagementPanelHandle = {
   saveCurrentChanges: () => Promise<void>;
+  discardPendingChanges: (
+    reloadRoles: () => Promise<'applied' | 'stale' | void>,
+  ) => Promise<void>;
   deleteSelectedRows: () => void;
   exportCurrentRows: () => void;
 };
@@ -88,13 +96,14 @@ export const RoleManagementPanel = forwardRef<
     onRolesSaved,
     onSaveSuccess,
     onDirtyChange,
+    onSavingChange,
     onError,
     roleGridKey = 0,
     roleGridLoading = false,
   },
   ref,
 ) {
-  const [selectedRoleId, setSelectedRoleId] = useState('');
+  const [selectedRoleId, setSelectedRoleIdState] = useState('');
   const [userRows, setUserRows] = useState<RoleUserRow[]>([]);
   const [unassignedUsers, setUnassignedUsers] = useState<RoleUserRow[]>([]);
   const [userLoading, setUserLoading] = useState(false);
@@ -108,18 +117,53 @@ export const RoleManagementPanel = forwardRef<
   const [pendingRoleId, setPendingRoleId] = useState<string>();
   const [roleSwitchDialogOpen, setRoleSwitchDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingSync, setPendingSync] = useState(false);
+  const [committedCreateRowIds, setCommittedCreateRowIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
+  const [savingRoleRows, setSavingRoleRows] = useState<RoleManagementRow[]>([]);
+  const [failedSaveView, setFailedSaveView] = useState<{
+    rows: RoleManagementRow[];
+    inputs?: {
+      roles: RoleManagementRow[];
+      searchQuery: string;
+      roleGridKey: number;
+    };
+  }>();
   const roleGridRef = useRef<F1GridRef<RoleManagementRow>>(null);
   const userGridRef = useRef<F1GridRef<RoleUserRow>>(null);
   const userRequestIdRef = useRef(0);
   const selectedRoleIdRef = useRef(selectedRoleId);
   const userGridDirtyRef = useRef(false);
   const saveInFlightRef = useRef<Promise<void> | undefined>(undefined);
-  const completedRoleOperationsRef = useRef(new Set<string>());
-  const completedMappingOperationsRef = useRef(new Set<string>());
+  const reloadInFlightRef = useRef(false);
+  const completedRoleCreatesRef = useRef(
+    new Map<string, { roleCode: string; payloadKey: string }>(),
+  );
+  const completedRoleUpdatesRef = useRef(new Map<string, string>());
+  // Last successfully written assignment per role/user, kept until a refetch succeeds.
+  const writtenMappingsRef = useRef(new Map<string, boolean>());
+  // Mapping retry records are scoped by role and cleared only after that role's
+  // mappings are fetched from the server.
+  const clearMappingMarkers = useCallback((roleId: string) => {
+    for (const key of [...writtenMappingsRef.current.keys()]) {
+      if (key.startsWith(`${roleId}:`)) writtenMappingsRef.current.delete(key);
+    }
+  }, []);
+  const hasPendingMarkers = useCallback(
+    () =>
+      completedRoleCreatesRef.current.size > 0 ||
+      completedRoleUpdatesRef.current.size > 0 ||
+      writtenMappingsRef.current.size > 0,
+    [],
+  );
 
-  useEffect(() => {
-    selectedRoleIdRef.current = selectedRoleId;
-  }, [selectedRoleId]);
+  // Keep the ref in step with queued selection changes so a save started before
+  // the commit targets the role the user will actually see.
+  const setSelectedRoleId = useCallback((roleId: string) => {
+    selectedRoleIdRef.current = roleId;
+    setSelectedRoleIdState(roleId);
+  }, []);
 
   const filteredRoles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -132,7 +176,30 @@ export const RoleManagementPanel = forwardRef<
     );
   }, [roles, searchQuery]);
 
+  // Capture inputs on the first render after a failed save so batched save-time
+  // refresh results stay pinned until roles, search, or the grid baseline changes.
+  if (failedSaveView && !failedSaveView.inputs) {
+    setFailedSaveView({
+      ...failedSaveView,
+      inputs: { roles, searchQuery, roleGridKey },
+    });
+  }
+  const failedSaveInputs = failedSaveView?.inputs;
+  const failedSaveRoles =
+    failedSaveView &&
+    (!failedSaveInputs ||
+      (failedSaveInputs.roles === roles &&
+        failedSaveInputs.searchQuery === searchQuery &&
+        failedSaveInputs.roleGridKey === roleGridKey))
+      ? failedSaveView.rows
+      : undefined;
+  const displayedRoles = saving
+    ? savingRoleRows
+    : (failedSaveRoles ?? filteredRoles);
+
   useEffect(() => {
+    // The ref also covers a save started before this effect's render committed.
+    if (saving || saveInFlightRef.current || failedSaveRoles) return;
     if (!filteredRoles.length) {
       setSelectedRoleId('');
       return;
@@ -140,12 +207,15 @@ export const RoleManagementPanel = forwardRef<
     if (!filteredRoles.some((role) => role.id === selectedRoleId)) {
       setSelectedRoleId(filteredRoles[0].id);
     }
-  }, [filteredRoles, selectedRoleId]);
+  }, [failedSaveRoles, filteredRoles, selectedRoleId, saving, setSelectedRoleId]);
 
-  const selectedRole = filteredRoles.find((role) => role.id === selectedRoleId);
+  const selectedRole = displayedRoles.find((role) => role.id === selectedRoleId);
 
   const loadUserRows = useCallback(
-    async (roleId: string, options: { silent?: boolean } = {}) => {
+    async (
+      roleId: string,
+      options: { silent?: boolean; rethrow?: boolean } = {},
+    ): Promise<'applied' | 'stale' | 'failed'> => {
       const requestId = ++userRequestIdRef.current;
       if (!roleId || roleId.startsWith('new-role-')) {
         setUserRows([]);
@@ -154,7 +224,7 @@ export const RoleManagementPanel = forwardRef<
         userGridDirtyRef.current = false;
         setUserGridDirty(false);
         setUserGridKey((current) => current + 1);
-        return;
+        return 'applied';
       }
 
       if (!options.silent) {
@@ -167,30 +237,41 @@ export const RoleManagementPanel = forwardRef<
           requestId !== userRequestIdRef.current ||
           selectedRoleIdRef.current !== roleId
         ) {
-          return;
+          return 'stale';
         }
         setUserRows([...result.assignedUsers, ...result.unassignedUsers]);
         setUnassignedUsers(result.unassignedUsers);
         userGridDirtyRef.current = false;
         setUserGridDirty(false);
         setUserGridKey((current) => current + 1);
+        if (!options.silent) {
+          clearMappingMarkers(roleId);
+          setPendingSync(hasPendingMarkers());
+        }
+        return 'applied';
       } catch (error) {
-        if (requestId !== userRequestIdRef.current) return;
+        if (requestId !== userRequestIdRef.current) return 'stale';
         const message =
           error instanceof Error
             ? error.message
             : '사용자 매핑을 불러오지 못했습니다.';
+        if (options.silent) {
+          onError?.(message);
+          throw error;
+        }
         setUserRows([]);
         setUnassignedUsers([]);
         setUserError(message);
         onError?.(message);
+        if (options.rethrow) throw error;
+        return 'failed';
       } finally {
         if (requestId === userRequestIdRef.current && !options.silent) {
           setUserLoading(false);
         }
       }
     },
-    [onError],
+    [clearMappingMarkers, hasPendingMarkers, onError],
   );
 
   useEffect(() => {
@@ -198,6 +279,7 @@ export const RoleManagementPanel = forwardRef<
   }, [loadUserRows, selectedRoleId]);
 
   const handleRoleSelection = useCallback((rowIds: Array<string | number>) => {
+    if (saveInFlightRef.current) return;
     const nextRoleId = rowIds[0] == null ? '' : String(rowIds[0]);
     if (!nextRoleId || nextRoleId === selectedRoleIdRef.current) return;
     if (userGridDirtyRef.current) {
@@ -206,7 +288,7 @@ export const RoleManagementPanel = forwardRef<
       return;
     }
     setSelectedRoleId(nextRoleId);
-  }, []);
+  }, [setSelectedRoleId]);
 
   const handleRoleGridChanges = useCallback(
     (changes: F1GridChanges<RoleManagementRow>) => {
@@ -229,8 +311,12 @@ export const RoleManagementPanel = forwardRef<
   );
 
   useEffect(() => {
-    onDirtyChange?.(roleGridDirty || userGridDirty);
-  }, [onDirtyChange, roleGridDirty, userGridDirty]);
+    onDirtyChange?.(roleGridDirty || userGridDirty || pendingSync);
+  }, [onDirtyChange, roleGridDirty, userGridDirty, pendingSync]);
+
+  // The update API does not persist role_code, so a committed create keeps its code.
+  const isUncommittedNewRole = (row: RoleManagementRow) =>
+    row.id.startsWith('new-role-') && !committedCreateRowIds.has(row.id);
 
   const roleEditorPlugin = {
     id: 'role-grid-editor',
@@ -242,10 +328,12 @@ export const RoleManagementPanel = forwardRef<
       row: RoleManagementRow;
       field: keyof RoleManagementRow;
     }) =>
-      field === 'name' ||
-      field === 'description' ||
-      field === 'active' ||
-      (field === 'group' && row.id.startsWith('new-role-')),
+      !saving &&
+      !saveInFlightRef.current &&
+      (field === 'name' ||
+        field === 'description' ||
+        field === 'active' ||
+        (field === 'group' && isUncommittedNewRole(row))),
   };
 
   const roleColumns: F1GridColumn<RoleManagementRow>[] = [
@@ -262,7 +350,7 @@ export const RoleManagementPanel = forwardRef<
       field: 'group',
       headerName: '역할 코드',
       flex: 1,
-      editable: (row) => row.id.startsWith('new-role-'),
+      editable: isUncommittedNewRole,
       required: true,
       headerAlign: 'center',
     },
@@ -399,85 +487,201 @@ export const RoleManagementPanel = forwardRef<
 
   const saveCurrentChanges = useCallback(() => {
     if (saveInFlightRef.current) return saveInFlightRef.current;
+    // Grid rows are stale while an explicit reload is pending; never write from them.
+    if (reloadInFlightRef.current) return Promise.resolve();
 
     const savePromise = (async () => {
+      const savingRows = roleGridRef.current?.getActiveRows() ?? displayedRoles;
+      setSavingRoleRows(savingRows);
       setSaving(true);
+      onSavingChange?.(true);
       const roleChanges =
         roleGridRef.current?.getChanges() ?? emptyChanges<RoleManagementRow>();
       const roleId = selectedRoleIdRef.current;
       const mappingChanges =
         userGridRef.current?.getChanges() ?? emptyChanges<RoleUserRow>();
       const mappingBaseline = userRows;
+      // Include clean rows too: a written assignment may have been reverted.
+      const mappingRows =
+        userGridRef.current?.getActiveRows() ?? mappingChanges.updatedRows;
+      const hasPendingRoleWrites =
+        completedRoleCreatesRef.current.size > 0 ||
+        completedRoleUpdatesRef.current.size > 0;
+      const hasPendingMappingWrites = writtenMappingsRef.current.size > 0;
+      // Rows written before a failed refresh may be clean again in the grid,
+      // so compare them against the last successfully written payload.
+      // Rows created before a failed refresh keep their temporary ID, so retry them
+      // through the create record instead of as updates of the temporary ID.
+      const isCreatedRow = (row: RoleManagementRow) =>
+        completedRoleCreatesRef.current.has(row.id);
+      const roleCreateRows = [
+        ...roleChanges.insertedRows,
+        ...savingRows.filter(
+          (row) =>
+            isCreatedRow(row) &&
+            !roleChanges.insertedRows.some((inserted) => inserted.id === row.id),
+        ),
+      ];
+      const roleUpdateRows = [
+        ...roleChanges.updatedRows.filter((row) => !isCreatedRow(row)),
+        ...savingRows.filter(
+          (row) =>
+            completedRoleUpdatesRef.current.has(row.id) &&
+            !roleChanges.updatedRows.some((updated) => updated.id === row.id),
+        ),
+      ];
+      const shouldRefreshRoles =
+        roleChanges.insertedRows.length > 0 ||
+        roleUpdateRows.length > 0 ||
+        hasPendingRoleWrites;
+      const shouldRefreshMappings =
+        mappingChanges.updatedRows.length > 0 || hasPendingMappingWrites;
 
       try {
         if (roleChanges.deletedRows.length > 0) {
           throw new Error('기존 역할 삭제는 현재 지원되지 않습니다.');
         }
-        for (const row of [
-          ...roleChanges.insertedRows,
-          ...roleChanges.updatedRows,
-        ]) {
+        for (const row of [...roleCreateRows, ...roleUpdateRows]) {
           if (!row.group.trim() || !row.name.trim()) {
             throw new Error('역할 코드와 역할명은 필수입니다.');
           }
         }
-        for (const row of roleChanges.insertedRows) {
-          const operationId = `create:${row.id}`;
-          if (completedRoleOperationsRef.current.has(operationId)) continue;
-          await onCreateRole?.({
+        for (const row of roleCreateRows) {
+          const created = completedRoleCreatesRef.current.get(row.id);
+          const payload: RoleSavePayload = {
+            roleCode: created?.roleCode ?? row.group.trim(),
+            roleNm: row.name.trim(),
+            roleDc: row.description.trim(),
+            useAt: row.active ? 'Y' : 'N',
+          };
+          const payloadKey = JSON.stringify(payload);
+          if (!created) {
+            await onCreateRole?.(payload);
+            completedRoleCreatesRef.current.set(row.id, {
+              roleCode: payload.roleCode,
+              payloadKey,
+            });
+            continue;
+          }
+          if (created.payloadKey === payloadKey) continue;
+          // The create already succeeded, so apply later edits to the persisted role.
+          const persistedRole = (await fetchRoleRows()).find(
+            (role) => role.group === created.roleCode,
+          );
+          if (!persistedRole) {
+            throw new Error(
+              '저장된 역할을 찾을 수 없습니다. 조회 후 다시 시도해 주세요.',
+            );
+          }
+          await onUpdateRole?.(persistedRole.id, payload);
+          completedRoleCreatesRef.current.set(row.id, { ...created, payloadKey });
+        }
+        for (const row of roleUpdateRows) {
+          const payload: RoleSavePayload = {
             roleCode: row.group.trim(),
             roleNm: row.name.trim(),
             roleDc: row.description.trim(),
             useAt: row.active ? 'Y' : 'N',
-          });
-          completedRoleOperationsRef.current.add(operationId);
+          };
+          const payloadKey = JSON.stringify(payload);
+          if (completedRoleUpdatesRef.current.get(row.id) === payloadKey) {
+            continue;
+          }
+          await onUpdateRole?.(row.id, payload);
+          completedRoleUpdatesRef.current.set(row.id, payloadKey);
         }
-        for (const row of roleChanges.updatedRows) {
-          const operationId = `update:${row.id}`;
-          if (completedRoleOperationsRef.current.has(operationId)) continue;
-          await onUpdateRole?.(row.id, {
-            roleCode: row.group.trim(),
-            roleNm: row.name.trim(),
-            roleDc: row.description.trim(),
-            useAt: row.active ? 'Y' : 'N',
-          });
-          completedRoleOperationsRef.current.add(operationId);
-        }
-        if (roleChanges.insertedRows.length || roleChanges.updatedRows.length) {
-          await onRolesSaved?.();
-          completedRoleOperationsRef.current.clear();
+        // Role records stay retryable unless the role list was actually applied.
+        const refreshRoles = async (options?: { silent?: boolean }) => {
+          if ((await onRolesSaved?.(options)) === 'stale') {
+            throw new Error(
+              '역할 목록을 다시 불러오지 못했습니다. 다시 저장해 주세요.',
+            );
+          }
+        };
+        if (shouldRefreshRoles) {
+          await refreshRoles();
         }
 
-        if (!roleId || roleId.startsWith('new-role-')) return;
-        for (const row of mappingChanges.updatedRows) {
-          const originalRow = mappingBaseline.find(
-            (item) => item.id === row.id,
-          );
-          if (!originalRow || originalRow.assigned === row.assigned) continue;
-          const operationId = `${roleId}:${row.id}:${row.assigned ? 'assign' : 'remove'}`;
-          if (completedMappingOperationsRef.current.has(operationId)) continue;
+        const canSaveMappings = Boolean(roleId) && !roleId.startsWith('new-role-');
+        for (const row of canSaveMappings ? mappingRows : []) {
+          const key = `${roleId}:${row.loginId}`;
+          const serverAssigned = writtenMappingsRef.current.has(key)
+            ? writtenMappingsRef.current.get(key)
+            : mappingBaseline.find((item) => item.id === row.id)?.assigned;
+          if (serverAssigned === undefined || serverAssigned === row.assigned) {
+            continue;
+          }
           if (row.assigned) await assignUserToRole(roleId, row.loginId);
           else await removeUserFromRole(roleId, row.loginId);
-          completedMappingOperationsRef.current.add(operationId);
+          writtenMappingsRef.current.set(key, row.assigned);
         }
-        if (mappingChanges.updatedRows.length) {
-          await loadUserRows(roleId, { silent: true });
-          await onRolesSaved?.({ silent: true });
-          completedMappingOperationsRef.current.clear();
+        // Role writes are reconciled only after the selected mapping (and every
+        // pending role mapping) is fetched and applied, even without mapping edits.
+        if (shouldRefreshRoles || shouldRefreshMappings) {
+          const reconciledRoleIds: string[] = [];
+          if (canSaveMappings) {
+            const status = await loadUserRows(roleId, { silent: true });
+            // Selection is locked while saving; never report success for a
+            // refresh that was not applied to the saved target.
+            if (status !== 'applied') {
+              throw new Error(
+                '사용자 매핑을 다시 불러오지 못했습니다. 다시 저장해 주세요.',
+              );
+            }
+            reconciledRoleIds.push(roleId);
+          }
+          const otherRoleIds = new Set(
+            [...writtenMappingsRef.current.keys()]
+              .map((key) => key.split(':')[0])
+              .filter((pendingRoleId) => pendingRoleId !== roleId),
+          );
+          // Non-selected roles have no visible rows to apply, so their records
+          // clear only once the fetched rows confirm every written assignment.
+          for (const pendingRoleId of otherRoleIds) {
+            const result = await fetchRoleUserRows(pendingRoleId);
+            const assignedLoginIds = new Set(
+              result.assignedUsers.map((user) => String(user.loginId)),
+            );
+            const confirmed = [...writtenMappingsRef.current].every(
+              ([key, assigned]) => {
+                const [markerRoleId, loginId] = key.split(':');
+                return (
+                  markerRoleId !== pendingRoleId ||
+                  assignedLoginIds.has(loginId) === assigned
+                );
+              },
+            );
+            if (!confirmed) {
+              throw new Error(
+                '다른 역할의 사용자 매핑 저장 결과를 확인하지 못했습니다. 다시 저장해 주세요.',
+              );
+            }
+            reconciledRoleIds.push(pendingRoleId);
+          }
+          if (shouldRefreshMappings) await refreshRoles({ silent: true });
+          reconciledRoleIds.forEach(clearMappingMarkers);
         }
 
-        if (
-          roleChanges.insertedRows.length ||
-          roleChanges.updatedRows.length ||
-          mappingChanges.updatedRows.length
-        ) {
+        // Role records are reconciled only once every post-save refresh applied.
+        completedRoleCreatesRef.current.clear();
+        completedRoleUpdatesRef.current.clear();
+        if (shouldRefreshRoles || shouldRefreshMappings) {
           onSaveSuccess?.('역할을 저장했습니다.');
         }
+        setCommittedCreateRowIds(new Set());
+        setFailedSaveView(undefined);
+        setPendingSync(hasPendingMarkers());
         setRoleGridDirty(false);
         setUserGridDirty(false);
         userGridDirtyRef.current = false;
+      } catch (saveError) {
+        setFailedSaveView({ rows: savingRows });
+        setCommittedCreateRowIds(new Set(completedRoleCreatesRef.current.keys()));
+        setPendingSync(hasPendingMarkers());
+        throw saveError;
       } finally {
         setSaving(false);
+        onSavingChange?.(false);
       }
     })();
 
@@ -496,13 +700,63 @@ export const RoleManagementPanel = forwardRef<
     );
     return savePromise;
   }, [
+    clearMappingMarkers,
+    displayedRoles,
+    hasPendingMarkers,
     loadUserRows,
     onCreateRole,
     onRolesSaved,
     onSaveSuccess,
+    onSavingChange,
     onUpdateRole,
     userRows,
   ]);
+
+  // Called on a confirmed reload: discard local edits and refetch both role and
+  // mapping server state so already-written changes are not sent again.
+  // Retry markers are cleared only after both reads succeed.
+  const discardPendingChanges = useCallback(
+    async (reloadRoles: () => Promise<'applied' | 'stale' | void>) => {
+      if (saveInFlightRef.current || reloadInFlightRef.current) return;
+      reloadInFlightRef.current = true;
+      const targetRoleId = selectedRoleIdRef.current;
+      userGridDirtyRef.current = false;
+      setUserGridDirty(false);
+      setUserGridKey((current) => current + 1);
+      const [rolesResult, mappingResult] = await Promise.allSettled([
+        reloadRoles(),
+        loadUserRows(targetRoleId, { rethrow: true }),
+      ]).finally(() => {
+        reloadInFlightRef.current = false;
+      });
+      const rolesApplied =
+        rolesResult.status === 'fulfilled' &&
+        rolesResult.value !== 'stale';
+      if (rolesApplied) {
+        setFailedSaveView(undefined);
+        setRoleGridDirty(false);
+      }
+      // Mapping records for the applied role were cleared by loadUserRows; other
+      // roles keep theirs until their own mappings are fetched.
+      const reconciled =
+        rolesResult.status === 'fulfilled' &&
+        rolesResult.value !== 'stale' &&
+        mappingResult.status === 'fulfilled' &&
+        mappingResult.value === 'applied' &&
+        selectedRoleIdRef.current === targetRoleId;
+      if (reconciled) {
+        completedRoleCreatesRef.current.clear();
+        completedRoleUpdatesRef.current.clear();
+        setCommittedCreateRowIds(new Set());
+      }
+      const pending = hasPendingMarkers();
+      setPendingSync(pending);
+      onDirtyChange?.(
+        pending || userGridDirtyRef.current || (!rolesApplied && roleGridDirty),
+      );
+    },
+    [hasPendingMarkers, loadUserRows, onDirtyChange, roleGridDirty],
+  );
 
   const closeRoleSwitchDialog = useCallback(() => {
     setRoleSwitchDialogOpen(false);
@@ -510,7 +764,7 @@ export const RoleManagementPanel = forwardRef<
   }, []);
 
   const discardMappingAndMove = useCallback(() => {
-    if (!pendingRoleId) return;
+    if (saving || saveInFlightRef.current || !pendingRoleId) return;
     ++userRequestIdRef.current;
     userGridDirtyRef.current = false;
     setRoleGridDirty(false);
@@ -519,7 +773,7 @@ export const RoleManagementPanel = forwardRef<
     const nextRoleId = pendingRoleId;
     closeRoleSwitchDialog();
     setSelectedRoleId(nextRoleId);
-  }, [closeRoleSwitchDialog, pendingRoleId]);
+  }, [closeRoleSwitchDialog, pendingRoleId, saving, setSelectedRoleId]);
 
   const filteredCandidates = useMemo(() => {
     const query = userSearchQuery.trim().toLowerCase();
@@ -536,13 +790,21 @@ export const RoleManagementPanel = forwardRef<
     ref,
     () => ({
       saveCurrentChanges,
+      discardPendingChanges,
       deleteSelectedRows: () => {
+        if (saving || saveInFlightRef.current) return;
         roleGridRef.current?.deleteSelectedRows();
       },
       exportCurrentRows,
     }),
-    [exportCurrentRows, saveCurrentChanges],
+    [discardPendingChanges, exportCurrentRows, saveCurrentChanges, saving],
   );
+
+  const blockGridInteractionWhileSaving = (event: SyntheticEvent) => {
+    if (!saving && !saveInFlightRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   return (
     <Box
@@ -607,12 +869,23 @@ export const RoleManagementPanel = forwardRef<
                 권한 관리
               </Typography>
             </Box>
-            <Box sx={{ flex: 1, height: '100%', overflow: 'hidden' }}>
+            <Box
+              sx={{ flex: 1, height: '100%', overflow: 'hidden' }}
+              onClickCapture={blockGridInteractionWhileSaving}
+              onDoubleClickCapture={blockGridInteractionWhileSaving}
+              onKeyDownCapture={blockGridInteractionWhileSaving}
+              onPasteCapture={blockGridInteractionWhileSaving}
+            >
               <F1Grid
                 key={roleGridKey}
                 ref={roleGridRef}
-                rows={filteredRoles}
-                columns={readOnlyColumns(roleColumns, canWrite)}
+                rows={displayedRoles}
+                columns={readOnlyColumns(
+                  saving
+                    ? roleColumns.map((column) => ({ ...column, editable: false }))
+                    : roleColumns,
+                  canWrite,
+                )}
                 rowKey="id"
                 storageKey="settings-system-role-grid"
                 ariaLabel="F1-GRID 권한 관리"
@@ -621,10 +894,13 @@ export const RoleManagementPanel = forwardRef<
                 minRowHeight={32}
                 maxRowHeight={320}
                 showCheckbox={false}
-                createRow={createRoleRow}
+                createRow={saving ? undefined : createRoleRow}
                 editorPlugins={[roleEditorPlugin]}
-                allowAddRowInContextMenu={canWrite}
-                allowDeleteRowInContextMenu={canDelete}
+                onBeforeEdit={() => !saving && !saveInFlightRef.current}
+                allowAddRowInContextMenu={canWrite && !saving}
+                allowDuplicateRowInContextMenu={canWrite && !saving}
+                allowDeleteRowInContextMenu={canDelete && !saving}
+                disableContextMenu={saving}
                 onSelectionChange={handleRoleSelection}
                 onChangesChange={handleRoleGridChanges}
                 canExportExcel={canExportExcel}
@@ -691,7 +967,13 @@ export const RoleManagementPanel = forwardRef<
             </Box>
             {selectedRole || roleGridLoading ? (
               <>
-                <Box sx={{ flex: 1, height: '100%', overflow: 'hidden' }}>
+                <Box
+                  sx={{ flex: 1, height: '100%', overflow: 'hidden' }}
+                  onClickCapture={blockGridInteractionWhileSaving}
+                  onDoubleClickCapture={blockGridInteractionWhileSaving}
+                  onKeyDownCapture={blockGridInteractionWhileSaving}
+                  onPasteCapture={blockGridInteractionWhileSaving}
+                >
                   {userError ? (
                     <Typography variant="body2" color="error.main">
                       {userError}
@@ -701,7 +983,15 @@ export const RoleManagementPanel = forwardRef<
                       key={userGridKey}
                       ref={userGridRef}
                       rows={userRows}
-                      columns={readOnlyColumns(userColumns, canWrite)}
+                      columns={readOnlyColumns(
+                        saving
+                          ? userColumns.map((column) => ({
+                              ...column,
+                              editable: false,
+                            }))
+                          : userColumns,
+                        canWrite,
+                      )}
                       rowKey="id"
                       storageKey="settings-system-role-user-grid"
                       ariaLabel="F1-GRID 사용자 매핑"
@@ -714,9 +1004,11 @@ export const RoleManagementPanel = forwardRef<
                         {
                           id: 'role-user-grid-editor',
                           enabled: true,
-                          canEdit: () => true,
+                          canEdit: () => !saving && !saveInFlightRef.current,
                         },
                       ]}
+                      onBeforeEdit={() => !saving && !saveInFlightRef.current}
+                      disableContextMenu={saving}
                       allowAddRowInContextMenu={false}
                       allowDuplicateRowInContextMenu={false}
                       allowDeleteRowInContextMenu={false}
@@ -775,8 +1067,9 @@ export const RoleManagementPanel = forwardRef<
           <Button onClick={() => setUserDialogOpen(false)}>취소</Button>
           <Button
             variant="contained"
-            disabled={!candidateLoginId}
+            disabled={saving || !candidateLoginId}
             onClick={() => {
+              if (saving || saveInFlightRef.current) return;
               userGridRef.current?.setCellValue(
                 candidateLoginId,
                 'assigned',

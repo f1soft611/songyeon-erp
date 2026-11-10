@@ -1700,7 +1700,9 @@ function F1GridInner<T extends object>(
         : column.type === 'number' ||
             column.type === 'decimal' ||
             column.type === 'currency'
-          ? Number(draftText)
+          ? draftText.trim() === ''
+            ? null
+            : Number(draftText)
           : column.type === 'date'
             ? normalizeDateInput(draftText) || draftText
             : (matchedAutocompleteOption?.value ??

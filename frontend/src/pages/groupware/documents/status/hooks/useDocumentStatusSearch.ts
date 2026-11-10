@@ -16,7 +16,7 @@ import type {
 } from '../types/documentStatusSearch.types';
 import type { DocumentApprovalScope } from '../../write/types/documentWrite.types';
 
-const DOCUMENT_STATUS_SESSION_KEY = 's-erp:page:document-status';
+const DOCUMENT_STATUS_SESSION_KEY = 'songyeon-erp:page:document-status';
 const DOCUMENT_STATUS_SESSION_VERSION = 1;
 
 function getCompleteDateRange(

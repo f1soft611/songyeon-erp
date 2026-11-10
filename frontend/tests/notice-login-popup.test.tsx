@@ -20,7 +20,7 @@ const host = () => render(<NotificationProvider><NoticeLoginPopupHost /></Notifi
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
-  localStorage.setItem('s-erp-auth', JSON.stringify(auth));
+  localStorage.setItem('songyeon-erp-auth', JSON.stringify(auth));
   api.list.mockResolvedValue([{ postId: 2 }, { postId: 1 }]);
   api.detail.mockImplementation(async (id: number) => detail(id));
   api.dismiss.mockResolvedValue(undefined);
@@ -71,7 +71,7 @@ describe('login popup queue', () => {
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     second.unmount();
-    localStorage.setItem('s-erp-auth', JSON.stringify({ ...auth, popupSessionId: 'session-2' }));
+    localStorage.setItem('songyeon-erp-auth', JSON.stringify({ ...auth, popupSessionId: 'session-2' }));
     host();
     expect(await screen.findByText('공지 2')).toBeInTheDocument();
     expect(api.list).toHaveBeenCalledTimes(2);
@@ -141,8 +141,8 @@ describe('login popup queue', () => {
     host();
     await waitFor(() => expect(api.list).toHaveBeenCalled());
     await act(async () => {
-      localStorage.removeItem('s-erp-auth');
-      window.dispatchEvent(new Event('s-erp-auth-change'));
+      localStorage.removeItem('songyeon-erp-auth');
+      window.dispatchEvent(new Event('songyeon-erp-auth-change'));
       resolveList([{ postId: 99 }]);
     });
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());

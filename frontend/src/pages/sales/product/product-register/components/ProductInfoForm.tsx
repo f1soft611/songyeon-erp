@@ -12,6 +12,7 @@ type ProductInfoFormProps = {
   onChange: (patch: Partial<ProductRegisterForm>) => void;
   packagingTypes: string[];
   storageOptions: CommonCodeOption[];
+  foodTypeOptions: CommonCodeOption[]; // 식품유형 공통코드 FOOD_TYPE(2026-11-05)
   clients: ClientOption[];
   quoteClientName: string; // 견적에서 넘어온 거래처 이름(목록에 없을 때 보여 준다)
   productCode?: string; // [저장]한 제품의 코드(2026-10-28)
@@ -19,11 +20,11 @@ type ProductInfoFormProps = {
 };
 
 const shrink = { inputLabel: { shrink: true } };
-// 업체 양식과 같이 두 칸씩: 제품코드|제품명, 규격/단위|포장유형, 보관방법|거래처명
+// 업체 양식과 같이 두 칸씩: 제품코드|제품명, 규격/단위|포장유형, 식품유형|보관방법, 거래처명(2026-11-05 송연 제품등록처럼 식품유형은 포장유형 다음)
 const gridSx = { display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' }, columnGap: 2, rowGap: 2.5 };
 
 // 제품등록의 제품 정보 칸
-export function ProductInfoForm({ form, onChange, packagingTypes, storageOptions, clients, quoteClientName, productCode = '', readOnly = false }: ProductInfoFormProps) {
+export function ProductInfoForm({ form, onChange, packagingTypes, storageOptions, foodTypeOptions, clients, quoteClientName, productCode = '', readOnly = false }: ProductInfoFormProps) {
   const searchClients = useCallback(async (keyword: string): Promise<MasterPickerOption[]> => clientPickerOptions(clients, keyword), [clients]);
   return (
     <Box sx={gridSx}>
@@ -70,6 +71,22 @@ export function ProductInfoForm({ form, onChange, packagingTypes, storageOptions
         <MenuItem value="">선택 안 함</MenuItem>
         {packagingTypes.map((name) => (
           <MenuItem key={name} value={name}>{name}</MenuItem>
+        ))}
+      </TextField>
+      <TextField
+        select
+        size="small"
+        margin="none"
+        label="식품유형"
+        disabled={readOnly}
+        value={form.foodType}
+        onChange={(event) => onChange({ foodType: event.target.value })}
+        slotProps={{ ...shrink, select: { displayEmpty: true } }}
+      >
+        <MenuItem value="">선택 안 함</MenuItem>
+        {/* 식품유형: 공통코드 FOOD_TYPE(2026-11-05), 값은 코드. 손으로 치면 오타가 새 유형이 되므로 고르기만(송연 제품등록) */}
+        {foodTypeOptions.map((option) => (
+          <MenuItem key={option.code} value={option.code}>{option.name}</MenuItem>
         ))}
       </TextField>
       <TextField

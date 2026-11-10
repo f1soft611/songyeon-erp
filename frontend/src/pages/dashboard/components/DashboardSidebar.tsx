@@ -2,6 +2,8 @@ import { Box, Drawer, useTheme } from '@mui/material';
 import type { ModuleItem } from '../types/dashboard';
 import { DashboardMenuTree } from './DashboardMenuTree';
 import { DashboardModuleSection } from './DashboardModuleSection';
+import { MenuFavoritesTree } from './MenuFavoritesTree';
+import type { MenuFavoritesResponse } from '../types/menuFavorite.types';
 
 type RecentMenuEntry = {
   menuId: string;
@@ -16,6 +18,13 @@ type DashboardSidebarProps = {
   moduleItems: ModuleItem[];
   selectedModuleId: string;
   selectedModule: ModuleItem;
+  favorites?: MenuFavoritesResponse;
+  favoritesSelected?: boolean;
+  onFavoritesSelect?: () => void;
+  onFavoritesMore?: () => void;
+  onFavoriteMenuSelect?: (moduleId: string, menuId: string) => void;
+  onFavoritesRefresh?: () => Promise<void>;
+  onFavoritesError?: (message: string) => void;
   expandedItemIds: string[];
   selectedMenuId: string;
   recentMenuItems?: RecentMenuEntry[];
@@ -33,6 +42,13 @@ export function DashboardSidebar({
   moduleItems,
   selectedModuleId,
   selectedModule,
+  favorites,
+  favoritesSelected = false,
+  onFavoritesSelect,
+  onFavoritesMore,
+  onFavoriteMenuSelect,
+  onFavoritesRefresh,
+  onFavoritesError,
   expandedItemIds,
   selectedMenuId,
   recentMenuItems = [],
@@ -53,7 +69,10 @@ export function DashboardSidebar({
       <DashboardModuleSection
         moduleItems={moduleItems}
         selectedModuleId={selectedModuleId}
+        hasFavorites={Boolean(favorites?.favorites.length)}
+        favoritesSelected={favoritesSelected}
         onModuleChange={onModuleChange}
+        onFavoritesSelect={onFavoritesSelect}
       />
 
       {(!isMenuPanelCollapsed || (isMobile && isMobileMenuOpen)) && (
@@ -78,15 +97,29 @@ export function DashboardSidebar({
             },
           }}
         >
-          <DashboardMenuTree
-            selectedModule={selectedModule}
-            expandedItemIds={expandedItemIds}
-            selectedMenuId={selectedMenuId}
-            recentMenuItems={recentMenuItems}
-            onMenuSelect={onMenuSelect}
-            onRecentMenuSelect={onRecentMenuSelect}
-            onToggleMenu={onToggleMenu}
-          />
+          {favoritesSelected && favorites && onFavoritesRefresh && onFavoritesError ? (
+            <MenuFavoritesTree
+              favorites={favorites}
+              moduleItems={moduleItems}
+              onMenuSelect={onFavoriteMenuSelect ?? (() => undefined)}
+              onRefresh={onFavoritesRefresh}
+              onError={onFavoritesError}
+            />
+          ) : (
+            <DashboardMenuTree
+              selectedModule={selectedModule}
+              expandedItemIds={expandedItemIds}
+              selectedMenuId={selectedMenuId}
+              recentMenuItems={recentMenuItems}
+              favorites={favorites}
+              onFavoritesRefresh={onFavoritesRefresh}
+              onFavoritesError={onFavoritesError}
+              onFavoritesMore={onFavoritesMore}
+              onMenuSelect={onMenuSelect}
+              onRecentMenuSelect={onRecentMenuSelect}
+              onToggleMenu={onToggleMenu}
+            />
+          )}
         </Drawer>
       )}
     </Box>

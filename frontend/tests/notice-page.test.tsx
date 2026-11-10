@@ -784,9 +784,16 @@ describe('Community notice page', () => {
   });
 
   it('edits and deletes a comment from the thread', async () => {
+    const editableNotice = {
+      ...noticeFeed[0],
+      comments: noticeFeed[0].comments?.map((comment) => ({
+        ...comment,
+        isEditable: true,
+      })),
+    };
     render(
       <NoticeFeedList
-        items={[noticeFeed[0]]}
+        items={[editableNotice]}
         isDark={false}
         expandedNoticeId={noticeFeed[0].id}
         onToggleExpand={() => undefined}

@@ -38,6 +38,9 @@ public class ProductRegisterRequestVO implements Serializable {
     @Schema(description = "보관방법")
     private String storage;
 
+    @Schema(description = "식품유형 코드(2026-11-05, 공통코드 FOOD_TYPE). 비우면 없음")
+    private String foodType;
+
     @Schema(description = "거래처코드(2026-10-23, 화면이 목록에서 고른 값). 비우면 거래처 없음")
     private String clientCode;
 

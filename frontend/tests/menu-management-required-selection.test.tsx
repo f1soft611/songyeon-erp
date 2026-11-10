@@ -82,6 +82,7 @@ const pageProps = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   apiMocks.apiGet.mockImplementation((path: string) => {
     if (path === '/api/v1/system/modules') {
       return Promise.resolve({
@@ -99,6 +100,12 @@ beforeEach(() => {
       return Promise.resolve({ resultList: permissions });
     }
     if (path === '/api/v1/system/menus?moduleId=1&roleId=1') {
+      return Promise.resolve({ resultList: [] });
+    }
+    if (path === '/api/v1/system/menus?moduleId=1&roleId=2') {
+      return Promise.resolve({ resultList: [] });
+    }
+    if (path === '/api/v1/system/menus?moduleId=2&roleId=2') {
       return Promise.resolve({ resultList: [] });
     }
     return Promise.reject(new Error(`unexpected call: ${path}`));
@@ -146,6 +153,162 @@ describe('MenuManagementPage required selection', () => {
       expect(apiMocks.apiGet).toHaveBeenCalledWith(
         '/api/v1/system/menus?moduleId=1&roleId=1',
       );
+    });
+  });
+
+  it('restores the saved module, role, and search query on entry', async () => {
+    window.sessionStorage.setItem(
+      'songyeon-erp:page:menu-management',
+      JSON.stringify({
+        version: 1,
+        value: {
+          selectedModuleId: 2,
+          selectedRoleId: '2',
+          searchQuery: '사용자',
+        },
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: '모듈 선택' }).textContent,
+      ).toContain('환경설정');
+      expect(
+        screen.getByRole('combobox', { name: '권한 선택' }).textContent,
+      ).toContain('운영자');
+    });
+    expect(screen.getByRole('textbox', { name: '메뉴 검색' })).toHaveValue(
+      '사용자',
+    );
+    await waitFor(() => {
+      expect(apiMocks.apiGet).toHaveBeenCalledWith(
+        '/api/v1/system/menus?moduleId=2&roleId=2',
+      );
+    });
+  });
+
+  it('does not query menus when the saved role no longer exists', async () => {
+    window.sessionStorage.setItem(
+      'songyeon-erp:page:menu-management',
+      JSON.stringify({
+        version: 1,
+        value: {
+          selectedModuleId: 2,
+          selectedRoleId: 'missing-role',
+          searchQuery: '사용자',
+        },
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: '모듈 선택' }).textContent,
+      ).toContain('환경설정');
+      expect(
+        screen.getByRole('combobox', { name: '권한 선택' }).textContent,
+      ).toContain('권한 선택');
+    });
+    expect(apiMocks.apiGet.mock.calls).not.toContainEqual([
+      '/api/v1/system/menus?moduleId=2&roleId=missing-role',
+    ]);
+  });
+
+  it('falls back to the first module when the saved module no longer exists', async () => {
+    window.sessionStorage.setItem(
+      'songyeon-erp:page:menu-management',
+      JSON.stringify({
+        version: 1,
+        value: {
+          selectedModuleId: 999,
+          selectedRoleId: '2',
+          searchQuery: '사용자',
+        },
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: '모듈 선택' }).textContent,
+      ).toContain('기본');
+      expect(
+        screen.getByRole('combobox', { name: '권한 선택' }).textContent,
+      ).toContain('운영자');
+    });
+    expect(screen.getByRole('textbox', { name: '메뉴 검색' })).toHaveValue(
+      '사용자',
+    );
+    await waitFor(() => {
+      expect(apiMocks.apiGet).toHaveBeenCalledWith(
+        '/api/v1/system/menus?moduleId=1&roleId=2',
+      );
+    });
+  });
+
+  it('discards a saved session with an invalid field type', async () => {
+    window.sessionStorage.setItem(
+      'songyeon-erp:page:menu-management',
+      JSON.stringify({
+        version: 1,
+        value: {
+          selectedModuleId: 2,
+          selectedRoleId: 2,
+          searchQuery: '사용자',
+        },
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('combobox', { name: '모듈 선택' }).textContent,
+      ).toContain('기본');
+      expect(
+        screen.getByRole('combobox', { name: '권한 선택' }).textContent,
+      ).toContain('권한 선택');
+    });
+    expect(screen.getByRole('textbox', { name: '메뉴 검색' })).toHaveValue('');
+    expect(apiMocks.apiGet.mock.calls).not.toContainEqual([
+      '/api/v1/system/menus?moduleId=2&roleId=2',
+    ]);
+  });
+
+  it('persists module, role, and search changes to the page session', async () => {
+    renderPage();
+
+    const moduleSelector = await screen.findByRole('combobox', {
+      name: '모듈 선택',
+    });
+    await waitFor(() => expect(moduleSelector).not.toBeDisabled());
+    fireEvent.mouseDown(moduleSelector);
+    fireEvent.click(screen.getByRole('option', { name: '환경설정' }));
+
+    const roleSelector = screen.getByRole('combobox', { name: '권한 선택' });
+    fireEvent.mouseDown(roleSelector);
+    fireEvent.click(screen.getByRole('option', { name: '운영자' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '메뉴 검색' }), {
+      target: { value: '권한' },
+    });
+
+    await waitFor(() => {
+      const storedSession = window.sessionStorage.getItem(
+        'songyeon-erp:page:menu-management',
+      );
+      expect(storedSession).not.toBeNull();
+      expect(JSON.parse(storedSession ?? '{}')).toEqual({
+        version: 1,
+        value: {
+          selectedModuleId: 2,
+          selectedRoleId: '2',
+          searchQuery: '권한',
+        },
+      });
     });
   });
 

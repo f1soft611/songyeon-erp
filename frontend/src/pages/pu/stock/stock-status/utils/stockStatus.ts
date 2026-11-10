@@ -28,7 +28,6 @@ export function visibleRows(rows: StockStatusRow[], kind: StockStatusKind, query
 // 합계는 화면에 보이는 것만 더한다. 걸러놓고 전체 합계를 보여주면 안 맞는다고 여긴다
 export const visibleTotal = (rows: StockStatusRow[]) => rows.reduce((sum, m) => sum + (m.amount || 0), 0);
 
-export const emptyText = (kind: StockStatusKind) => (kind === 'submaterial' ? '해당하는 부자재가 없습니다' : '해당하는 원재료가 없습니다');
 
 // 화면에 보이는 칸은 내려받은 파일에도 있어야 한다(송연 재고현황_{날짜})
 export function excelColumns(warehouses: string[]): ExcelColumn<StockStatusRow>[] {

@@ -68,6 +68,7 @@ class ProductRegisterServiceImplTest {
 		ItemMasterDAO bomDao = mock(ItemMasterDAO.class);
 		ItemMasterService bomService = mock(ItemMasterService.class);
 		when(bomService.resolveStorageCode("002")).thenReturn("002");
+		when(bomService.resolveFoodTypeCode("001")).thenReturn("001");
 		when(bomService.resolveClientCode("000003", null)).thenReturn("000003"); // 2026-10-23 고른 거래처코드 그대로
 		List<BomLineVO> lines = Arrays.asList(line("고춧가루", 450.5), line("소금", null), line("설탕", 100d));
 		when(bomService.resolveBomLines(any())).thenReturn(lines);
@@ -81,6 +82,7 @@ class ProductRegisterServiceImplTest {
 		request.setSpec(" ");
 		request.setProductType("레토르트");
 		request.setStorage("002"); // 2026-10-23 공통코드 STORAGE_METHOD 코드(냉장)
+		request.setFoodType("001"); // 2026-11-05 공통코드 FOOD_TYPE 코드(복합조미식품)
 		request.setClientCode("000003");
 		request.setRegUserId("00000002"); // 컨트롤러가 로그인 사원 사번으로 채운다(2026-10-23)
 		BomLineInputVO input = new BomLineInputVO();
@@ -103,8 +105,10 @@ class ProductRegisterServiceImplTest {
 		assertNull(product.getValue().getSpec());
 		assertEquals("레토르트", product.getValue().getProductType());
 		assertEquals("002", product.getValue().getStorage());
+		assertEquals("001", product.getValue().getFoodType());
 		assertEquals("000003", product.getValue().getClientCode());
 		verify(bomService).resolveStorageCode("002");
+		verify(bomService).resolveFoodTypeCode("001");
 		verify(bomService).resolveBomLines(request.getBom());
 		verify(bomService).resolveClientCode("000003", null);
 	}

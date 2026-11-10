@@ -283,7 +283,7 @@ export function HrPage({ selectedModule, currentMenuName, content, breadcrumbIte
           <Tab value="cert" label="증명서신청" />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
         {tab === 'staff' && (
           <Card sx={cardSx}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>

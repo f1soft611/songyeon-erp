@@ -78,7 +78,7 @@ export function LabelPrintManagementPage({
         onDefaultSearch={() => void management.loadRows()}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           {!management.loading && management.rows.length === 0 && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

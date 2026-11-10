@@ -69,6 +69,9 @@ public interface ItemMasterService {
     /** 보관방법(2026-10-23): 비우면 null, 공통코드 STORAGE_METHOD 의 사용 중 코드만 받는다. 제품등록도 같이 쓴다 */
     String resolveStorageCode(String raw) throws Exception;
 
+    /** 식품유형(2026-11-05): 비우면 null, 공통코드 FOOD_TYPE 의 사용 중 코드만 받는다. 제품등록이 쓴다 */
+    String resolveFoodTypeCode(String raw) throws Exception;
+
     /** 거래처 고르기 목록(2026-10-23): 사용 중 거래처 코드 · 이름 */
     List<ClientOptionVO> listClientOptions() throws Exception;
 

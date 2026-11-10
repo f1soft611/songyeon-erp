@@ -1,9 +1,9 @@
-import type { RefObject } from 'react';
-import { Box, Chip, Link, Typography } from '@mui/material';
-import { F1Grid, type F1GridColumn, type F1GridRef } from '../../../../../shared/components/f1-grid';
+import { useState, type KeyboardEvent, type RefObject } from 'react';
+import { Box, Link, Typography } from '@mui/material';
+import { F1Grid, type F1GridColumn, type F1GridRef, type F1GridRowId } from '../../../../../shared/components/f1-grid';
 import { downloadAttachment, type AttachmentFile } from '../../../../../shared/services/attachment.service';
 import type { Receiving } from '../types/receiving.types';
-import { errorText, formatMoney, formatQty, materialWithCode } from '../utils/receiving';
+import { errorText, receivingDeleteBlockReason } from '../utils/receiving';
 
 // 붙어있는 서류를 내려받기 링크로(송연 attachmentLinksHTML)
 function FileLinks({ files, onError }: { files?: AttachmentFile[]; onError: (text: string) => void }) {
@@ -45,17 +45,17 @@ export function createReceivingHistoryColumns({ onError }: ReceivingHistoryColum
     {
       field: 'clientName',
       headerName: '거래처',
-      width: 140,
+      width: 200,
       align: 'left',
-      renderCell: ({ row }) => row.clientName || '',
+      pinned: 'left',
     },
     {
       field: 'materialName',
       headerName: '원재료',
       flex: 1.4,
-      width: 200,
+      width: 250,
       align: 'left',
-      renderCell: ({ row }) => materialWithCode(row),
+      pinned: 'left',
     },
     {
       field: 'barcode',
@@ -68,48 +68,47 @@ export function createReceivingHistoryColumns({ onError }: ReceivingHistoryColum
       field: 'qty',
       headerName: '수량',
       width: 90,
-      headerAlign: 'center',
+      type: 'number',
+      decimalPlaces: 2,
       align: 'right',
-      renderCell: ({ row }) => formatQty(row.qty),
     },
     {
       field: 'taxType',
       headerName: '과세',
       width: 76,
       align: 'center',
-      renderCell: ({ row }) => <Chip size="small" variant="outlined" label={row.taxType || '과세'} />,
     },
     {
       field: 'unitPrice',
       headerName: '단가',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 4,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.unitPrice),
     },
     {
       field: 'supplyAmount',
       headerName: '공급가액',
       width: 110,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.supplyAmount),
     },
     {
       field: 'vatAmount',
       headerName: '부가세',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.vatAmount),
     },
     {
       field: 'totalAmount',
       headerName: '합계',
       width: 120,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.totalAmount),
       getCellStyle: () => ({ fontWeight: 700 }),
     },
     {
@@ -129,14 +128,38 @@ type ReceivingHistoryGridProps = {
   loading: boolean;
   gridKey: number;
   gridRef: RefObject<F1GridRef<Receiving> | null>;
+  canCreate: boolean;
   canDelete: boolean;
+  onAddRow: () => void;
+  onDeleteBlocked: (reason: string) => void;
   onChangesChange: () => void;
 };
 
 // 2026-10-26 오른쪽 클릭 [행 삭제]: 표에서 빼 두고 [저장] 때 지운다
-export function ReceivingHistoryGrid({ rows, columns, loading, gridKey, gridRef, canDelete, onChangesChange }: ReceivingHistoryGridProps) {
+// 2026-11-05 오른쪽 클릭 [행 추가]: 표에 빈 줄을 넣지 않고 입고 등록 창을 연다(견적 화면과 같은 방식, F1-Grid 가 [행 추가]를 넘겨주는 길은 treeContextMenu 뿐).
+// 지울 수 없는 입고(반품이 걸림 · 지우면 재고 마이너스)를 고르면 [행 삭제]를 끄고, Delete 키는 빼지 않고 이유를 알린다. 삭제 권한이 없으면 Delete 키도 막는다
+export function ReceivingHistoryGrid({
+  rows, columns, loading, gridKey, gridRef, canCreate, canDelete, onAddRow, onDeleteBlocked, onChangesChange,
+}: ReceivingHistoryGridProps) {
+  const [deleteBlocked, setDeleteBlocked] = useState(false);
+  const blockReason = (selectedIds?: F1GridRowId[]) => {
+    const grid = gridRef.current;
+    const ids = new Set((selectedIds ?? grid?.getSelectedRowIds() ?? []).map(String));
+    const selected = rows.filter((row) => ids.has(String(row.id)));
+    return receivingDeleteBlockReason(selected, grid?.getChanges().deletedRows ?? []);
+  };
+  const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Delete' || (gridRef.current?.getSelectedRowIds() ?? []).length === 0) return;
+    const reason = canDelete ? blockReason() : null;
+    if (!canDelete || reason) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (reason) onDeleteBlocked(reason);
+    }
+  };
+
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }} onKeyDownCapture={handleKeyDownCapture}>
       <F1Grid
         key={`history-${gridKey}`}
         ref={gridRef}
@@ -154,10 +177,14 @@ export function ReceivingHistoryGrid({ rows, columns, loading, gridKey, gridRef,
         columnLine
         showCheckbox={false}
         resizableRows={false}
-        allowAddRowInContextMenu={false}
+        allowAddRowInContextMenu={canCreate}
+        allowAddRootInContextMenu={false}
+        treeContextMenu={canCreate ? { onAddRoot: onAddRow, onAddChild: () => onAddRow() } : undefined}
         allowDuplicateRowInContextMenu={false}
         allowDeleteRowInContextMenu={canDelete}
+        deleteMenuDisabled={deleteBlocked}
         selectRowOnContextMenu
+        onSelectionChange={(rowIds) => setDeleteBlocked(rowIds.length > 0 && blockReason(rowIds) != null)}
         onChangesChange={onChangesChange}
       />
     </Box>

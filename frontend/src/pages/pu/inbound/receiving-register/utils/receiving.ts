@@ -126,6 +126,23 @@ export const monthStart = (date = new Date()) =>
 
 export const materialWithCode = (row: Receiving) => `${row.materialName || ''} (${row.materialCode || ''})`;
 
+// 2026-11-05 지울 수 없는 입고면 이유, 지울 수 있으면 null (서버 ReceivingServiceImpl.cancel 과 같은 규칙).
+// 반품이 걸린 입고, 지우면 재고가 마이너스가 되는 입고. 같은 원재료를 함께 지우면(이미 표에서 빼 둔 줄 포함) 수량을 더해 견준다
+export function receivingDeleteBlockReason(selected: Receiving[], pending: Receiving[]): string | null {
+  const returned = selected.find((row) => Number(row.returnedQty ?? 0) > 0);
+  if (returned) return `반품이 등록된 입고는 지울 수 없어요. 반품등록에서 반품을 먼저 지워주세요 (${returned.materialName || ''})`;
+  const pendingIds = new Set(pending.map((row) => row.id));
+  const all = [...pending, ...selected.filter((row) => !pendingIds.has(row.id))];
+  for (const row of selected) {
+    const qty = all
+      .filter((other) => String(other.materialCode) === String(row.materialCode))
+      .reduce((sum, other) => sum + Math.max(Number(other.qty ?? 0), 0), 0);
+    const stock = Number(row.stockQty ?? 0);
+    if (qty > 0 && stock < qty) return `재고가 모자라 지울 수 없어요(${row.materialName || ''} 현재 재고 ${formatQty(stock)}, 지울 입고 수량 ${formatQty(qty)})`;
+  }
+  return null;
+}
+
 export const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
 

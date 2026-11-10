@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Card, CardContent, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -11,6 +11,7 @@ import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import type { F1GridRef } from '../../../../shared/components/f1-grid';
 import { downloadExcel, todayDash } from '../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../shared/utils/searchSession';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { QuoteFormDialog } from './components/QuoteFormDialog';
 import { QuoteGrid, createQuoteColumns } from './components/QuoteGrid';
@@ -45,7 +46,9 @@ type QuoteManagementPageProps = {
 export function QuoteManagementPage({ selectedModule, currentMenuName, content, breadcrumbItems, selectedMenuPermissions }: QuoteManagementPageProps) {
   const management = useQuoteManagement();
   const gridRef = useRef<F1GridRef<QuoteRow>>(null);
-  const [search, setSearch] = useState('');
+  // 2026-11-04 검색어는 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그대로 걸러 보인다
+  const [search, setSearch] = useState(() => readSearchSession('sales-quote', { search: '' }).search);
+  useEffect(() => saveSearchSession('sales-quote', { search }), [search]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const permissions = {
@@ -147,7 +150,7 @@ export function QuoteManagementPage({ selectedModule, currentMenuName, content, 
       </PageSearchArea>
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
       <PageMessageArea message={management.notice} severity="success" onClose={() => management.setNotice('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={{ borderRadius: 1, border: '1px solid rgba(148,163,184,0.18)', boxShadow: 'none', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <CardContent sx={{ p: 2, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', '&:last-child': { pb: 2 } }}>
             <QuoteGrid

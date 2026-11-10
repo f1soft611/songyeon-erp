@@ -26,6 +26,17 @@ describe('useNoticeList', () => {
     });
   });
 
+  it('keeps already loaded regular and pinned notices after a failed full refresh', async () => {
+    const { result } = renderHook(() => useNoticeList({ selectedNoticeFilter: '' }));
+    await act(async () => { await result.current.loadNoticePosts(); });
+    serviceMocks.fetchNoticePosts.mockRejectedValueOnce(new Error('refresh failed'));
+    await act(async () => { await result.current.loadNoticePosts(); });
+    expect(result.current.noticeItems.map((item) => item.id)).toEqual([3]);
+    expect(result.current.pinnedNoticeItems.map((item) => item.id)).toEqual([2]);
+    expect(result.current.initialLoad.error).toBeNull();
+    expect(result.current.errorMessage).toBeTruthy();
+  });
+
   it('loads pinned and regular posts using the active category filter', async () => {
     const { result } = renderHook(() =>
       useNoticeList({ selectedNoticeFilter: 'OPS' }),

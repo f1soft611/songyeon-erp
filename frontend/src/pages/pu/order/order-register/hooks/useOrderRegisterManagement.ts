@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { F1GridRowId, F1TreeRef } from '../../../../../shared/components/f1-grid';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { cancelOrder, fetchOrders } from '../services/orderRegister.service';
 import type { OrderRegisterRow, PurchaseOrder } from '../types/orderRegister.types';
 import { REGISTER_EXCEL_COLUMNS, errorText, toRegisterRows } from '../utils/orderRegister';
@@ -9,12 +10,15 @@ import { REGISTER_EXCEL_COLUMNS, errorText, toRegisterRows } from '../utils/orde
 // 2026-11-03 발주일은 상세 조회(⌄) 기간으로 옮겼다. 오늘 ~ 오늘로 시작하고, 열면 오늘 발주를 바로 보여준다(사용자 결정)
 export type OrderPeriod = { from: string; to: string };
 const todayPeriod = (): OrderPeriod => ({ from: todayDash(), to: todayDash() });
+// 2026-11-04 마지막으로 조회한 발주일 · 거래처는 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+const SESSION_PAGE = 'pu-order-register';
 
 export function useOrderRegisterManagement() {
   const treeRef = useRef<F1TreeRef<OrderRegisterRow>>(null);
   const requestIdRef = useRef(0);
-  const [period, setPeriod] = useState<OrderPeriod>(todayPeriod); // [조회]로 적용한 상세 발주일
-  const [client, setClient] = useState('');
+  const [initial] = useState(() => readSearchSession(SESSION_PAGE, { period: todayPeriod(), client: '' }));
+  const [period, setPeriod] = useState<OrderPeriod>(initial.period); // [조회]로 적용한 상세 발주일
+  const [client, setClient] = useState(initial.client);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,6 +35,7 @@ export function useOrderRegisterManagement() {
   rowsRef.current = rows;
 
   const loadRows = useCallback(async (range: OrderPeriod, clientQ: string) => {
+    saveSearchSession(SESSION_PAGE, { period: range, client: clientQ });
     const requestId = ++requestIdRef.current;
     // 펼쳐둔 거래처를 기억해 둔다. 사라진 거래처는 다음 목록에 없으니 저절로 빠진다
     const groups = rowsRef.current.filter((row) => row.kind === 'group').map((row) => row.id);
@@ -54,8 +59,8 @@ export function useOrderRegisterManagement() {
   }, []);
 
   useEffect(() => {
-    void loadRows(todayPeriod(), '');
-  }, [loadRows]);
+    void loadRows(initial.period, initial.client);
+  }, [loadRows, initial]);
 
   const search = () => void loadRows(period, client);
 

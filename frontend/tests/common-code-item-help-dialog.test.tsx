@@ -66,6 +66,20 @@ function getLastGridRow() {
 }
 
 describe('CommonCodeItemHelpDialog', () => {
+  it('supports custom dialog title and grid aria label overrides', async () => {
+    renderDialog({
+      dialogTitle: '자료실 폴더 설정',
+      gridAriaLabel: '자료실 폴더 목록',
+    });
+
+    expect(
+      await screen.findByRole('dialog', { name: '자료실 폴더 설정' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('grid', { name: '자료실 폴더 목록' }),
+    ).toBeInTheDocument();
+  });
+
   it('hides create and edit actions for read-only users', async () => {
     renderDialog({ canEdit: false });
 

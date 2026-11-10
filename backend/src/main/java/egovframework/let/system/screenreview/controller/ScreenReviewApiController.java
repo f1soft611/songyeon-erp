@@ -57,6 +57,19 @@ public class ScreenReviewApiController {
         return loginEmployeeResolver.employeeId(user);
     }
 
+    @Operation(summary = "화면검수 관리 목록(사용 중인 화면마다 표시 상태 · 개발담당 · 마지막 검수일 · 마지막 의견)", security = { @SecurityRequirement(name = "Authorization") },
+            tags = { "ScreenReviewApiController" })
+    @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "조회 성공") })
+    @GetMapping
+    public ResultVO getSummaryList(@Parameter(hidden = true) @AuthenticationPrincipal LoginVO user) throws Exception {
+        if (user == null || user.getTenantId() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, ResponseCode.AUTH_ERROR.getMessage());
+        }
+        Map<String, Object> resultMap = new HashMap<>();
+        resultMap.put("items", screenReviewService.getSummaryList(user.getTenantId()));
+        return resultVoHelper.buildFromMap(resultMap, ResponseCode.SUCCESS);
+    }
+
     @Operation(summary = "화면검수 조회(현황 · 이력 · 내 임시저장, 첨부 포함)", security = { @SecurityRequirement(name = "Authorization") },
             tags = { "ScreenReviewApiController" })
     @ApiResponses(value = { @ApiResponse(responseCode = "200", description = "조회 성공") })

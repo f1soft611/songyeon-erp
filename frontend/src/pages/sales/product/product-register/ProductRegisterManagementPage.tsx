@@ -94,7 +94,7 @@ export function ProductRegisterManagementPage({
         actionGroups={pageActionGroups}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {/* [저장] 뒤: 등록한 제품을 보기 전용으로 남긴다 */}
         {savedProduct && (
           <Alert severity="success" variant="outlined" sx={{ borderRadius: 1 }}>
@@ -120,6 +120,7 @@ export function ProductRegisterManagementPage({
               onChange={management.setFormValues}
               packagingTypes={management.packagingTypes}
               storageOptions={management.storageOptions}
+              foodTypeOptions={management.foodTypeOptions}
               clients={management.clients}
               quoteClientName={quote?.clientName ?? ''}
               productCode={savedProduct?.productCode ?? ''}

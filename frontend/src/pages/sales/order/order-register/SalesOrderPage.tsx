@@ -50,8 +50,9 @@ export function SalesOrderPage({
   const [clientPicker, setClientPicker] = useState<{ apply: (changes: Partial<OrderRow>) => void } | null>(null);
   const [productPicker, setProductPicker] = useState<{ apply: (changes: Partial<OrderRow>) => void } | null>(null);
   // 상세 조회(⌄): 고치는 중인 값과 [조회]로 적용한 값(조건 칩)
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>({});
+  // 돌아온 경우 마지막으로 조회한 조건을 칩으로 다시 보인다(2026-11-04)
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(management.savedDetailValues);
 
   const permissions = {
     read: Boolean(selectedMenuPermissions?.read),
@@ -152,7 +153,7 @@ export function SalesOrderPage({
         detailLoading={management.loading}
       />
       <PageMessageArea message={management.error} onClose={() => management.setError('')} />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={{ borderRadius: 1, border: '1px solid rgba(148,163,184,0.18)', boxShadow: 'none', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', p: 1.5 }}>
           <SalesOrderGrid
             rows={management.rows}

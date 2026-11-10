@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
@@ -6,10 +6,15 @@ import { DocumentActionsMenu } from '../src/pages/groupware/documents/write/comp
 import { DocumentLinkPreviews } from '../src/pages/groupware/documents/write/components/DocumentLinkPreviews';
 import {
   buildDocumentShareLink,
+  extractExternalLinkUrls,
   extractDocumentShareIds,
   parseDocumentShareLink,
 } from '../src/pages/groupware/documents/write/data/documentShareLink';
-import { getSharedDocumentPreview, listDocumentApprovals } from '../src/pages/groupware/documents/write/services/documentApproval.service';
+import {
+  getExternalLinkPreview,
+  getSharedDocumentPreview,
+  listDocumentApprovals,
+} from '../src/pages/groupware/documents/write/services/documentApproval.service';
 import { apiPost, ApiResponseError } from '../src/shared/services/apiClient';
 
 vi.mock('../src/shared/services/apiClient', async (importOriginal) => ({
@@ -20,6 +25,7 @@ vi.mock('../src/pages/groupware/documents/write/services/documentApproval.servic
   ...await importOriginal<object>(),
   listDocumentApprovals: vi.fn(),
   getSharedDocumentPreview: vi.fn(),
+  getExternalLinkPreview: vi.fn(),
 }));
 
 const link = (id: number) => `${window.location.origin}/groupware/doc/write?documentId=${id}`;
@@ -33,6 +39,10 @@ const record = {
 beforeEach(() => {
   vi.mocked(listDocumentApprovals).mockResolvedValue([record]);
   vi.mocked(getSharedDocumentPreview).mockResolvedValue(record);
+  vi.mocked(getExternalLinkPreview).mockResolvedValue({
+    siteName: 'Example', title: 'External page', description: 'External summary',
+    imageUrl: 'https://example.com/preview.png',
+  });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -69,6 +79,14 @@ describe('document share links', () => {
     expect(extractDocumentShareIds(`<a href="https://example.com">${link(42)}</a>`)).toEqual([]);
     expect(extractDocumentShareIds(`<a href="${link(43)}">${link(42)}</a>`)).toEqual([43]);
   });
+
+  it('extracts external absolute HTTP links without confusing internal shares or unsafe schemes', () => {
+    const external = 'https://example.com/article';
+    expect(extractExternalLinkUrls(`<p>${external}</p><a href="${external}">${link(42)}</a>
+      <a href="${link(42)}">internal</a><a href="javascript:alert(1)">unsafe</a>
+      <a href="https://user:pass@bad.example/">credentials</a>
+      <a href="http://localhost/private">localhost</a>`)).toEqual([external]);
+  });
 });
 
 describe('document sharing UI', () => {
@@ -91,6 +109,56 @@ describe('document sharing UI', () => {
     expect(onOpenDocument).toHaveBeenCalledWith(42);
     expect(listDocumentApprovals).not.toHaveBeenCalled();
   });
+
+  it('keeps internal share links out of the external OG endpoint', async () => {
+    render(<DocumentLinkPreviews html={`${link(42)}
+      <a href="https://example.com/article">External article</a>`} onOpenDocument={vi.fn()} />);
+    expect(await screen.findByRole('link', { name: /External page/ })).toHaveAttribute(
+      'href', 'https://example.com/article',
+    );
+    expect(getExternalLinkPreview).toHaveBeenCalledOnce();
+    expect(getExternalLinkPreview).toHaveBeenCalledWith('https://example.com/article');
+    expect(listDocumentApprovals).toHaveBeenCalledWith('ALL', undefined, 42);
+  });
+
+  it('renders external OG cards distinctly and keeps the original link available on lookup failure', async () => {
+    render(<DocumentLinkPreviews html="https://example.com/article" onOpenDocument={vi.fn()} />);
+    const linkElement = await screen.findByRole('link', { name: /External page/ });
+    expect(screen.queryByText('웹 링크', { exact: true })).not.toBeInTheDocument();
+    expect(linkElement).toHaveAttribute('target', '_blank');
+    expect(linkElement).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByRole('img', { name: 'External page' })).toHaveAttribute(
+      'referrerPolicy', 'no-referrer',
+    );
+
+    vi.mocked(getExternalLinkPreview).mockRejectedValueOnce(new Error('offline'));
+    cleanup();
+    render(<DocumentLinkPreviews html="https://example.com/unavailable" onOpenDocument={vi.fn()} />);
+    expect(await screen.findByText('웹 링크 미리보기를 불러오지 못했습니다.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /https:\/\/example.com\/unavailable/ })).toHaveAttribute(
+      'href', 'https://example.com/unavailable',
+    );
+  });
+
+  it('updates external previews after link edits and ignores stale lookup results', async () => {
+    let resolveFirst: ((value: {
+      siteName: string; title: string; description: string; imageUrl: null;
+    }) => void) | undefined;
+    const firstRequest = new Promise<{
+      siteName: string; title: string; description: string; imageUrl: null;
+    }>((resolve) => { resolveFirst = resolve; });
+    vi.mocked(getExternalLinkPreview).mockImplementation((url) => url.endsWith('/first')
+      ? firstRequest
+      : Promise.resolve({
+        siteName: 'Example', title: 'Updated page', description: 'Latest link', imageUrl: null,
+      }));
+    const { rerender } = render(<DocumentLinkPreviews html="https://example.com/first" />);
+    rerender(<DocumentLinkPreviews html="https://example.com/second" />);
+
+    expect(await screen.findByText('Updated page')).toBeInTheDocument();
+    resolveFirst?.({ siteName: 'Example', title: 'Stale page', description: 'Old link', imageUrl: null });
+    await waitFor(() => expect(screen.queryByText('Stale page')).not.toBeInTheDocument());
+  });
   it('allows sharing a readable non-drafter document without exposing edit/delete', () => {
     const onShare = vi.fn();
     render(<DocumentActionsMenu isDrafter={false} documentStatus="COMPLETED"
@@ -99,6 +167,49 @@ describe('document sharing UI', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '문서 공유하기' }));
     expect(onShare).toHaveBeenCalledOnce();
     expect(screen.queryByRole('menuitem', { name: '문서 수정' })).not.toBeInTheDocument();
+  });
+
+  it('groups sharing and reference actions apart from available document management actions', () => {
+    render(<DocumentActionsMenu isDrafter documentStatus="DRAFT"
+      onShare={vi.fn()} onAddReferences={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+
+    const menu = screen.getByRole('menu');
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent))
+      .toEqual(['문서 공유하기', '참조자 추가하기', '문서 수정', '삭제']);
+    const divider = within(menu).getByRole('separator');
+    const referenceItem = within(menu).getByRole('menuitem', { name: '참조자 추가하기' });
+    const editItem = within(menu).getByRole('menuitem', { name: '문서 수정' });
+    expect(Boolean(referenceItem.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING))
+      .toBe(true);
+    expect(Boolean(divider.compareDocumentPosition(editItem) & Node.DOCUMENT_POSITION_FOLLOWING))
+      .toBe(true);
+  });
+
+  it('does not render a divider when no document management actions are available', () => {
+    render(<DocumentActionsMenu isDrafter={false} documentStatus="COMPLETED"
+      onShare={vi.fn()} onAddReferences={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+
+    expect(screen.getByRole('menuitem', { name: '참조자 추가하기' })).toBeInTheDocument();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+  });
+
+  it('closes the menu and invokes only the selected reference action', async () => {
+    const onShare = vi.fn();
+    const onAddReferences = vi.fn();
+    const onEdit = vi.fn();
+    const onDelete = vi.fn();
+    render(<DocumentActionsMenu isDrafter documentStatus="DRAFT"
+      onShare={onShare} onAddReferences={onAddReferences} onEdit={onEdit} onDelete={onDelete} />);
+    fireEvent.click(screen.getByRole('button', { name: '문서 더보기' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '참조자 추가하기' }));
+
+    expect(onAddReferences).toHaveBeenCalledOnce();
+    expect(onShare).not.toHaveBeenCalled();
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 
   it('loads permission-filtered metadata and opens the right panel through its callback', async () => {

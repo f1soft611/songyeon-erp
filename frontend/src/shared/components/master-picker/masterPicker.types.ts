@@ -13,6 +13,7 @@ export type MasterPickerProps = {
   value: MasterPickerOption | null;
   search: MasterPickerSearch;
   onChange: (value: MasterPickerOption) => void;
+  triggerMode?: 'button' | 'icon';
   disabled?: boolean;
   required?: boolean;
   error?: boolean;

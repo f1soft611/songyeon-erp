@@ -3,9 +3,12 @@ import { Box, TextField } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import SaveIcon from '@mui/icons-material/Save';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
+import { useInitialLoadState } from '../../../../shared/hooks/useInitialLoadState';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import { useUnsavedChangesBeforeUnload } from '../../../../shared/hooks/useUnsavedChangesBeforeUnload';
 import type {
   ModuleItem,
   PageContent,
@@ -48,10 +51,12 @@ export function WarehouseManagementPage({
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [panelDirty, setPanelDirty] = useState(false);
+  useUnsavedChangesBeforeUnload(panelDirty);
   const [saving, setSaving] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
   const [warehouseGridKey, setWarehouseGridKey] = useState(0);
   const warehouseRequestIdRef = useRef(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   const filteredWarehouses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -75,6 +80,7 @@ export function WarehouseManagementPage({
   const loadWarehouses = useCallback(
     async ({ showSkeleton = false }: { showSkeleton?: boolean } = {}) => {
       const requestId = ++warehouseRequestIdRef.current;
+      start();
       setError('');
       if (showSkeleton) {
         setPageLoading(true);
@@ -84,10 +90,11 @@ export function WarehouseManagementPage({
         const result = await fetchWarehouseRows();
         if (requestId === warehouseRequestIdRef.current) {
           setWarehouses(result);
+          succeed();
         }
       } catch (requestError) {
         if (requestId === warehouseRequestIdRef.current) {
-          setWarehouses([]);
+          fail(requestError);
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -101,7 +108,7 @@ export function WarehouseManagementPage({
         }
       }
     },
-    [],
+    [start, succeed, fail],
   );
 
   useEffect(() => {
@@ -114,7 +121,7 @@ export function WarehouseManagementPage({
   }, [loadWarehouses]);
 
   const handleSaveChanges = useCallback(async () => {
-    if (!warehousePanelRef.current) return;
+    if (!warehousePanelRef.current || saving) return;
     setSaving(true);
     try {
       await warehousePanelRef.current.saveCurrentChanges();
@@ -127,7 +134,7 @@ export function WarehouseManagementPage({
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [saving]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -137,9 +144,10 @@ export function WarehouseManagementPage({
           label: '조회',
           icon: SearchIcon,
           visible: pageActionPermissions.read,
-          disabled: false,
+          disabled: saving,
           onClick: () => {
-            void loadWarehouses({ showSkeleton: true });
+            if (saving) return;
+            void loadWarehouses({ showSkeleton: true }).catch(() => undefined);
           },
         },
       ],
@@ -150,6 +158,7 @@ export function WarehouseManagementPage({
         {
           label: '저장',
           icon: SaveIcon,
+          saving,
           visible: pageActionPermissions.write,
           disabled: !panelDirty || saving,
           onClick: () => {
@@ -179,8 +188,11 @@ export function WarehouseManagementPage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
+      <PageLoadBoundary {...initialLoad} label="창고 목록"
+        onRetry={() => { void loadWarehouses({ showSkeleton: true }).catch(() => undefined); }}>
       <PageSearchArea>
         <TextField
+          disabled={saving}
           size="small"
           margin="none"
           placeholder="창고명 검색"
@@ -219,7 +231,9 @@ export function WarehouseManagementPage({
         onError={setError}
         warehouseGridKey={warehouseGridKey}
         warehouseGridLoading={pageLoading}
+        saving={saving}
       />
+      </PageLoadBoundary>
     </Box>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { clientProductDetailValues, readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import {
   PACKING_CODE_GROUP, VEHICLE_CODE_GROUP, confirmShipment, fetchCommonCodeNames, fetchDriverOptions, fetchShipSchedule, unconfirmShipment,
 } from '../services/shipConfirm.service';
@@ -20,7 +21,9 @@ const errorText = (error: unknown, fallback: string) =>
 export function useShipConfirmManagement() {
   const gridRef = useRef<F1GridRef<ShipRow>>(null);
   const requestIdRef = useRef(0);
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 날짜 · 상세 조회 조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('lg-ship-confirm', { date: todayDash(), filter: NO_FILTER }));
+  const [date, setDate] = useState(saved.date);
   const [loadedDate, setLoadedDate] = useState('');
   const [rows, setRows] = useState<ShipRow[]>([]); // 조회한 그대로(인쇄는 이 순서)
   const rowsRef = useRef(rows);
@@ -39,7 +42,7 @@ export function useShipConfirmManagement() {
   const [alertText, setAlertText] = useState<string | null>(null);
   const [error, setError] = useState('');
   // 상세 조회(⌄)로 적용한 조건. 받은 출하 중 맞는 줄만 표에 둔다(2026-10-30)
-  const detailFilterRef = useRef<ShipDetailFilter>(NO_FILTER);
+  const detailFilterRef = useRef<ShipDetailFilter>(saved.filter);
 
   // 표 안에서 친 값을 목록으로 되받아 온다
   const pull = (): ShipRow[] => gridRef.current?.getActiveRows() ?? rowsRef.current;
@@ -49,6 +52,7 @@ export function useShipConfirmManagement() {
       setError('조회할 날짜를 먼저 선택해주세요');
       return;
     }
+    saveSearchSession('lg-ship-confirm', { date: day, filter: detailFilterRef.current });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -74,12 +78,12 @@ export function useShipConfirmManagement() {
   };
 
   useEffect(() => {
-    void loadRows(todayDash());
+    void loadRows(saved.date);
     // 칸에 고를 것. 못 받으면 빈 목록(고를 것 없이 비워둔다)
     fetchCommonCodeNames(PACKING_CODE_GROUP).then(setPackingNames).catch(() => undefined);
     fetchCommonCodeNames(VEHICLE_CODE_GROUP).then(setVehicleNames).catch(() => undefined);
     fetchDriverOptions().then(setDrivers).catch(() => undefined);
-  }, [loadRows]);
+  }, [loadRows, saved]);
 
   const send = async (row: ShipRow) => {
     try {
@@ -183,6 +187,7 @@ export function useShipConfirmManagement() {
   const confirmedCount = rows.filter(isConfirmed).length;
 
   return {
+    savedDetailValues: clientProductDetailValues(saved.filter),
     gridRef,
     applyDetailFilter,
     date,

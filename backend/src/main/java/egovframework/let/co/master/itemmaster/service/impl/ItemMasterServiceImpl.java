@@ -49,6 +49,7 @@ public class ItemMasterServiceImpl extends EgovAbstractServiceImpl implements It
     static final String PRODUCT_NOT_FOUND = "제품을 찾을 수 없습니다";
     static final String NAME_REQUIRED = "제품명은 필수입니다";
     static final String STORAGE_MESSAGE = "보관방법을 다시 골라주세요(공통코드 보관방법에 없는 값입니다)";
+    static final String FOOD_TYPE_MESSAGE = "식품유형을 다시 골라주세요(공통코드 식품유형에 없는 값입니다)";
     static final String CLIENT_CODE_MESSAGE = "거래처를 목록에서 다시 골라주세요(사용 중인 거래처가 아닙니다)";
     static final String CLIENT_REQUIRED_MESSAGE = "거래처를 골라주세요(거래처마스터에 등록된 거래처만 저장할 수 있어요)";
     static final String CLIENT_NOT_REGISTERED_MESSAGE = "거래처마스터에 없는 거래처예요. 거래처를 목록에서 다시 골라주세요";
@@ -84,6 +85,7 @@ public class ItemMasterServiceImpl extends EgovAbstractServiceImpl implements It
         ProductBomVO product = requireProduct(code);
         String name = payload.getName().trim();
         String storage = resolveStorageCode(payload.getStorage()); // 2026-10-23 공통코드 STORAGE_METHOD 코드
+        String foodType = resolveFoodTypeCode(payload.getFoodType()); // 2026-11-05 공통코드 FOOD_TYPE 코드
         // 2026-10-23 거래처는 화면이 목록에서 고른 거래처코드를 그대로 저장한다(이름 변환 없음)
         String client = resolveClientCode(payload.getClientCode(), product.getClientCode());
         // 2026-10-27 제품마스터 수정: 거래처는 필수, 거래처마스터에 등록된 거래처만(지금 값을 그대로 두어도 마스터에 없으면 막는다)
@@ -93,7 +95,7 @@ public class ItemMasterServiceImpl extends EgovAbstractServiceImpl implements It
         if (itemMasterDAO.selectRegisteredClientCode(client) == null) {
             throw new IllegalArgumentException(CLIENT_NOT_REGISTERED_MESSAGE);
         }
-        itemMasterDAO.updateProductInfo(code, name, storage, client);
+        itemMasterDAO.updateProductInfo(code, name, storage, foodType, client);
         itemMasterDAO.updatePricingProductName(code, name);
     }
 
@@ -278,6 +280,18 @@ public class ItemMasterServiceImpl extends EgovAbstractServiceImpl implements It
         }
         if (!itemMasterDAO.selectStorageCodes().contains(value)) {
             throw new IllegalArgumentException(STORAGE_MESSAGE);
+        }
+        return value;
+    }
+
+    @Override
+    public String resolveFoodTypeCode(String raw) throws Exception {
+        String value = StringUtils.hasText(raw) ? raw.trim() : null;
+        if (value == null) {
+            return null;
+        }
+        if (!itemMasterDAO.selectFoodTypeCodes().contains(value)) {
+            throw new IllegalArgumentException(FOOD_TYPE_MESSAGE);
         }
         return value;
     }

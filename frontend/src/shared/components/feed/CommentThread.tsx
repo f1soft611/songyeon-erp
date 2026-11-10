@@ -4,6 +4,7 @@ export {
   sanitizeCommentHtml,
 } from './TiptapCommentThread';
 export type {
+  CommentMentionOption,
   CommentThreadProps,
   FeedCommentAttachment,
   FeedCommentItem,

@@ -3,7 +3,6 @@ import { Box, Button, Typography } from '@mui/material';
 import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
 import { resetGridStorageIfColumnsChanged } from '../../../../../shared/utils/gridStorage';
 import type { DocRow, DocTarget } from '../../receiving-register/types/receiving.types';
-import { formatQty } from '../../receiving-register/utils/receiving';
 
 const STORAGE_KEY = 'pu-recv-doc-grid';
 // 2026-11-02 [상세보기] 단추 칸을 rowAction 으로 바꿨다. 저장된 칸 순서에 지금 칸이 없으면 처음 순서로
@@ -36,17 +35,16 @@ export function createReceivingDocColumns({ onUpload, onView, onDetail }: Receiv
     {
       field: 'entryCount',
       headerName: '입고건수',
+      type: 'number',
       width: 100,
-      headerAlign: 'center',
       align: 'right',
     },
     {
       field: 'totalQty',
       headerName: '총 입고수량',
+      type: 'number',
       width: 130,
-      headerAlign: 'center',
       align: 'right',
-      renderCell: ({ row }) => formatQty(row.totalQty),
       getCellStyle: () => ({ fontWeight: 700 }),
     },
     {

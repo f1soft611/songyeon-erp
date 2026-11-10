@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchReceivingSummary, fetchReceivings } from '../../receiving-register/services/receiving.service';
 import type { PageSearchFieldValue } from '../../../../../shared/components/page-search/searchFields';
 import type { DocQuery, DocRow, DocTarget, Receiving, ReceivingSummary } from '../../receiving-register/types/receiving.types';
@@ -8,7 +9,8 @@ import { DOC_EXCEL_COLUMNS, applyDocDetail, errorText, filesOfMaterial, monthSta
 // 서류등록 화면: 품목별로 묶어 입고 건마다 서류를 붙인다. 열면 바로 부른다. 마지막 요청의 응답만 쓴다
 export function useReceivingDocs(onError: (text: string) => void) {
   const requestRef = useRef(0);
-  const [query, setQuery] = useState<DocQuery>(() => ({ start: monthStart(), end: todayDash(), clientQ: '', materialQ: '' }));
+  const [query, setQuery] = useState<DocQuery>(() => // 2026-11-04 마지막으로 조회한 조건(탭 세션)으로 다시 연다
+    readSearchSession('pu-receiving-doc', { start: monthStart(), end: todayDash(), clientQ: '', materialQ: '' }));
   const queryRef = useRef(query);
   queryRef.current = query;
   const [summary, setSummary] = useState<ReceivingSummary[] | null>(null);
@@ -31,6 +33,7 @@ export function useReceivingDocs(onError: (text: string) => void) {
       onError('조회 기간을 선택해주세요');
       return;
     }
+    saveSearchSession('pu-receiving-doc', current);
     const requestId = ++requestRef.current;
     setLoading(true);
     try {

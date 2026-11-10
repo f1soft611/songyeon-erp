@@ -162,7 +162,7 @@ export function ReturnRegisterManagementPage({
         onDetailSearch={(values) => applyPeriod(toPeriod(values.receiveDate))}
         detailLoading={returns.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
             <Typography sx={{ fontSize: 14, fontWeight: 700 }}>반품내역</Typography>
@@ -177,7 +177,9 @@ export function ReturnRegisterManagementPage({
             loading={returns.loading}
             gridKey={returns.version}
             gridRef={returns.gridRef}
+            canCreate={Boolean(selectedMenuPermissions?.create)}
             canDelete={canDelete}
+            onAddRow={() => returns.setReturnOpen(true)}
             onChangesChange={deleteSave.refreshDirty}
           />
         </Card>

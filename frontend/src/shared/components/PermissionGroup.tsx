@@ -1,5 +1,6 @@
-import { Box, Button } from '@mui/material';
+import { Box } from '@mui/material';
 import type { ElementType } from 'react';
+import { AppSaveButton } from './AppSaveButton';
 
 export type PermissionGroupDefinition = {
   key: string;
@@ -43,6 +44,8 @@ export type PermissionActionDefinition = {
   icon?: ElementType;
   visible?: boolean;
   disabled?: boolean;
+  saving?: boolean;
+  savingAriaLabel?: string;
   onClick?: () => void | Promise<void>;
 };
 
@@ -74,13 +77,15 @@ export function PermissionGroupActionBar({
           .map((action) => {
             const IconComponent = action.icon;
             return (
-              <Button
+              <AppSaveButton
                 key={`${group.key}-${action.label}`}
                 size="small"
                 startIcon={
                   IconComponent ? <IconComponent fontSize="small" /> : undefined
                 }
                 disabled={action.disabled}
+                saving={action.saving}
+                progressLabel={action.savingAriaLabel}
                 onClick={() => {
                   void action.onClick?.();
                 }}
@@ -88,7 +93,7 @@ export function PermissionGroupActionBar({
                 variant="contained"
               >
                 {action.label}
-              </Button>
+              </AppSaveButton>
             );
           }),
       )}

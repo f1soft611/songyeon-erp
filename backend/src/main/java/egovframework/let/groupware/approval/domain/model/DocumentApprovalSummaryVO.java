@@ -12,6 +12,10 @@ public class DocumentApprovalSummaryVO {
     private Long revisionRequestedCount = 0L;
     private Long rejectedCount = 0L;
     private List<DocumentApprovalListItemVO> notices = new ArrayList<>();
+    private Long referenceConfirmationRequiredCount;
+    private List<DocumentApprovalListItemVO> referenceConfirmationItems;
+    private Long finalConfirmationRequiredCount;
+    private List<DocumentApprovalListItemVO> finalConfirmationItems;
 
     public Long getActionRequiredCount() { return actionRequiredCount; }
     public void setActionRequiredCount(Long actionRequiredCount) { this.actionRequiredCount = actionRequiredCount; }
@@ -29,4 +33,20 @@ public class DocumentApprovalSummaryVO {
     public void setRejectedCount(Long rejectedCount) { this.rejectedCount = rejectedCount; }
     public List<DocumentApprovalListItemVO> getNotices() { return notices; }
     public void setNotices(List<DocumentApprovalListItemVO> notices) { this.notices = notices; }
+    public Long getReferenceConfirmationRequiredCount() { return referenceConfirmationRequiredCount; }
+    public void setReferenceConfirmationRequiredCount(Long referenceConfirmationRequiredCount) {
+        this.referenceConfirmationRequiredCount = referenceConfirmationRequiredCount;
+    }
+    public List<DocumentApprovalListItemVO> getReferenceConfirmationItems() { return referenceConfirmationItems; }
+    public void setReferenceConfirmationItems(List<DocumentApprovalListItemVO> referenceConfirmationItems) {
+        this.referenceConfirmationItems = referenceConfirmationItems;
+    }
+    public Long getFinalConfirmationRequiredCount() { return finalConfirmationRequiredCount; }
+    public void setFinalConfirmationRequiredCount(Long finalConfirmationRequiredCount) {
+        this.finalConfirmationRequiredCount = finalConfirmationRequiredCount;
+    }
+    public List<DocumentApprovalListItemVO> getFinalConfirmationItems() { return finalConfirmationItems; }
+    public void setFinalConfirmationItems(List<DocumentApprovalListItemVO> finalConfirmationItems) {
+        this.finalConfirmationItems = finalConfirmationItems;
+    }
 }

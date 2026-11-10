@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { PageSearchFieldValue } from '../../../../../shared/components/page-search/searchFields';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { fetchLots, fetchStock, fetchStockAsOf } from '../services/productStock.service';
 import type { LotRecord, LotState, StockRow, StockSort } from '../types/productStock.types';
 import { flattenLots, STOCK_EXCEL_COLUMNS } from '../utils/productStock';
@@ -11,9 +13,11 @@ const errorText = (error: unknown, fallback: string) =>
 export function useProductStockManagement() {
   const requestIdRef = useRef(0);
   const [exportDate, setExportDate] = useState(() => todayDash());
-  const [search, setSearch] = useState('');
-  const [client, setClient] = useState('');
-  const [sort, setSort] = useState<StockSort>('name-asc');
+  // 2026-11-04 마지막으로 조회한 검색어 · 거래처 · 정렬은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('lg-product-stock', { search: '', client: '', sort: 'name-asc' as StockSort }));
+  const [search, setSearch] = useState(saved.search);
+  const [client, setClient] = useState(saved.client);
+  const [sort, setSort] = useState<StockSort>(saved.sort);
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -29,6 +33,7 @@ export function useProductStockManagement() {
   const [error, setError] = useState('');
 
   const loadRows = useCallback(async (q: string, clientName: string, order: StockSort) => {
+    saveSearchSession('lg-product-stock', { search: q, client: clientName, sort: order });
     const requestId = ++requestIdRef.current;
     setAllExpanded(false);
     setLots({});
@@ -50,8 +55,8 @@ export function useProductStockManagement() {
   }, [setLots]);
 
   useEffect(() => {
-    void loadRows('', '', 'name-asc');
-  }, [loadRows]);
+    void loadRows(saved.search, saved.client, saved.sort);
+  }, [loadRows, saved]);
 
   const reload = () => void loadRows(search, client, sort);
   // 상세 조회(⌄) [조회]: 거래처 · 정렬을 적용해 다시 받는다(정렬을 비우면 품목명 오름차순)
@@ -105,7 +110,14 @@ export function useProductStockManagement() {
   const loadingLots = openRows.some((row) => lots[row.code] === 'loading');
   const noLotRows = openRows.filter((row) => Array.isArray(lots[row.code]) && (lots[row.code] as LotRecord[]).length === 0);
 
+  // 돌아온 경우 마지막으로 조회한 거래처 · 정렬을 칩으로 다시 보인다(정렬은 품목명 오름차순이 아닐 때만)
+  const savedDetailValues: Record<string, PageSearchFieldValue> = {
+    ...(saved.client ? { clientName: saved.client } : {}),
+    ...(saved.sort !== 'name-asc' ? { sort: saved.sort } : {}),
+  };
+
   return {
+    savedDetailValues,
     exportDate,
     setExportDate,
     search,

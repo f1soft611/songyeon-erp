@@ -8,6 +8,8 @@ export type ProductBomRow = {
   spec: string;
   storage: string; // 보관방법 코드(공통코드 STORAGE_METHOD, 2026-10-23)
   storageNm: string; // 보관방법 이름
+  foodType: string; // 식품유형 코드(공통코드 FOOD_TYPE, 2026-11-05)
+  foodTypeNm: string; // 식품유형 이름
   clientName: string; // 거래처마스터 이름(서버가 붙여 준다)
   clientCode: string; // 거래처코드(2026-10-23, 제품에는 이 코드를 저장한다)
   discontinued: boolean;

@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { checkProdCheck, fetchProdCheckProducts } from '../services/prodCheck.service';
 import type { ProdCheckLine, ProdCheckResult, ProdCheckRow } from '../types/prodCheck.types';
 import { addLines, emptyQtyLines, excelColumnsOf, verdictOf } from '../utils/prodCheck';
@@ -14,10 +15,15 @@ export function useProdCheck() {
   const linesGridRef = useRef<F1GridRef<ProdCheckLine>>(null);
   // 고를 수 있는 제품(배합비가 있는 것). 제품 추가 창을 처음 열 때 받는다(비어 있으면 열 때마다 다시)
   const [products, setProducts] = useState<string[]>([]);
-  const [lines, setLines] = useState<ProdCheckLine[]>([]);
+  // 2026-11-04 마지막으로 확인한 생산일자 · 제품 줄은 탭 세션에 둔다. 확인한 적이 있으면 다른 화면에 갔다 돌아왔을 때 그대로 다시 확인한다
+  const [saved] = useState(() => {
+    const value = readSearchSession<{ date: string; lines: ProdCheckLine[] } | null>('sales-prod-check', null, { date: '', lines: [] });
+    return value && value.lines.every((line) => typeof line?.product === 'string') ? value : null;
+  });
+  const [lines, setLines] = useState<ProdCheckLine[]>(saved?.lines ?? []);
   // 줄을 담거나 뺄 때만 표를 새로 그린다(수량은 표 안에서 고치고, 확인할 때 표에서 읽는다)
   const [linesVersion, setLinesVersion] = useState(0);
-  const [date, setDateValue] = useState(() => todayDash());
+  const [date, setDateValue] = useState(() => saved?.date || todayDash());
   const [data, setData] = useState<ProdCheckResult | null>(null);
   const [one, setOne] = useState<string | null>(null); // 상세보기로 고른 제품(없으면 합계)
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -75,12 +81,18 @@ export function useProdCheck() {
       setLines(current);
       setData(await checkProdCheck(date, current));
       setOne(null);
+      saveSearchSession('sales-prod-check', { date, lines: current });
     } catch (requestError) {
       setError(errorText(requestError, '확인하지 못했어요'));
     } finally {
       setChecking(false);
     }
   };
+
+  useEffect(() => {
+    if (saved && saved.lines.length > 0) void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportExcel = async () => {
     if (!data || data.rows.length === 0) {

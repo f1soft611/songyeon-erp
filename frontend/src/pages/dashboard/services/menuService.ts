@@ -97,6 +97,7 @@ const flattenMenuTree = (nodes: MenuTreeNode[]): MenuItem[] =>
     return [
       {
         id: node.id,
+        menuId: node.menuId,
         name: node.name,
         pageKey,
         ...(node.path ? { path: node.path } : {}),

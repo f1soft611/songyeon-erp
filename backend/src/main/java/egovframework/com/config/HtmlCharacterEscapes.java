@@ -2,7 +2,6 @@ package egovframework.com.config;
 
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.io.CharacterEscapes;
-import com.fasterxml.jackson.core.io.SerializedString;
 
 public class HtmlCharacterEscapes extends CharacterEscapes {
 
@@ -21,6 +20,6 @@ public class HtmlCharacterEscapes extends CharacterEscapes {
 
     @Override
     public SerializableString getEscapeSequence(int ch) {
-        return new SerializedString(Character.toString((char) ch));
+        return null;
     }
 }

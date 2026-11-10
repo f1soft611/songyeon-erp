@@ -50,6 +50,8 @@ const documentKindByType: Record<DocumentApprovalRecord['documentType'], Documen
 const documentApprovalScopeLabels: Record<DocumentApprovalScope, string> = {
   ALL: '전체',
   MY_PENDING: '내가 처리할 결재',
+  MY_REFERENCE_PENDING: '참조 확인 대기',
+  MY_FINAL_CONFIRMATION_PENDING: '내가 최종 확인할 문서',
   IN_PROGRESS: '결재 진행 중',
   DRAFT: '작성 중 문서',
   COMPLETED: '승인',
@@ -60,6 +62,8 @@ const documentApprovalScopeLabels: Record<DocumentApprovalScope, string> = {
 const documentApprovalScopes = [
   'ALL',
   'MY_PENDING',
+  'MY_REFERENCE_PENDING',
+  'MY_FINAL_CONFIRMATION_PENDING',
   'IN_PROGRESS',
   'DRAFT',
   'COMPLETED',
@@ -123,6 +127,12 @@ export function getApprovalSystemEventPresentation(
       return getApprovalStatusPresentation('COMPLETED');
     case 'COMPLETED':
       return { ...getApprovalStatusPresentation('COMPLETED'), label: '완료' };
+    case 'REFERENCE_CONFIRMED':
+      return { ...getApprovalStatusPresentation('COMPLETED'), label: '참조 확인' };
+    case 'FINAL_CONFIRMATION_CONFIRMED':
+      return { ...getApprovalStatusPresentation('COMPLETED'), label: '최종확인' };
+    case 'REFERENCE_ADDED':
+      return { label: '참조자 추가', color: 'info', variant: 'outlined' };
     case 'RETURNED':
       return getApprovalStatusPresentation('REVISION_REQUESTED');
     default:

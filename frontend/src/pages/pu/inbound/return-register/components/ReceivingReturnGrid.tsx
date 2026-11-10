@@ -1,8 +1,7 @@
-import type { RefObject } from 'react';
-import { Box, Chip } from '@mui/material';
+import type { KeyboardEvent, RefObject } from 'react';
+import { Box } from '@mui/material';
 import { F1Grid, type F1GridColumn, type F1GridRef } from '../../../../../shared/components/f1-grid';
 import type { Receiving } from '../../receiving-register/types/receiving.types';
-import { formatMoney, formatQty, materialWithCode } from '../../receiving-register/utils/receiving';
 
 // 반품내역 칸
 export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
@@ -18,6 +17,7 @@ export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
     {
       field: 'receiveDate',
       headerName: '반품일',
+      type: 'date',
       width: 110,
       align: 'center',
     },
@@ -26,7 +26,6 @@ export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
       headerName: '거래처',
       width: 140,
       align: 'left',
-      renderCell: ({ row }) => row.clientName || '',
     },
     {
       field: 'materialName',
@@ -34,15 +33,13 @@ export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
       flex: 1.4,
       width: 200,
       align: 'left',
-      renderCell: ({ row }) => materialWithCode(row),
     },
     {
       field: 'qty',
       headerName: '수량',
       width: 90,
-      headerAlign: 'center',
+      type: 'number',
       align: 'right',
-      renderCell: ({ row }) => formatQty(row.qty),
       getCellStyle: () => ({ color: '#dc2626', fontWeight: 700 }),
     },
     {
@@ -50,39 +47,38 @@ export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
       headerName: '과세',
       width: 76,
       align: 'center',
-      renderCell: ({ row }) => <Chip size="small" variant="outlined" label={row.taxType || '과세'} />,
     },
     {
       field: 'unitPrice',
       headerName: '단가',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 4,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.unitPrice),
     },
     {
       field: 'supplyAmount',
       headerName: '공급가액',
       width: 110,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.supplyAmount),
     },
     {
       field: 'vatAmount',
       headerName: '부가세',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.vatAmount),
     },
     {
       field: 'totalAmount',
       headerName: '합계',
       width: 120,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.totalAmount),
       getCellStyle: () => ({ color: '#dc2626', fontWeight: 700 }),
     },
     {
@@ -91,7 +87,6 @@ export function createReceivingReturnColumns(): F1GridColumn<Receiving>[] {
       flex: 1,
       width: 140,
       align: 'left',
-      renderCell: ({ row }) => row.returnReason || '',
     },
   ];
 }
@@ -102,14 +97,27 @@ type ReceivingReturnGridProps = {
   loading: boolean;
   gridKey: number;
   gridRef: RefObject<F1GridRef<Receiving> | null>;
+  canCreate: boolean;
   canDelete: boolean;
+  onAddRow: () => void;
   onChangesChange: () => void;
 };
 
 // 2026-10-26 오른쪽 클릭 [행 삭제]: 표에서 빼 두고 [저장] 때 지운다
-export function ReceivingReturnGrid({ rows, columns, loading, gridKey, gridRef, canDelete, onChangesChange }: ReceivingReturnGridProps) {
+// 2026-11-05 오른쪽 클릭 [행 추가]: 표에 빈 줄을 넣지 않고 반품 등록 창을 연다(입고등록과 같음, F1-Grid 가 [행 추가]를 넘겨주는 길은 treeContextMenu 뿐).
+// 반품 줄은 지워도 막을 규칙이 없다(다른 줄이 참조하지 않고, 지우면 재고가 돌아온다). 삭제 권한이 없으면 Delete 키도 막는다
+export function ReceivingReturnGrid({
+  rows, columns, loading, gridKey, gridRef, canCreate, canDelete, onAddRow, onChangesChange,
+}: ReceivingReturnGridProps) {
+  const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Delete' && !canDelete) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+    <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }} onKeyDownCapture={handleKeyDownCapture}>
       <F1Grid
         key={`return-${gridKey}`}
         ref={gridRef}
@@ -127,7 +135,9 @@ export function ReceivingReturnGrid({ rows, columns, loading, gridKey, gridRef, 
         columnLine
         showCheckbox={false}
         resizableRows={false}
-        allowAddRowInContextMenu={false}
+        allowAddRowInContextMenu={canCreate}
+        allowAddRootInContextMenu={false}
+        treeContextMenu={canCreate ? { onAddRoot: onAddRow, onAddChild: () => onAddRow() } : undefined}
         allowDuplicateRowInContextMenu={false}
         allowDeleteRowInContextMenu={canDelete}
         selectRowOnContextMenu

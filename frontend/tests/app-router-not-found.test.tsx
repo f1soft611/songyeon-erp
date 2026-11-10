@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AppRouter from '../src/routes/AppRouter';
@@ -53,6 +53,24 @@ afterEach(() => {
 });
 
 describe('AppRouter not found fallback', () => {
+  // 2026-11-04 S_ERP 통합검색 화면(메뉴 DB 에 없는 고정 주소)
+  it.each(['/search', '/search/'])('allows the authenticated common search page without a registered database menu: %s', async (path) => {
+    window.localStorage.setItem('songyeon-erp-auth', JSON.stringify({
+      tenantCode: 'TEST', userId: 'test', accessToken: 'token', refreshToken: '',
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+    }));
+    render(
+      <AppSettingsProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppRouter />
+        </MemoryRouter>
+      </AppSettingsProvider>,
+    );
+    expect(await screen.findByRole('heading', { name: '통합검색 결과' }, { timeout: 25000 })).toBeVisible();
+    expect(screen.getByLabelText('통합검색 검색어')).toBeVisible();
+    expect(screen.queryByText('요청하신 페이지를 찾을 수 없습니다')).not.toBeInTheDocument();
+  }, 30000);
+
   it('renders the NotFound page for unknown routes', () => {
     render(
       <AppSettingsProvider>
@@ -76,7 +94,7 @@ describe('AppRouter not found fallback', () => {
         userId: 'admin',
         accessToken: 'token',
         refreshToken: 'refresh',
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
       }),
     );
 
@@ -122,6 +140,8 @@ describe('AppRouter not found fallback', () => {
       screen.queryByText('요청하신 페이지를 찾을 수 없습니다'),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toBeVisible();
+    // 앱은 토큰을 확인한 뒤에 메뉴를 부른다. 요청이 나간 다음에 응답을 넘긴다(S_ERP 테스트와 같음)
+    await waitFor(() => expect(resolveMenuResponse).toBeDefined());
 
     resolveMenuResponse?.(
       new Response(
@@ -132,18 +152,25 @@ describe('AppRouter not found fallback', () => {
             user: { userId: 'admin', roles: [] },
             menus: [
               {
-                menuId: 'dashboard',
-                name: '종합현황',
-                path: '/',
+                menuId: 'dashboard-module',
+                name: '대시보드',
+                path: '/dashboard',
                 icon: 'Dashboard',
-                children: [],
-                permissions: {
-                  read: true,
-                  create: true,
-                  update: true,
-                  delete: true,
-                  excel: true,
-                },
+                children: [
+                  {
+                    menuId: 'dashboard-home',
+                    name: '종합현황',
+                    path: '/dashboard/home',
+                    children: [],
+                    permissions: {
+                      read: true,
+                      create: true,
+                      update: true,
+                      delete: true,
+                      excel: true,
+                    },
+                  },
+                ],
               },
             ],
           },
@@ -165,7 +192,7 @@ describe('AppRouter not found fallback', () => {
         userId: 'admin',
         accessToken: 'token',
         refreshToken: 'refresh',
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
       }),
     );
 

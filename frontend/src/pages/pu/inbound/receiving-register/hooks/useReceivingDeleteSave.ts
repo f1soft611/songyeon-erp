@@ -8,6 +8,8 @@ type DeleteSaveList = {
   gridRef: RefObject<F1GridRef<Receiving> | null>;
   setDirty: (dirty: boolean) => void;
   reload: () => Promise<void>;
+  // 지울 수 없는 줄이면 이유(2026-11-05 입고등록: 반품이 걸린 입고 · 지우면 재고 마이너스). 없으면 막지 않는다
+  blockReason?: (selected: Receiving[], pending: Receiving[]) => string | null;
 };
 
 // 2026-10-26 입고내역 · 반품내역 [삭제] · [저장]: 줄을 골라 [삭제](오른쪽 클릭 [행 삭제])로 표에서 빼고 [저장] 때 지운다.
@@ -41,6 +43,11 @@ export function useReceivingDeleteSave(
     const grid = list.gridRef.current;
     if ((grid?.getSelectedRows() ?? []).length === 0) {
       setAlertText(kind === 'return' ? '지울 반품 줄을 먼저 골라주세요(줄을 누르면 골라집니다)' : '지울 입고 줄을 먼저 골라주세요(줄을 누르면 골라집니다)');
+      return;
+    }
+    const reason = list.blockReason?.(grid?.getSelectedRows() ?? [], grid?.getChanges().deletedRows ?? []);
+    if (reason) {
+      setAlertText(reason);
       return;
     }
     grid?.deleteSelectedRows();

@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 그룹웨어 1:1 쪽지(S_ERP 와 같음). 사람 칸 · #{userId} 는 송연 사번(varchar) 이다(2026-11-04) -->
+<mapper namespace="DirectMessageDAO">
+
+    <select id="selectUnreadCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM public.tb_direct_message
+        WHERE tenant_id = #{tenantId}
+          AND recipient_user_id = #{userId}
+          AND read_at IS NULL
+    </select>
+
+    <select id="selectActiveRecipient" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_user u
+            JOIN public.tb_login_account la
+              ON la.login_id = u.login_id
+             AND la.tenant_id = u.tenant_id
+            WHERE u.tenant_id = #{tenantId}
+              AND u.user_id = #{recipientUserId}
+              AND u.user_id &lt;&gt; #{userId}
+              AND u.use_at = 'Y'
+              AND la.use_at = 'Y'
+        )
+    </select>
+
+    <select id="selectThreadIdForMessage" parameterType="map" resultType="long">
+        SELECT m.thread_id
+        FROM public.tb_direct_message m
+        JOIN public.tb_direct_message_thread t
+          ON t.tenant_id = m.tenant_id
+         AND t.thread_id = m.thread_id
+        WHERE m.tenant_id = #{tenantId}
+          AND m.message_id = #{messageId}
+          AND #{userId} IN (t.participant_a_user_id, t.participant_b_user_id)
+          AND (
+              CASE WHEN t.participant_a_user_id = #{userId}
+                   THEN t.participant_a_hidden_at ELSE t.participant_b_hidden_at END IS NULL
+              OR m.created_at &gt; CASE WHEN t.participant_a_user_id = #{userId}
+                                       THEN t.participant_a_hidden_at ELSE t.participant_b_hidden_at END
+          )
+    </select>
+
+    <select id="insertThread" parameterType="map" resultType="long">
+        INSERT INTO public.tb_direct_message_thread (
+            tenant_id, participant_a_user_id, participant_b_user_id, subject
+        ) VALUES (
+            #{tenantId}, #{participantAUserId}, #{participantBUserId}, #{subject}
+        )
+        RETURNING thread_id
+    </select>
+
+    <select id="insertMessage" parameterType="map" resultType="long">
+        INSERT INTO public.tb_direct_message (
+            tenant_id, thread_id, sender_user_id, recipient_user_id, content
+        ) VALUES (
+            #{tenantId}, #{threadId}, #{senderUserId}, #{recipientUserId}, #{content}
+        )
+        RETURNING message_id
+    </select>
+
+    <update id="updateThreadUpdatedAt" parameterType="map">
+        UPDATE public.tb_direct_message_thread
+        SET updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND thread_id = #{threadId}
+    </update>
+
+    <select id="selectThreadForParticipant" parameterType="map"
+            resultType="egovframework.let.groupware.message.domain.model.DirectMessageVO">
+        SELECT t.thread_id AS threadId,
+               t.subject,
+               t.updated_at AS updatedAt,
+               CASE WHEN t.participant_a_user_id = #{userId}
+                    THEN t.participant_b_user_id ELSE t.participant_a_user_id END AS otherUserId,
+               other.user_nm AS otherUserName,
+               CASE WHEN t.participant_a_user_id = #{userId}
+                    THEN t.participant_a_hidden_at ELSE t.participant_b_hidden_at END AS hiddenAt
+        FROM public.tb_direct_message_thread t
+        JOIN public.tb_user other
+          ON other.tenant_id = t.tenant_id
+         AND other.user_id = CASE WHEN t.participant_a_user_id = #{userId}
+                                  THEN t.participant_b_user_id ELSE t.participant_a_user_id END
+        WHERE t.tenant_id = #{tenantId}
+          AND t.thread_id = #{threadId}
+          AND #{userId} IN (t.participant_a_user_id, t.participant_b_user_id)
+    </select>
+
+    <select id="selectThreads" parameterType="map"
+            resultType="egovframework.let.groupware.message.domain.model.DirectMessageVO">
+        SELECT t.thread_id AS threadId,
+               t.subject,
+               t.updated_at AS updatedAt,
+               other.user_id AS otherUserId,
+               other.user_nm AS otherUserName,
+               la.profile_image AS otherUserProfileImage,
+               latest.content AS latestContent,
+               latest.created_at AS latestMessageAt,
+               (
+                   SELECT COUNT(*)
+                   FROM public.tb_direct_message unread
+                   WHERE unread.tenant_id = t.tenant_id
+                     AND unread.thread_id = t.thread_id
+                     AND unread.recipient_user_id = #{userId}
+                     AND unread.read_at IS NULL
+               ) AS unreadCount
+        FROM public.tb_direct_message_thread t
+        JOIN public.tb_user other
+          ON other.tenant_id = t.tenant_id
+         AND other.user_id = CASE WHEN t.participant_a_user_id = #{userId}
+                                  THEN t.participant_b_user_id ELSE t.participant_a_user_id END
+        LEFT JOIN public.tb_login_account la
+          ON la.tenant_id = other.tenant_id
+         AND la.login_id = other.login_id
+        JOIN LATERAL (
+            SELECT m.content, m.created_at
+            FROM public.tb_direct_message m
+            WHERE m.tenant_id = t.tenant_id
+              AND m.thread_id = t.thread_id
+            ORDER BY m.created_at DESC, m.message_id DESC
+            LIMIT 1
+        ) latest ON TRUE
+        CROSS JOIN LATERAL (
+            SELECT CASE WHEN t.participant_a_user_id = #{userId}
+                        THEN t.participant_a_hidden_at ELSE t.participant_b_hidden_at END AS hidden_at
+        ) hidden
+        WHERE t.tenant_id = #{tenantId}
+          AND #{userId} IN (t.participant_a_user_id, t.participant_b_user_id)
+          AND (hidden.hidden_at IS NULL OR latest.created_at &gt; hidden.hidden_at)
+          AND (
+              #{folder} = 'ALL'
+              OR
+              (#{folder} = 'INBOX' AND EXISTS (
+                  SELECT 1 FROM public.tb_direct_message m
+                  WHERE m.tenant_id = t.tenant_id AND m.thread_id = t.thread_id
+                    AND m.recipient_user_id = #{userId}
+              ))
+              OR
+              (#{folder} = 'SENT' AND EXISTS (
+                  SELECT 1 FROM public.tb_direct_message m
+                  WHERE m.tenant_id = t.tenant_id AND m.thread_id = t.thread_id
+                    AND m.sender_user_id = #{userId}
+              ))
+          )
+          <if test="beforeUpdatedAt != null">
+              AND (t.updated_at, t.thread_id) &lt; (#{beforeUpdatedAt}, #{beforeThreadId})
+          </if>
+        ORDER BY t.updated_at DESC, t.thread_id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectThreadMessages" parameterType="map"
+            resultType="egovframework.let.groupware.message.domain.model.DirectMessageVO">
+        SELECT m.thread_id AS threadId,
+               m.message_id AS messageId,
+               t.subject,
+               m.sender_user_id AS senderUserId,
+               sender.user_nm AS senderUserName,
+               m.recipient_user_id AS recipientUserId,
+               recipient.user_nm AS recipientUserName,
+               m.content,
+               m.created_at AS createdAt,
+               m.read_at AS readAt
+        FROM public.tb_direct_message m
+        JOIN public.tb_direct_message_thread t
+          ON t.tenant_id = m.tenant_id AND t.thread_id = m.thread_id
+        JOIN public.tb_user sender
+          ON sender.tenant_id = m.tenant_id AND sender.user_id = m.sender_user_id
+        JOIN public.tb_user recipient
+          ON recipient.tenant_id = m.tenant_id AND recipient.user_id = m.recipient_user_id
+        WHERE m.tenant_id = #{tenantId}
+          AND m.thread_id = #{threadId}
+          AND EXISTS (
+              SELECT 1 FROM public.tb_direct_message_thread t
+              WHERE t.tenant_id = m.tenant_id AND t.thread_id = m.thread_id
+                AND #{userId} IN (t.participant_a_user_id, t.participant_b_user_id)
+          )
+          AND m.created_at &gt;= #{dayStart}
+          AND m.created_at &lt; #{dayEnd}
+          <if test="visibleAfter != null">
+              AND m.created_at &gt; #{visibleAfter}
+          </if>
+        ORDER BY m.created_at ASC, m.message_id ASC
+    </select>
+
+    <select id="selectLatestMessageDate" parameterType="map" resultType="java.time.LocalDate">
+        SELECT max(m.created_at)::date
+        FROM public.tb_direct_message m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.thread_id = #{threadId}
+          <if test="beforeDayStart != null">
+              AND m.created_at &lt; #{beforeDayStart}
+          </if>
+          <if test="visibleAfter != null">
+              AND m.created_at &gt; #{visibleAfter}
+          </if>
+    </select>
+
+    <select id="selectHasMessagesBefore" parameterType="map" resultType="boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM public.tb_direct_message m
+            WHERE m.tenant_id = #{tenantId}
+              AND m.thread_id = #{threadId}
+              AND m.created_at &lt; #{dayStart}
+              <if test="visibleAfter != null">
+                  AND m.created_at &gt; #{visibleAfter}
+              </if>
+        )
+    </select>
+
+    <update id="hideThreadForParticipant" parameterType="map">
+        UPDATE public.tb_direct_message_thread
+        SET participant_a_hidden_at = CASE WHEN participant_a_user_id = #{userId}
+                                           THEN CURRENT_TIMESTAMP ELSE participant_a_hidden_at END,
+            participant_b_hidden_at = CASE WHEN participant_b_user_id = #{userId}
+                                           THEN CURRENT_TIMESTAMP ELSE participant_b_hidden_at END
+        WHERE tenant_id = #{tenantId}
+          AND thread_id = #{threadId}
+          AND #{userId} IN (participant_a_user_id, participant_b_user_id)
+    </update>
+
+    <update id="markThreadMessagesRead" parameterType="map">
+        UPDATE public.tb_direct_message
+        SET read_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND thread_id = #{threadId}
+          AND recipient_user_id = #{userId}
+          AND read_at IS NULL
+    </update>
+
+    <update id="markThreadNotificationsRead" parameterType="map">
+        UPDATE public.tb_notification n
+        SET read_at = CURRENT_TIMESTAMP
+        FROM public.tb_direct_message m
+        WHERE n.tenant_id = #{tenantId}
+          AND n.recipient_user_id = #{userId}
+          AND n.event_type = 'DIRECT_MESSAGE_RECEIVED'
+          AND n.source_type = 'DIRECT_MESSAGE'
+          AND n.source_id = m.message_id
+          AND m.tenant_id = #{tenantId}
+          AND m.thread_id = #{threadId}
+          AND m.recipient_user_id = #{userId}
+          AND n.read_at IS NULL
+    </update>
+
+</mapper>

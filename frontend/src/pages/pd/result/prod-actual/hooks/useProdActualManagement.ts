@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { F1GridRef } from '../../../../../shared/components/f1-grid';
 import { downloadExcel, todayDash } from '../../../../../shared/utils/excelFile';
+import { clientProductDetailValues, readSearchSession, saveSearchSession } from '../../../../../shared/utils/searchSession';
 import { restoreBlockedGridDeletes } from '../../../../../shared/utils/gridDelete';
 import { filterOrderRows } from '../../../../sales/order/order-register/utils/salesOrder';
 import { fetchActualSchedule, saveActualQty } from '../services/prodActual.service';
@@ -18,7 +19,9 @@ const errorText = (error: unknown, fallback: string) =>
 export function useProdActualManagement() {
   const gridRef = useRef<F1GridRef<ProdActualRow>>(null);
   const requestIdRef = useRef(0);
-  const [date, setDate] = useState(() => todayDash());
+  // 2026-11-04 마지막으로 조회한 날짜 · 상세 조회 조건은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('pd-prod-actual', { date: todayDash(), filter: NO_FILTER }));
+  const [date, setDate] = useState(saved.date);
   const [rows, setRows] = useState<ProdActualRow[]>([]);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
@@ -34,7 +37,7 @@ export function useProdActualManagement() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   // 상세 조회(⌄)로 적용한 조건. 받은 생산건 중 맞는 줄만 표에 둔다(2026-10-30)
-  const detailFilterRef = useRef<ProdActualDetailFilter>(NO_FILTER);
+  const detailFilterRef = useRef<ProdActualDetailFilter>(saved.filter);
 
   const commit = (next: ProdActualRow[]) => {
     rowsRef.current = next;
@@ -49,6 +52,7 @@ export function useProdActualManagement() {
       setError('조회할 날짜를 먼저 선택해주세요');
       return;
     }
+    saveSearchSession('pd-prod-actual', { date: day, filter: detailFilterRef.current });
     const requestId = ++requestIdRef.current;
     setLoading(true);
     try {
@@ -64,8 +68,8 @@ export function useProdActualManagement() {
   }, []);
 
   useEffect(() => {
-    void loadRows(todayDash());
-  }, [loadRows]);
+    void loadRows(saved.date);
+  }, [loadRows, saved]);
 
   // 저장하지 않은 실생산량이 있으면 먼저 묻고 한다([조회] · 상세 조회)
   const hasChanges = () => {
@@ -189,6 +193,7 @@ export function useProdActualManagement() {
   };
 
   return {
+    savedDetailValues: clientProductDetailValues(saved.filter),
     gridRef,
     date,
     setDate,

@@ -35,20 +35,106 @@ import io.minio.StatObjectResponse;
 class EmbeddedImageStorageServiceImplTest {
 
     @Test
+    void preservesUnicodeAndReservedCharactersInThePreviewFileName() throws Exception {
+        EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
+                mock(MinioStorageService.class), mock(CommonFileDAO.class), "document-attachments", 1024L);
+
+        EmbeddedImageUploadVO uploaded = service.uploadTemporaryImage(9L, png("붙여넣기 +&.png"));
+        String encodedName = uploaded.getPreviewUrl().split("fileName=", 2)[1];
+
+        assertEquals(uploaded.getFileName(), java.net.URLDecoder.decode(encodedName, "UTF-8"));
+    }
+
+    @Test
+    void streamsTemporaryImageFromTheAuthenticatedTenantWithPrivateHeaders() throws Exception {
+        MinioStorageService storage = mock(MinioStorageService.class);
+        EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
+        String token = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
+        String key = "tenant/9/embedded-image-temp/" + token + "/pasted.png";
+        StatObjectResponse metadata = mock(StatObjectResponse.class);
+        when(metadata.contentType()).thenReturn("image/png");
+        when(metadata.size()).thenReturn(3L);
+        when(storage.stat("document-attachments", key)).thenReturn(metadata);
+        when(storage.download("document-attachments", key))
+                .thenReturn(new ByteArrayInputStream(new byte[] {1, 2, 3}));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        service.streamTemporaryImage(9L, token, "pasted.png", response);
+
+        org.junit.jupiter.api.Assertions.assertArrayEquals(new byte[] {1, 2, 3}, response.getContentAsByteArray());
+        assertEquals("image/png", response.getContentType());
+        assertEquals("3", response.getHeader("Content-Length"));
+        assertEquals("private, no-store", response.getHeader("Cache-Control"));
+        assertEquals("inline", response.getHeader("Content-Disposition"));
+        assertEquals("nosniff", response.getHeader("X-Content-Type-Options"));
+        verify(storage).download("document-attachments", key);
+    }
+
+    @Test
+    void rejectsInvalidTemporaryPreviewInputsBeforeAccessingMinio() throws Exception {
+        MinioStorageService storage = mock(MinioStorageService.class);
+        EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
+        String token = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
+        assertEquals(HttpStatus.UNAUTHORIZED, assertThrows(ResponseStatusException.class,
+                () -> service.streamTemporaryImage(null, token, "image.png", new MockHttpServletResponse())).getStatus());
+        assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                () -> service.streamTemporaryImage(9L, "bad-token", "image.png", new MockHttpServletResponse())).getStatus());
+        for (String fileName : new String[] {"", "../image.png", "a\\image.png", ".", "..", "image\n.png"}) {
+            assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                    () -> service.streamTemporaryImage(9L, token, fileName, new MockHttpServletResponse())).getStatus());
+        }
+        org.mockito.Mockito.verifyNoInteractions(storage);
+    }
+
+    @Test
+    void rejectsUnsupportedOrOversizedTemporaryPreviewMetadata() throws Exception {
+        MinioStorageService storage = mock(MinioStorageService.class);
+        EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
+        StatObjectResponse metadata = mock(StatObjectResponse.class);
+        when(storage.stat(any(), any())).thenReturn(metadata);
+        when(metadata.contentType()).thenReturn("image/svg+xml", "image/png", "image/png");
+        when(metadata.size()).thenReturn(3L, 1025L, 0L);
+        for (int attempt = 0; attempt < 3; attempt++) {
+            assertEquals(HttpStatus.BAD_REQUEST, assertThrows(ResponseStatusException.class,
+                    () -> service.streamTemporaryImage(9L, "bde1fdec-5d22-487a-a254-2b9547cd32b3",
+                            "image.png", new MockHttpServletResponse())).getStatus());
+        }
+        verify(storage, never()).download(any(), any());
+    }
+
+    @Test
+    void mapsMissingTemporaryObjectToNotFound() throws Exception {
+        MinioStorageService storage = mock(MinioStorageService.class);
+        EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
+        io.minio.errors.ErrorResponseException missing = mock(io.minio.errors.ErrorResponseException.class);
+        io.minio.messages.ErrorResponse error = mock(io.minio.messages.ErrorResponse.class);
+        when(error.code()).thenReturn("NoSuchKey");
+        when(missing.errorResponse()).thenReturn(error);
+        when(storage.stat(any(), any())).thenThrow(missing);
+
+        assertEquals(HttpStatus.NOT_FOUND, assertThrows(ResponseStatusException.class,
+                () -> service.streamTemporaryImage(9L, "bde1fdec-5d22-487a-a254-2b9547cd32b3",
+                        "image.png", new MockHttpServletResponse())).getStatus());
+    }
+
+    @Test
     void uploadsTemporaryImageToSharedTaggedPrefixAndReturnsPreviewUrl() throws Exception {
         MinioStorageService storage = mock(MinioStorageService.class);
         CommonFileDAO commonFileDAO = mock(CommonFileDAO.class);
-        when(storage.getPresignedObjectUrl(eq("document-attachments"), any(String.class), eq(600)))
-                .thenReturn("https://minio.example/preview?expires=600");
         EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                storage, commonFileDAO, "document-attachments", 1024L);
 
         EmbeddedImageUploadVO result = service.uploadTemporaryImage(9L, png("../pasted.png"));
 
         assertEquals("pasted.png", result.getFileName());
         assertEquals(8L, result.getFileSize());
         assertEquals("image/png", result.getMimeType());
-        assertEquals("https://minio.example/preview?expires=600", result.getPreviewUrl());
+        assertEquals("/api/v1/common/embedded-images/temp/" + result.getUploadToken()
+                + "?fileName=pasted.png", result.getPreviewUrl());
         assertEquals("tenant/9/embedded-image-temp/" + result.getUploadToken() + "/pasted.png",
                 result.getObjectKey());
         assertEquals("document-attachments", result.getBucketName());
@@ -56,13 +142,14 @@ class EmbeddedImageStorageServiceImplTest {
                 key.startsWith("tenant/9/embedded-image-temp/")
                         && key.endsWith("/pasted.png")), any(InputStream.class), eq(8L), eq("image/png"),
                 eq(Collections.singletonMap("s-erp-temp-owner", "embedded-image")));
+        verify(storage, never()).getPresignedObjectUrl(any(), any(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     @Test
     void rejectsInvalidImageSignatureAndOversizedFileBeforeMinioUpload() throws Exception {
         MinioStorageService storage = mock(MinioStorageService.class);
         EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                storage, mock(CommonFileDAO.class), "document-attachments", 7L, 600L);
+                storage, mock(CommonFileDAO.class), "document-attachments", 7L);
 
         ResponseStatusException invalidSignature = org.junit.jupiter.api.Assertions.assertThrows(
                 ResponseStatusException.class,
@@ -80,7 +167,7 @@ class EmbeddedImageStorageServiceImplTest {
     void rejectsJpegMimeWithOnlyTheThreeByteStartMarker() throws Exception {
         MinioStorageService storage = mock(MinioStorageService.class);
         EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                storage, mock(CommonFileDAO.class), "document-attachments", 1024L, 600L);
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
         MockMultipartFile truncated = new MockMultipartFile(
                 "file", "short.jpg", "image/jpeg", new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff});
 
@@ -93,7 +180,7 @@ class EmbeddedImageStorageServiceImplTest {
     void acceptsJpegGifAndWebpWhenMimeAndSignatureMatch() throws Exception {
         MinioStorageService storage = mock(MinioStorageService.class);
         EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                storage, mock(CommonFileDAO.class), "document-attachments", 1024L, 600L);
+                storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
 
         service.uploadTemporaryImage(9L, image("photo.jpg", "image/jpeg",
                 new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff, (byte) 0xe0}));
@@ -117,7 +204,7 @@ class EmbeddedImageStorageServiceImplTest {
         when(storage.stat(eq("document-attachments"), any(String.class))).thenReturn(metadata);
         when(commonFileDAO.insertCommonFile(any(Map.class))).thenReturn(113L);
         EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                storage, commonFileDAO, "document-attachments", 1024L);
         String uploadToken = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
 
         CommonFileVO result = service.promoteTemporaryImage(
@@ -149,7 +236,7 @@ class EmbeddedImageStorageServiceImplTest {
                 when(storage.stat(eq("document-attachments"), any(String.class))).thenReturn(metadata);
                 when(commonFileDAO.insertCommonFile(any(Map.class))).thenReturn(null);
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                        storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                        storage, commonFileDAO, "document-attachments", 1024L);
                 String uploadToken = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
                 String permanentKey = "tenant/9/embedded-images/notice/44/" + uploadToken + "/pasted.png";
                 String temporaryKey = "tenant/9/embedded-image-temp/" + uploadToken + "/pasted.png";
@@ -171,7 +258,7 @@ class EmbeddedImageStorageServiceImplTest {
                 when(storage.stat(eq("document-attachments"), any(String.class))).thenReturn(metadata);
                 when(commonFileDAO.insertCommonFile(any(Map.class))).thenReturn(113L);
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                                storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                                storage, commonFileDAO, "document-attachments", 1024L);
                 String uploadToken = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
                 String permanentKey = "tenant/9/embedded-images/notice/44/" + uploadToken + "/pasted.png";
                 TransactionSynchronizationManager.initSynchronization();
@@ -193,7 +280,7 @@ class EmbeddedImageStorageServiceImplTest {
             void deletesTemporaryImageByTenantTokenAndSafeFileName() throws Exception {
                 MinioStorageService storage = mock(MinioStorageService.class);
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                        storage, mock(CommonFileDAO.class), "document-attachments", 1024L, 600L);
+                        storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
                 String uploadToken = "bde1fdec-5d22-487a-a254-2b9547cd32b3";
 
                 service.deleteTemporaryImage(9L, uploadToken, "../pasted.png");
@@ -212,7 +299,7 @@ class EmbeddedImageStorageServiceImplTest {
                 when(commonFileDAO.selectCommonFileList(any(Map.class)))
                         .thenReturn(java.util.Arrays.asList(removed, retained, attachment));
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                        storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                        storage, commonFileDAO, "document-attachments", 1024L);
                 List<EmbeddedImageUploadVO> sessionUploads = new ArrayList<EmbeddedImageUploadVO>();
                 EmbeddedImageUploadVO upload = new EmbeddedImageUploadVO();
                 upload.setUploadToken("bde1fdec-5d22-487a-a254-2b9547cd32b3");
@@ -249,7 +336,7 @@ class EmbeddedImageStorageServiceImplTest {
             void rejectsTemporaryDeleteOutsideTenantOrWithInvalidToken() throws Exception {
                 MinioStorageService storage = mock(MinioStorageService.class);
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                        storage, mock(CommonFileDAO.class), "document-attachments", 1024L, 600L);
+                        storage, mock(CommonFileDAO.class), "document-attachments", 1024L);
 
                 assertThrows(org.springframework.web.server.ResponseStatusException.class,
                         () -> service.deleteTemporaryImage(null, "bad-token", "image.png"));
@@ -260,7 +347,7 @@ class EmbeddedImageStorageServiceImplTest {
         void rejectsInvalidSessionUploadMetadataBeforeSoftDeletingOwnedImages() throws Exception {
                 CommonFileDAO commonFileDAO = mock(CommonFileDAO.class);
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                                mock(MinioStorageService.class), commonFileDAO, "document-attachments", 1024L, 600L);
+                                mock(MinioStorageService.class), commonFileDAO, "document-attachments", 1024L);
                 EmbeddedImageUploadVO invalid = new EmbeddedImageUploadVO();
                 invalid.setUploadToken("not-a-uuid");
                 invalid.setFileName("image.png");
@@ -283,7 +370,7 @@ class EmbeddedImageStorageServiceImplTest {
                 when(storage.download("document-attachments", file.getObjectKey()))
                         .thenReturn(new ByteArrayInputStream(imageBytes));
                 EmbeddedImageStorageServiceImpl service = new EmbeddedImageStorageServiceImpl(
-                        storage, commonFileDAO, "document-attachments", 1024L, 600L);
+                        storage, commonFileDAO, "document-attachments", 1024L);
                 MockHttpServletResponse response = new MockHttpServletResponse();
 
                 service.streamOwnedImage(9L, "NOTICE", 44L, 113L, response);

@@ -5,6 +5,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import { PageHeader } from '../../../../shared/components/PageHeader';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
+import { SearchResultMessage } from '../../../../shared/components/SearchResultMessage';
 import type { PageSearchField, PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
@@ -114,7 +115,9 @@ export function OrderStatusManagementPage({
         onDetailSearch={management.applyDetail}
         detailLoading={management.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {/* 2026-11-04 S_ERP 현황 표준(SearchResultMessage): 조회가 끝나면 '조회 결과 총 N건입니다.' · 0건 안내, X 로 닫고 다시 조회하면 다시 보인다 */}
+      {orders && !management.loading && <SearchResultMessage resultCount={orders.length} />}
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Card sx={cardSx}>
           <Box aria-label="발주현황 요약" sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'center', mb: 0.5, fontSize: 14 }}>
             <span>건수 <b>{orders ? counts.count : '-'}</b></span>

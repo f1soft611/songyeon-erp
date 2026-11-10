@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewDraftVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewFileVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewHistoryVO;
+import egovframework.let.system.screenreview.domain.model.ScreenReviewSummaryVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewVO;
 
 /**
@@ -23,6 +24,11 @@ public class ScreenReviewDAO extends EgovAbstractMapper {
     /** 화면ID(menu_code)의 메뉴 번호 {tenantId, menuCode}. 없으면 null */
     public Long selectMenuId(Map<String, Object> params) throws Exception {
         return selectOne("ScreenReviewDAO.selectMenuId", params);
+    }
+
+    /** 화면검수 관리 목록: 사용 중인 화면(하위 메뉴 없는 메뉴)마다 현황 · 마지막 이력 {tenantId} */
+    public List<ScreenReviewSummaryVO> selectSummaryList(Map<String, Object> params) throws Exception {
+        return selectList("ScreenReviewDAO.selectSummaryList", params);
     }
 
     /** 검수 현황 {tenantId, menuId}. 없으면 null(미검수) */

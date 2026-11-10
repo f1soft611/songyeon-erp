@@ -4,8 +4,9 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
 import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
-import { Alert, Box, Button, CircularProgress, IconButton, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, IconButton, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
 import { useEffect, useRef } from 'react';
+import { AppLoadingSpinner } from '../AppLoadingSpinner';
 import type { CommonFileViewItem } from './commonViewTypes';
 
 type FileViewProps<T extends CommonFileViewItem> = {
@@ -128,7 +129,7 @@ export function FileView<T extends CommonFileViewItem>({
         <Stack role="status" aria-label="파일 페이지 불러오는 중" direction="row" sx={{
           py: 3, alignItems: 'center', justifyContent: 'center',
         }}>
-          <CircularProgress size={24} color="primary" aria-label="로딩 중" />
+          <AppLoadingSpinner size={24} color="primary" aria-label="로딩 중" />
         </Stack>
       ) : null}
       {!isLoading && !error && items.length === 0 &&

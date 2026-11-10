@@ -19,6 +19,7 @@ import egovframework.let.system.screenreview.domain.model.ScreenReviewDraftVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewFileVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewHistoryVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewSaveVO;
+import egovframework.let.system.screenreview.domain.model.ScreenReviewSummaryVO;
 import egovframework.let.system.screenreview.domain.model.ScreenReviewVO;
 import egovframework.let.system.screenreview.domain.repository.ScreenReviewDAO;
 import egovframework.let.system.screenreview.service.ScreenReviewService;
@@ -71,6 +72,26 @@ public class ScreenReviewServiceImpl extends EgovAbstractServiceImpl implements 
 
     LocalDate today() {
         return LocalDate.now(SEOUL);
+    }
+
+    // 표시 상태: 수정요청 · 검수진행중은 현황 그대로. 검수완료로 한 바퀴가 끝나면 현황은 미검수로 돌아가므로(2026-11-03)
+    // 마지막 이력이 검수완료면 검수완료로 본다. 그 밖(이력 없음 · 현황 없음)은 미진행
+    static String displayStatus(String reviewStatus, String lastToStatus) {
+        if (CHANGE_REQUESTED.equals(reviewStatus) || IN_PROGRESS.equals(reviewStatus)) {
+            return reviewStatus;
+        }
+        return COMPLETED.equals(lastToStatus) ? COMPLETED : NOT_STARTED;
+    }
+
+    @Override
+    public List<ScreenReviewSummaryVO> getSummaryList(Long tenantId) throws Exception {
+        Map<String, Object> params = new HashMap<>();
+        params.put("tenantId", tenantId);
+        List<ScreenReviewSummaryVO> list = screenReviewDAO.selectSummaryList(params);
+        for (ScreenReviewSummaryVO row : list) {
+            row.setDisplayStatus(displayStatus(row.getReviewStatus(), row.getLastToStatus()));
+        }
+        return list;
     }
 
     @Override

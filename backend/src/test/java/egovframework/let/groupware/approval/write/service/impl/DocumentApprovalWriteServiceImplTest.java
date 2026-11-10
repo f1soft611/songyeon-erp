@@ -21,12 +21,14 @@ import java.util.List;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import egovframework.com.cmm.LoginVO;
 import egovframework.com.common.domain.model.CommonFileVO;
@@ -64,6 +66,7 @@ import egovframework.let.groupware.approval.common.service.impl.DocumentApproval
 import egovframework.let.groupware.approval.common.service.impl.DocumentApprovalDraftSupportServiceImpl;
 import egovframework.let.groupware.approval.write.service.impl.DocumentApprovalWriteServiceImpl;
 import egovframework.let.groupware.approval.shared.service.impl.DocumentApprovalInteractionServiceImpl;
+import egovframework.let.groupware.notification.service.NotificationService;
 import egovframework.let.common.idsequence.service.IdSequenceService;
 
 class DocumentApprovalWriteServiceImplTest {
@@ -358,6 +361,66 @@ class DocumentApprovalWriteServiceImplTest {
             "101".equals(params.get("participantUserId"))));
         verify(approvalDAO).selectApprovalNotices(argThat(params ->
             "101".equals(params.get("participantUserId"))));
+    }
+
+    @Test
+    void summaryKeepsReferenceConfirmationsSeparateFromApprovalNotices() throws Exception {
+        DocumentApprovalSummaryVO aggregate = new DocumentApprovalSummaryVO();
+        aggregate.setActionRequiredCount(3L);
+        DocumentApprovalListItemVO notice = listItem(31L, "PENDING", "Approval notice");
+        List<DocumentApprovalListItemVO> notices = Collections.singletonList(notice);
+        DocumentApprovalListItemVO completedReference = listItem(41L, "COMPLETED", "Completed reference");
+        DocumentApprovalListItemVO rejectedReference = listItem(42L, "REJECTED", "Rejected reference");
+        List<DocumentApprovalListItemVO> referenceItems = Arrays.asList(completedReference, rejectedReference);
+        AtomicReference<Map<String, Object>> referenceActorParams = new AtomicReference<>();
+        DocumentApprovalDAO summaryDao = mock(DocumentApprovalDAO.class, invocation -> {
+            String methodName = invocation.getMethod().getName();
+            if ("selectDocumentApprovalSummary".equals(methodName)) {
+                return aggregate;
+            }
+            if ("selectApprovalNotices".equals(methodName)) {
+                return notices;
+            }
+            if ("selectReferenceConfirmationRequiredCount".equals(methodName)) {
+                referenceActorParams.set(invocation.getArgument(0));
+                return 2L;
+            }
+            if ("selectReferenceConfirmationItems".equals(methodName)) {
+                referenceActorParams.set(invocation.getArgument(0));
+                return referenceItems;
+            }
+            if ("selectFinalConfirmationRequiredCount".equals(methodName)) {
+                return 1L;
+            }
+            if ("selectFinalConfirmationItems".equals(methodName)) {
+                return Collections.singletonList(listItem(51L, "COMPLETED", "Final confirmation"));
+            }
+            return org.mockito.Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+        DocumentApprovalAccessServiceImpl access = new DocumentApprovalAccessServiceImpl(summaryDao);
+        DocumentApprovalWriteServiceImpl summaryService = new DocumentApprovalWriteServiceImpl(
+                summaryDao, fileService, imageStorageService, access,
+                mock(DocumentApprovalDraftSupportService.class),
+                mock(DocumentApprovalCommentSupportService.class), idSequenceService);
+
+        DocumentApprovalSummaryVO result = summaryService.getSummary(author);
+        JsonNode json = new ObjectMapper().valueToTree(result);
+
+        assertThat(json.path("actionRequiredCount").asLong()).isEqualTo(3L);
+        assertThat(json.path("notices").size()).isEqualTo(1);
+        assertThat(json.path("notices").get(0).path("electronicApprovalId").asLong()).isEqualTo(31L);
+        assertThat(json.path("referenceConfirmationRequiredCount").asLong()).isEqualTo(2L);
+        assertThat(json.path("referenceConfirmationItems").size()).isEqualTo(2);
+        assertThat(json.path("referenceConfirmationItems").get(0).path("documentStatus").asText())
+                .isEqualTo("COMPLETED");
+        assertThat(json.path("referenceConfirmationItems").get(1).path("documentStatus").asText())
+                .isEqualTo("REJECTED");
+        assertThat(json.path("finalConfirmationRequiredCount").asLong()).isEqualTo(1L);
+        assertThat(json.path("finalConfirmationItems").get(0).path("electronicApprovalId").asLong())
+                .isEqualTo(51L);
+        assertThat(referenceActorParams.get())
+                .containsEntry("tenantId", 4L)
+                .containsEntry("participantUserId", "101");
     }
 
     @Test
@@ -688,6 +751,14 @@ class DocumentApprovalWriteServiceImplTest {
         return new DocumentApprovalCommentSupportServiceImpl(commentDAO, fileService);
     }
 
+    private DocumentApprovalListItemVO listItem(Long id, String status, String title) {
+        DocumentApprovalListItemVO item = new DocumentApprovalListItemVO();
+        item.setElectronicApprovalId(id);
+        item.setDocumentStatus(status);
+        item.setTitle(title);
+        return item;
+    }
+
     private DocumentApprovalWriteServiceImpl writeService() { return writeService(imageStorageService); }
 
     private DocumentApprovalWriteServiceImpl writeService(EmbeddedImageStorageService storage) {
@@ -701,7 +772,7 @@ class DocumentApprovalWriteServiceImplTest {
     private DocumentApprovalInteractionServiceImpl sharedService(EmbeddedImageStorageService storage) {
         DocumentApprovalAccessServiceImpl access = accessService();
         return new DocumentApprovalInteractionServiceImpl(approvalDAO, commentDAO, fileService, storage, access,
-                draftSupportService(storage, access), commentSupportService());
+                draftSupportService(storage, access), commentSupportService(), mock(NotificationService.class));
     }
 
     private DocumentApprovalDetailVO detail(int viewCount) {

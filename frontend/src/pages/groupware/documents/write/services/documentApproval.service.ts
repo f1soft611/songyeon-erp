@@ -17,6 +17,7 @@ import type {
   DocumentApprovalFeedRecord,
   DocumentApprovalRecord,
   DocumentApprovalPinState,
+  DocumentApprovalReferenceAddResult,
   DocumentApprovalPage,
   DocumentApprovalPageRequest,
   DocumentApprovalScope,
@@ -31,6 +32,8 @@ import type {
   DocumentFilePage,
   DocumentFileQuery,
 } from '../types/documentWrite.types';
+export { getExternalLinkPreview } from '../../../../../shared/services/contentLinkPreview.service';
+export type { ExternalLinkPreview } from '../../../../../shared/services/contentLinkPreview.service';
 
 const APPROVAL_API = '/api/v1/groupware/approvals';
 
@@ -462,7 +465,7 @@ export async function unpinDocumentApproval(
 }
 
 export async function getDocumentApprovalSummary(): Promise<DocumentApprovalSummary> {
-  const response = await apiGet<{ item?: DocumentApprovalSummary }>(
+  const response = await apiGet<{ item?: unknown }>(
     `${APPROVAL_API}/summary`,
   );
   const item = response.item;
@@ -475,12 +478,124 @@ export async function getDocumentApprovalSummary(): Promise<DocumentApprovalSumm
       item.completedCount,
       item.revisionRequestedCount,
       item.rejectedCount,
-    ].every((count) => typeof count === 'number' && Number.isFinite(count)) ||
-    !Array.isArray(item.notices)
+      item.referenceConfirmationRequiredCount,
+      item.finalConfirmationRequiredCount,
+    ].every(
+      (count) =>
+        typeof count === 'number' &&
+        Number.isSafeInteger(count) &&
+        count >= 0,
+    ) ||
+    !Array.isArray(item.notices) ||
+    !Array.isArray(item.referenceConfirmationItems) ||
+    !item.referenceConfirmationItems.every(isDocumentApprovalRecord) ||
+    !Array.isArray(item.finalConfirmationItems) ||
+    !item.finalConfirmationItems.every(isDocumentApprovalRecord)
   ) {
     throw new Error('전자결재 요약 응답을 확인할 수 없습니다.');
   }
-  return item;
+  return item as DocumentApprovalSummary;
+}
+
+export async function confirmDocumentReference(
+  electronicApprovalId: number,
+): Promise<{
+  electronicApprovalId: number;
+  actionStatus: 'CONFIRMED';
+  actionAt: string;
+}> {
+  requireApprovalId(electronicApprovalId, '문서 ID');
+  const response = await apiPost<{ item?: unknown }>(
+    `${APPROVAL_API}/${electronicApprovalId}/reference-confirmation`,
+    {},
+  );
+  const item = response.item;
+  if (
+    !isObject(item) ||
+    item.electronicApprovalId !== electronicApprovalId ||
+    item.actionStatus !== 'CONFIRMED' ||
+    typeof item.actionAt !== 'string' ||
+    !item.actionAt.trim() ||
+    !Number.isFinite(Date.parse(item.actionAt))
+  ) {
+    throw new Error('참조 확인 응답을 확인할 수 없습니다.');
+  }
+  return {
+    electronicApprovalId,
+    actionStatus: 'CONFIRMED',
+    actionAt: item.actionAt,
+  };
+}
+
+export async function confirmDocumentFinalConfirmation(
+  electronicApprovalId: number,
+): Promise<{
+  electronicApprovalId: number;
+  actionStatus: 'CONFIRMED';
+  actionAt: string;
+}> {
+  requireApprovalId(electronicApprovalId, '문서 ID');
+  const response = await apiPost<{ item?: unknown }>(
+    `${APPROVAL_API}/${electronicApprovalId}/final-confirmation`,
+    {},
+  );
+  const item = response.item;
+  if (
+    !isObject(item) ||
+    item.electronicApprovalId !== electronicApprovalId ||
+    item.actionStatus !== 'CONFIRMED' ||
+    typeof item.actionAt !== 'string' ||
+    !item.actionAt.trim() ||
+    !Number.isFinite(Date.parse(item.actionAt))
+  ) {
+    throw new Error('최종확인 응답을 확인할 수 없습니다.');
+  }
+  return {
+    electronicApprovalId,
+    actionStatus: 'CONFIRMED',
+    actionAt: item.actionAt,
+  };
+}
+
+export async function addDocumentReferences(
+  electronicApprovalId: number,
+  participantUserIds: string[],
+): Promise<DocumentApprovalReferenceAddResult> {
+  requireApprovalId(electronicApprovalId, '문서 ID');
+  if (
+    !Array.isArray(participantUserIds) ||
+    participantUserIds.length === 0 ||
+    !participantUserIds.every(
+      (userId) => typeof userId === 'string' && userId.trim().length > 0,
+    )
+  ) {
+    throw new Error('추가할 참조자를 선택해 주세요.');
+  }
+  const normalizedUserIds = participantUserIds.map((userId) => userId.trim());
+  if (new Set(normalizedUserIds).size !== normalizedUserIds.length) {
+    throw new Error('중복된 참조자가 포함되어 있습니다.');
+  }
+
+  const response = await apiPost<{ item?: unknown }>(
+    `${APPROVAL_API}/${electronicApprovalId}/references`,
+    { participantUserIds: normalizedUserIds },
+  );
+  const item = response.item;
+  if (!isObject(item)) {
+    throw new Error('참조자 추가 응답을 확인할 수 없습니다.');
+  }
+  const responseId = item.electronicApprovalId;
+  const addedCount = item.addedCount;
+  if (
+    responseId !== electronicApprovalId ||
+    typeof addedCount !== 'number' ||
+    !Number.isSafeInteger(addedCount) ||
+    addedCount < 0 ||
+    addedCount > normalizedUserIds.length
+  ) {
+    throw new Error('참조자 추가 응답을 확인할 수 없습니다.');
+  }
+  return { electronicApprovalId, addedCount };
 }
 
 export async function getDocumentApprovalDetail(
@@ -564,16 +679,40 @@ export async function listApprovalComments(
   };
 }
 
+// 2026-11-04 S_ERP 결재 댓글 멘션. 송연은 사람을 사번 문자열로 가리킨다(앞 0 유지)
+export async function listApprovalCommentMentionUserIds(
+  electronicApprovalId: number,
+): Promise<string[]> {
+  requireApprovalId(electronicApprovalId, '문서 ID');
+  const response = await apiGet<{ resultList?: unknown[] }>(
+    `${APPROVAL_API}/${electronicApprovalId}/comments/mention-users`,
+  );
+  return (response.resultList ?? []).flatMap((value) => {
+    const userId = typeof value === 'string' ? value.trim() : '';
+    return userId ? [userId] : [];
+  });
+}
+
 export async function createApprovalComment(
   electronicApprovalId: number,
   content: string,
   parentCommentId?: number,
+  mentionedUserIds: string[] = [],
+  mentionAll = false,
 ): Promise<DocumentApprovalComment> {
   requireApprovalId(electronicApprovalId, '문서 ID');
   if (parentCommentId !== undefined) requireApprovalId(parentCommentId, '상위 댓글 ID');
+  if (mentionedUserIds.some((userId) => typeof userId !== 'string' || !userId.trim())) {
+    throw new Error('멘션 사용자 정보가 올바르지 않습니다.');
+  }
   const response = await apiPost<{ item?: DocumentApprovalComment }>(
     `${APPROVAL_API}/${electronicApprovalId}/comments`,
-    { content, ...(parentCommentId === undefined ? {} : { parentCommentId }) },
+    {
+      content,
+      ...(parentCommentId === undefined ? {} : { parentCommentId }),
+      mentionedUserIds: mentionedUserIds.map((userId) => userId.trim()),
+      mentionAll,
+    },
   );
   if (!isApprovalComment(response.item, electronicApprovalId)) {
     throw new Error('전자결재 댓글 등록 결과를 확인할 수 없습니다.');

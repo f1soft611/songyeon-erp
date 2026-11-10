@@ -1,5 +1,4 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import dayjs from 'dayjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const apiMocks = vi.hoisted(() => ({
@@ -160,28 +159,40 @@ describe('archive hooks', () => {
     vi.clearAllMocks();
   });
 
-  it('loads all files with the recent-year default filters', async () => {
+  it('waits until the caller supplies date defaults before loading files', async () => {
     apiMocks.apiGet.mockResolvedValue({
       resultList: [{ boardFileId: 7, fileName: 'guide.pdf' }],
       resultCnt: 1,
     });
-    const { result } = renderHook(() => useArchiveList());
-    const today = dayjs().format('YYYY-MM-DD');
-    const uploadedFrom = dayjs().subtract(1, 'year').format('YYYY-MM-DD');
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useArchiveList(enabled),
+      { initialProps: { enabled: false } },
+    );
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(apiMocks.apiGet).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.setFilters({
+        ...result.current.filters,
+        uploadedFrom: '2023-02-28',
+        uploadedTo: '2024-02-29',
+      });
+    });
+    rerender({ enabled: true });
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(1));
     expect(result.current.filters).toEqual({
       keyword: '',
       folderCode: '',
-      uploadedFrom,
-      uploadedTo: today,
+      uploadedFrom: '2023-02-28',
+      uploadedTo: '2024-02-29',
       fileType: 'ALL',
     });
     expect(result.current.rows).toEqual([
       { boardFileId: 7, fileName: 'guide.pdf' },
     ]);
     expect(apiMocks.apiGet).toHaveBeenCalledWith(
-      `/api/v1/groupware/boards/archive/files?uploadedFrom=${uploadedFrom}&uploadedTo=${today}`,
+      '/api/v1/groupware/boards/archive/files?uploadedFrom=2023-02-28&uploadedTo=2024-02-29',
       expect.any(AbortSignal),
     );
   });
@@ -190,7 +201,7 @@ describe('archive hooks', () => {
     apiMocks.apiGet
       .mockRejectedValueOnce(new Error('network unavailable'))
       .mockResolvedValueOnce({ resultList: [], resultCnt: 0 });
-    const { result } = renderHook(() => useArchiveList());
+    const { result } = renderHook(() => useArchiveList(true));
 
     await waitFor(() =>
       expect(result.current.error?.message).toBe('network unavailable'),

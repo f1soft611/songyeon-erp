@@ -10,16 +10,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mockingDetails;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.invocation.Invocation;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,12 +65,14 @@ import egovframework.let.groupware.approval.common.service.impl.DocumentApproval
 import egovframework.let.groupware.approval.write.service.impl.DocumentApprovalWriteServiceImpl;
 import egovframework.let.groupware.approval.shared.service.impl.DocumentApprovalInteractionServiceImpl;
 import egovframework.let.common.idsequence.service.IdSequenceService;
+import egovframework.let.groupware.notification.service.NotificationService;
 
 class DocumentApprovalInteractionServiceImplTest {
 
     private final CommonCommentDAO commentDAO = mock(CommonCommentDAO.class);
     private final CommonFileService fileService = mock(CommonFileService.class);
     private final DocumentApprovalDAO approvalDAO = mock(DocumentApprovalDAO.class);
+    private final NotificationService notificationService = mock(NotificationService.class);
     private final EmbeddedImageStorageService imageStorageService = mock(EmbeddedImageStorageService.class);
     private final LoginVO author = author();
     private final RichTextDocumentSanitizer documentSanitizer = new RichTextDocumentSanitizer();
@@ -662,6 +667,78 @@ class DocumentApprovalInteractionServiceImplTest {
     }
 
     @Test
+    void createsOneMentionNotificationForEachUniqueAuthorizedRecipient() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectApprovalCommentRecipientUserIds(anyMap()))
+                .thenReturn(Arrays.asList("101", "202", "303"));
+        when(commentDAO.insertCommonComment(anyMap())).thenReturn(55L);
+        when(commentDAO.selectApprovalUserCommentById(anyMap()))
+                .thenReturn(approvalComment(55L, "login-author", "USER"));
+
+        sharedService(notificationService).createApprovalComment(
+                author, 77L, "문서 댓글", null, Arrays.asList("202", "202", "101"), false);
+
+        verify(notificationService).createEvent(4L, "202", "APPROVAL_COMMENT_MENTION",
+                "APPROVAL_COMMENT", 55L, "전자결재 댓글에 언급되었습니다.", "문서 댓글");
+        verify(notificationService, never()).createEvent(4L, "101", "APPROVAL_COMMENT_MENTION",
+                "APPROVAL_COMMENT", 55L, "전자결재 댓글에 언급되었습니다.", "문서 댓글");
+    }
+
+    @Test
+    void mentionAllExpandsToAuthorizedDocumentParticipantsAndExcludesAuthor() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectApprovalCommentRecipientUserIds(anyMap()))
+                .thenReturn(Arrays.asList("101", "202", "303"));
+        when(commentDAO.insertCommonComment(anyMap())).thenReturn(55L);
+        when(commentDAO.selectApprovalUserCommentById(anyMap()))
+                .thenReturn(approvalComment(55L, "login-author", "USER"));
+
+        sharedService(notificationService).createApprovalComment(
+                author, 77L, "모두 확인해 주세요.", null, Collections.singletonList("202"), true);
+
+        verify(notificationService).createEvent(4L, "202", "APPROVAL_COMMENT_MENTION",
+                "APPROVAL_COMMENT", 55L, "전자결재 댓글에 언급되었습니다.", "모두 확인해 주세요.");
+        verify(notificationService).createEvent(4L, "303", "APPROVAL_COMMENT_MENTION",
+                "APPROVAL_COMMENT", 55L, "전자결재 댓글에 언급되었습니다.", "모두 확인해 주세요.");
+        verify(notificationService, never()).createEvent(4L, "101", "APPROVAL_COMMENT_MENTION",
+                "APPROVAL_COMMENT", 55L, "전자결재 댓글에 언급되었습니다.", "모두 확인해 주세요.");
+    }
+
+    @Test
+    void listsMentionableUsersFromDocumentAudienceExcludingAuthor() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectApprovalCommentRecipientUserIds(anyMap()))
+                .thenReturn(Arrays.asList("101", "202", "303"));
+
+        assertThat(sharedService(notificationService).listApprovalCommentMentionUserIds(author, 77L))
+                .containsExactly("202", "303");
+    }
+
+    @Test
+    void rejectsMentionableUserLookupWithoutDocumentAccess() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(false);
+
+        assertThatThrownBy(() -> sharedService(notificationService).listApprovalCommentMentionUserIds(author, 77L))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.NOT_FOUND));
+        verify(approvalDAO, never()).selectApprovalCommentRecipientUserIds(anyMap());
+    }
+
+    @Test
+    void rejectsMentionRecipientWithoutDocumentAccessBeforeCreatingComment() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectApprovalCommentRecipientUserIds(anyMap())).thenReturn(Collections.singletonList("202"));
+
+        assertThatThrownBy(() -> sharedService(notificationService).createApprovalComment(
+                author, 77L, "문서 댓글", null, Collections.singletonList("999"), false))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(commentDAO, never()).insertCommonComment(anyMap());
+        verifyNoInteractions(notificationService);
+    }
+
+    @Test
     void uploadApprovalCommentAttachmentUsesCommentOwnerAndAuthenticatedUploader() throws Exception {
         when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
         when(commentDAO.selectApprovalUserCommentById(anyMap()))
@@ -777,18 +854,72 @@ class DocumentApprovalInteractionServiceImplTest {
         assertThat(submitted.getEabusNo()).isEqualTo("001");
         assertThat(submitted.getSubmittedAt()).isEqualTo(submittedAt);
         ArgumentCaptor<Map<String, Object>> lineParams = mapCaptor();
-        verify(approvalDAO, org.mockito.Mockito.times(2)).insertDocumentApprovalLine(lineParams.capture());
+        verify(approvalDAO, org.mockito.Mockito.times(3)).insertDocumentApprovalLine(lineParams.capture());
         assertThat(lineParams.getAllValues()).extracting(params -> params.get("actionStatus"))
-            .containsExactly("APPROVED", "PENDING");
+            .containsExactly("APPROVED", "PENDING", "WAITING");
         assertThat(lineParams.getAllValues().get(0).get("actionAt")).isNotNull();
         assertThat(lineParams.getAllValues().get(0).get("pendingAt")).isNull();
         assertThat(lineParams.getAllValues().get(1).get("pendingAt")).isNotNull();
+        assertThat(lineParams.getAllValues().get(2))
+            .containsEntry("participantType", "FINAL_CONFIRMATION")
+            .containsEntry("participantUserId", "101")
+            .containsEntry("participantName", "작성자")
+            .containsEntry("participantDepartmentName", "기획팀")
+            .containsEntry("stageOrder", 3)
+            .containsEntry("participantOrder", 1)
+            .containsEntry("pendingAt", null)
+            .containsEntry("actionAt", null)
+            .containsEntry("actionComment", null);
 
         verify(approvalDAO).updateDocumentApprovalStatus(argThat(params ->
             "DRAFT".equals(params.get("expectedDocumentStatus"))
                 && "PENDING".equals(params.get("nextDocumentStatus"))));
         verify(commentDAO).insertSystemComment(argThat(params ->
             "SUBMITTED".equals(params.get("eventType")) && Long.valueOf(77L).equals(params.get("ownerId"))));
+    }
+
+    @Test
+    void submitAddsFinalConfirmationAfterReferenceStage() throws Exception {
+        DocumentApprovalDraftSaveRequestVO request = request();
+        request.setApprovalLines(Arrays.asList(
+            line(1, 1, "APPROVAL", "101"),
+            line(2, 1, "AGREEMENT", "202"),
+            line(3, 1, "REFERENCE", "303")));
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(workflowDocument("DRAFT"));
+        when(approvalDAO.selectActiveParticipants(anyMap())).thenReturn(Arrays.asList(
+            participant("101", "작성자", "기획팀"),
+            participant("202", "결재자", "재무팀"),
+            participant("303", "참조자", "기획팀")));
+        when(approvalDAO.updateDocumentApprovalMain(anyMap())).thenReturn(1);
+        when(approvalDAO.deleteDocumentApprovalLines(anyMap())).thenReturn(3);
+        when(approvalDAO.insertDocumentApprovalLine(anyMap())).thenReturn(1);
+        when(approvalDAO.updateDocumentApprovalStatus(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(91L);
+        when(approvalDAO.selectDraftDocumentStatus(anyMap())).thenReturn(draftResponse("PENDING"));
+
+        sharedService().submit(author, 77L, request);
+
+        verify(approvalDAO).insertDocumentApprovalLine(argThat(params ->
+            "FINAL_CONFIRMATION".equals(params.get("participantType"))
+                && Integer.valueOf(4).equals(params.get("stageOrder"))
+                && Integer.valueOf(1).equals(params.get("participantOrder"))
+                && "101".equals(params.get("participantUserId"))
+                && "WAITING".equals(params.get("actionStatus"))));
+    }
+
+    @Test
+    void submitRejectsClientSuppliedFinalConfirmationLine() throws Exception {
+        DocumentApprovalDraftSaveRequestVO request = request();
+        request.setApprovalLines(Arrays.asList(
+            line(1, 1, "APPROVAL", "101"),
+            line(2, 1, "FINAL_CONFIRMATION", "101")));
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(workflowDocument("DRAFT"));
+
+        assertThatThrownBy(() -> sharedService().submit(author, 77L, request))
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(approvalDAO, never()).updateDocumentApprovalMain(anyMap());
+        verify(approvalDAO, never()).insertDocumentApprovalLine(anyMap());
     }
 
     @Test
@@ -820,6 +951,88 @@ class DocumentApprovalInteractionServiceImplTest {
     }
 
     @Test
+    void finalApprovalActivatesDrafterConfirmationWithoutWritingCompletedEvent() throws Exception {
+        LoginVO approver = participantUser("login-202", "202", "결재자");
+        DocumentApprovalActionRequestVO request = new DocumentApprovalActionRequestVO();
+        request.setAction("APPROVED");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("IN_PROGRESS"));
+        when(approvalDAO.selectCurrentPendingApprovalLine(anyMap()))
+            .thenReturn(pendingLine(22L, 2, "APPROVAL", "202"));
+        when(approvalDAO.updateApprovalLineAction(anyMap())).thenReturn(1);
+        when(approvalDAO.selectPendingApprovalCountForStage(anyMap())).thenReturn(0L);
+        when(approvalDAO.selectNextWaitingApprovalStage(anyMap())).thenReturn(null);
+        when(approvalDAO.activateFinalConfirmationLine(anyMap())).thenReturn(1);
+        when(approvalDAO.updateDocumentApprovalStatus(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(92L);
+
+        DocumentApprovalDraftVO result = sharedService().processAction(approver, 77L, request);
+
+        assertThat(result.getDocumentStatus()).isEqualTo("COMPLETED");
+        assertThat(org.mockito.Mockito.mockingDetails(approvalDAO).getInvocations())
+            .anyMatch(invocation -> invocation.getMethod().getName().equals("activateFinalConfirmationLine")
+                && Long.valueOf(77L).equals(((Map<?, ?>) invocation.getArgument(0)).get("electronicApprovalId")));
+        verify(commentDAO).insertSystemComment(argThat(params -> "APPROVED".equals(params.get("eventType"))));
+        verify(commentDAO, never()).insertSystemComment(argThat(params -> "COMPLETED".equals(params.get("eventType"))));
+    }
+
+    @Test
+    void finalApprovalCreatesConfirmationForLegacyInFlightDocumentWithoutOne() throws Exception {
+        DocumentApprovalDAO legacyDao = mock(DocumentApprovalDAO.class, invocation -> {
+            if ("insertFinalConfirmationLineForExistingDocument".equals(invocation.getMethod().getName())) {
+                return 1;
+            }
+            return org.mockito.Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+        LoginVO approver = participantUser("login-202", "202", "결재자");
+        DocumentApprovalActionRequestVO request = new DocumentApprovalActionRequestVO();
+        request.setAction("APPROVED");
+        when(legacyDao.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("IN_PROGRESS"));
+        when(legacyDao.selectCurrentPendingApprovalLine(anyMap()))
+            .thenReturn(pendingLine(22L, 2, "APPROVAL", "202"));
+        when(legacyDao.updateApprovalLineAction(anyMap())).thenReturn(1);
+        when(legacyDao.selectPendingApprovalCountForStage(anyMap())).thenReturn(0L);
+        when(legacyDao.selectNextWaitingApprovalStage(anyMap())).thenReturn(null);
+        when(legacyDao.activateFinalConfirmationLine(anyMap())).thenReturn(0);
+        when(legacyDao.updateDocumentApprovalStatus(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(92L);
+
+        DocumentApprovalDraftVO result = sharedService(legacyDao).processAction(approver, 77L, request);
+
+        assertThat(result.getDocumentStatus()).isEqualTo("COMPLETED");
+        assertThat(org.mockito.Mockito.mockingDetails(legacyDao).getInvocations())
+            .anyMatch(invocation -> invocation.getMethod().getName()
+                .equals("insertFinalConfirmationLineForExistingDocument"));
+    }
+
+    @Test
+    void rejectionActivatesDrafterConfirmationAndPreservesRejectedDocumentStatus() throws Exception {
+        LoginVO approver = participantUser("login-202", "202", "결재자");
+        DocumentApprovalActionRequestVO request = new DocumentApprovalActionRequestVO();
+        request.setAction("REJECTED");
+        request.setActionComment("반려 사유");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("IN_PROGRESS"));
+        when(approvalDAO.selectCurrentPendingApprovalLine(anyMap()))
+            .thenReturn(pendingLine(22L, 2, "APPROVAL", "202"));
+        when(approvalDAO.updateApprovalLineAction(anyMap())).thenReturn(1);
+        when(approvalDAO.updateDocumentApprovalStatus(anyMap())).thenReturn(1);
+        when(approvalDAO.activateFinalConfirmationLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(92L);
+
+        DocumentApprovalDraftVO result = sharedService().processAction(approver, 77L, request);
+
+        assertThat(result.getDocumentStatus()).isEqualTo("REJECTED");
+        verify(approvalDAO).activateFinalConfirmationLine(argThat(params ->
+            Long.valueOf(77L).equals(params.get("electronicApprovalId"))
+                && Long.valueOf(4L).equals(params.get("tenantId"))));
+        verify(approvalDAO).updateDocumentApprovalStatus(argThat(params ->
+            "REJECTED".equals(params.get("nextDocumentStatus"))));
+        verify(commentDAO).insertSystemComment(argThat(params -> "REJECTED".equals(params.get("eventType"))));
+    }
+
+    @Test
     void actionRequiresCurrentPendingApprovalLine() throws Exception {
         DocumentApprovalActionRequestVO request = new DocumentApprovalActionRequestVO();
         request.setAction("APPROVED");
@@ -832,6 +1045,341 @@ class DocumentApprovalInteractionServiceImplTest {
                 exception -> assertThat(exception.getStatus()).isEqualTo(HttpStatus.CONFLICT));
         verifyNoInteractions(commentDAO);
         verify(approvalDAO, never()).updateApprovalLineAction(anyMap());
+    }
+
+    @Test
+    void referenceConfirmationUpdatesParticipantAndWritesOneSystemEvent() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        Date persistedAt = new Date(1_798_000_000_000L);
+        DocumentApprovalLineVO pendingReference = referenceLine(41L, "202", null, null);
+        DocumentApprovalLineVO confirmedReference = referenceLine(41L, "202", "CONFIRMED", persistedAt);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("COMPLETED"));
+        when(approvalDAO.selectUserReferenceApprovalLineForUpdate(anyMap())).thenReturn(pendingReference);
+        when(approvalDAO.selectUserReferenceApprovalLine(anyMap())).thenReturn(confirmedReference);
+        when(approvalDAO.confirmReferenceApprovalLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(91L);
+
+        Object result = invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L);
+
+        assertThat(readProperty(result, "getElectronicApprovalId")).isEqualTo(77L);
+        assertThat(readProperty(result, "getActionStatus")).isEqualTo("CONFIRMED");
+        assertThat(readProperty(result, "getActionAt")).isEqualTo(persistedAt);
+        verify(approvalDAO).confirmReferenceApprovalLine(argThat(params ->
+            Long.valueOf(77L).equals(params.get("electronicApprovalId"))
+                && Long.valueOf(41L).equals(params.get("electronicApprovalLineId"))
+                && "202".equals(params.get("participantUserId"))
+                && Long.valueOf(4L).equals(params.get("tenantId"))));
+        verify(commentDAO, org.mockito.Mockito.times(1)).insertSystemComment(argThat(params ->
+            "REFERENCE_CONFIRMED".equals(params.get("eventType"))
+                && "문서를 확인했습니다.".equals(params.get("content"))
+                && "SYSTEM".equals(params.get("commentType"))
+                && Long.valueOf(77L).equals(params.get("ownerId"))));
+
+        Method confirmationMethod = Arrays.stream(DocumentApprovalInteractionServiceImpl.class.getMethods())
+            .filter(method -> method.getName().equals("confirmReference"))
+            .findFirst().orElseThrow(AssertionError::new);
+        assertThat(confirmationMethod.getAnnotation(Transactional.class)).isNotNull();
+    }
+
+    @Test
+    void finalConfirmationPreservesDocumentStatusAndWritesOneSystemEvent() throws Exception {
+        Date pendingAt = new Date(1_798_000_000_000L);
+        Date confirmedAt = new Date(1_798_000_100_000L);
+        DocumentApprovalLineVO pendingLine = finalConfirmationLine(51L, "PENDING", pendingAt, null);
+        DocumentApprovalLineVO confirmedLine = finalConfirmationLine(51L, "CONFIRMED", pendingAt, confirmedAt);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(workflowDocument("REJECTED"));
+        when(approvalDAO.selectFinalConfirmationLineForUpdate(anyMap())).thenReturn(pendingLine);
+        when(approvalDAO.confirmFinalConfirmationLine(anyMap())).thenReturn(1);
+        when(approvalDAO.selectFinalConfirmationLine(anyMap())).thenReturn(confirmedLine);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(92L);
+
+        Object result = invokeApprovalMethod("confirmFinalConfirmation",
+            new Class<?>[] {LoginVO.class, Long.class}, author, 77L);
+
+        assertThat(readProperty(result, "getElectronicApprovalId")).isEqualTo(77L);
+        assertThat(readProperty(result, "getActionStatus")).isEqualTo("CONFIRMED");
+        assertThat(readProperty(result, "getActionAt")).isEqualTo(confirmedAt);
+        verify(approvalDAO).confirmFinalConfirmationLine(argThat(params ->
+            Long.valueOf(77L).equals(params.get("electronicApprovalId"))
+                && Long.valueOf(51L).equals(params.get("electronicApprovalLineId"))
+                && "101".equals(params.get("participantUserId"))
+                && Long.valueOf(4L).equals(params.get("tenantId"))));
+        verify(approvalDAO, never()).updateDocumentApprovalStatus(anyMap());
+        verify(commentDAO).insertSystemComment(argThat(params ->
+            "FINAL_CONFIRMATION_CONFIRMED".equals(params.get("eventType"))
+                && "기안자가 최종 확인을 완료했습니다.".equals(params.get("content"))));
+    }
+
+    @Test
+    void repeatedFinalConfirmationReturnsExistingResultWithoutDuplicateEvent() throws Exception {
+        Date confirmedAt = new Date(1_798_000_100_000L);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(workflowDocument("COMPLETED"));
+        when(approvalDAO.selectFinalConfirmationLineForUpdate(anyMap()))
+            .thenReturn(finalConfirmationLine(51L, "CONFIRMED", new Date(1_798_000_000_000L), confirmedAt));
+
+        Object result = invokeApprovalMethod("confirmFinalConfirmation",
+            new Class<?>[] {LoginVO.class, Long.class}, author, 77L);
+
+        assertThat(readProperty(result, "getActionStatus")).isEqualTo("CONFIRMED");
+        assertThat(readProperty(result, "getActionAt")).isEqualTo(confirmedAt);
+        verify(approvalDAO, never()).confirmFinalConfirmationLine(anyMap());
+        verifyNoInteractions(commentDAO);
+    }
+
+    @Test
+    void addReferencesAddsOnlyNewUsersAtTheExistingReferenceStageAndWritesSystemEvent() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("PENDING"));
+        when(approvalDAO.selectActiveParticipants(anyMap()))
+            .thenReturn(Arrays.asList(
+                participant("202", "검토자", "기획팀"),
+                participant("203", "관리자", "운영팀")));
+        DocumentApprovalLineVO actionLine = pendingLine(40L, 3, "APPROVAL", "101");
+        DocumentApprovalLineVO existingReference = referenceLine(41L, "301", "CONFIRMED",
+            new Date(1_798_000_000_000L));
+        existingReference.setStageOrder(4);
+        existingReference.setParticipantOrder(2);
+        when(approvalDAO.selectApprovalLines(anyMap()))
+            .thenReturn(Arrays.asList(actionLine, existingReference));
+        when(approvalDAO.insertDocumentApprovalLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(91L);
+
+        Object result = invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Arrays.asList("202", "203"));
+
+        assertThat(result).isEqualTo(2);
+        verify(approvalDAO).insertDocumentApprovalLine(argThat(params ->
+            "REFERENCE".equals(params.get("participantType"))
+                && "202".equals(params.get("participantUserId"))
+                && "검토자".equals(params.get("participantName"))
+                && "기획팀".equals(params.get("participantDepartmentName"))
+                && Integer.valueOf(4).equals(params.get("stageOrder"))
+                && Integer.valueOf(3).equals(params.get("participantOrder"))
+                && params.get("actionStatus") == null
+                && params.get("pendingAt") == null
+                && params.get("actionAt") == null
+                && params.get("actionComment") == null));
+        verify(approvalDAO).insertDocumentApprovalLine(argThat(params ->
+            "203".equals(params.get("participantUserId"))
+                && Integer.valueOf(4).equals(params.get("stageOrder"))
+                && Integer.valueOf(4).equals(params.get("participantOrder"))));
+        verify(commentDAO).insertSystemComment(argThat(params ->
+            "REFERENCE_ADDED".equals(params.get("eventType"))
+                && "작성자님이 참조자(검토자, 관리자)를 추가했습니다.".equals(params.get("content"))
+                && "SYSTEM".equals(params.get("commentType"))
+                && "login-author".equals(params.get("writerId"))
+                && Long.valueOf(77L).equals(params.get("ownerId"))));
+
+        Method addReferencesMethod = Arrays.stream(DocumentApprovalInteractionServiceImpl.class.getMethods())
+            .filter(method -> method.getName().equals("addDocumentReferences"))
+            .findFirst().orElseThrow(AssertionError::new);
+        assertThat(addReferencesMethod.getAnnotation(Transactional.class)).isNotNull();
+    }
+
+    @Test
+    void addReferencesPreservesExistingReferencesAndSkipsSystemEventWhenAllTargetsAlreadyParticipate()
+            throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("IN_PROGRESS"));
+        when(approvalDAO.selectActiveParticipants(anyMap()))
+            .thenReturn(Collections.singletonList(participant("202", "기존 참조자", "기획팀")));
+        DocumentApprovalLineVO confirmedReference = referenceLine(41L, "202", "CONFIRMED",
+            new Date(1_798_000_000_000L));
+        when(approvalDAO.selectApprovalLines(anyMap()))
+            .thenReturn(Collections.singletonList(confirmedReference));
+
+        Object result = invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Collections.singletonList("202"));
+
+        assertThat(result).isEqualTo(0);
+        verify(approvalDAO, never()).insertDocumentApprovalLine(anyMap());
+        verifyNoInteractions(commentDAO);
+    }
+
+    @Test
+    void addReferencesRejectsDraftAndInaccessibleDocumentsBeforeWrites() throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(false);
+        assertThatThrownBy(() -> invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Collections.singletonList("202")))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatus())
+                .isEqualTo(HttpStatus.NOT_FOUND));
+        verify(approvalDAO, never()).selectDocumentApprovalForUpdate(anyMap());
+        verify(approvalDAO, never()).insertDocumentApprovalLine(anyMap());
+        verifyNoInteractions(commentDAO);
+
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("DRAFT"));
+        assertThatThrownBy(() -> invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Collections.singletonList("202")))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatus())
+                .isEqualTo(HttpStatus.CONFLICT));
+        verify(approvalDAO, never()).insertDocumentApprovalLine(anyMap());
+        verifyNoInteractions(commentDAO);
+    }
+
+    @Test
+    void addReferencesRejectsEmptyBlankOrDuplicateUserIdsBeforeDatabaseAccess() throws Exception {
+        List<List<String>> invalidRequests = Arrays.asList(
+            null,
+            Collections.emptyList(),
+            Collections.singletonList(" "),
+            Arrays.asList("202", " 202 "));
+
+        for (List<String> invalidRequest : invalidRequests) {
+            assertThatThrownBy(() -> invokeApprovalMethod("addDocumentReferences",
+                new Class<?>[] {LoginVO.class, Long.class, List.class},
+                author, 77L, invalidRequest))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatus())
+                    .isEqualTo(HttpStatus.BAD_REQUEST));
+        }
+
+        verifyNoInteractions(approvalDAO, commentDAO);
+    }
+
+    @Test
+    void addReferencesRejectsIncompleteActiveUserResolutionAndRollsBackOnSystemEventFailure()
+            throws Exception {
+        when(approvalDAO.selectIsDocumentParticipant(anyMap())).thenReturn(true);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("PENDING"));
+        when(approvalDAO.selectActiveParticipants(anyMap()))
+            .thenReturn(Collections.singletonList(participant("202", "검토자", "기획팀")));
+
+        assertThatThrownBy(() -> invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Arrays.asList("202", "203")))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(exception -> assertThat(((ResponseStatusException) exception).getStatus())
+                .isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(approvalDAO, never()).insertDocumentApprovalLine(anyMap());
+        verifyNoInteractions(commentDAO);
+
+        when(approvalDAO.selectActiveParticipants(anyMap()))
+            .thenReturn(Collections.singletonList(participant("202", "검토자", "기획팀")));
+        when(approvalDAO.selectApprovalLines(anyMap()))
+            .thenReturn(Collections.singletonList(pendingLine(40L, 3, "APPROVAL", "101")));
+        when(approvalDAO.insertDocumentApprovalLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(null);
+
+        assertThatThrownBy(() -> invokeApprovalMethod("addDocumentReferences",
+            new Class<?>[] {LoginVO.class, Long.class, List.class},
+            author, 77L, Collections.singletonList("202")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("시스템 이력 기록에 실패");
+        verify(approvalDAO).insertDocumentApprovalLine(anyMap());
+        verify(commentDAO).insertSystemComment(argThat(params ->
+            "REFERENCE_ADDED".equals(params.get("eventType"))));
+    }
+
+    @Test
+    void businessContactReferenceCanBeConfirmed() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        Date persistedAt = new Date(1_798_000_000_000L);
+        DocumentApprovalWorkflowDocumentVO document = workflowDocument("COMPLETED");
+        document.setDocumentType("BUSINESS_CONTACT");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(document);
+        when(approvalDAO.selectUserReferenceApprovalLineForUpdate(anyMap()))
+            .thenReturn(referenceLine(41L, "202", null, null));
+        when(approvalDAO.selectUserReferenceApprovalLine(anyMap()))
+            .thenReturn(referenceLine(41L, "202", "CONFIRMED", persistedAt));
+        when(approvalDAO.confirmReferenceApprovalLine(anyMap())).thenReturn(1);
+        when(commentDAO.insertSystemComment(anyMap())).thenReturn(91L);
+
+        Object result = invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L);
+
+        assertThat(readProperty(result, "getActionStatus")).isEqualTo("CONFIRMED");
+        verify(commentDAO).insertSystemComment(argThat(params ->
+            "REFERENCE_CONFIRMED".equals(params.get("eventType"))));
+    }
+
+    @Test
+    void referenceConfirmationRejectsDraftWithoutParticipantUpdateOrSystemEvent() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("DRAFT"));
+
+        assertThatThrownBy(() -> invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L))
+            .isInstanceOf(ResponseStatusException.class);
+
+        assertNoReferenceConfirmationWrites();
+    }
+
+    @Test
+    void referenceConfirmationRejectsUnsupportedDocumentTypeWithoutWrites() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        DocumentApprovalWorkflowDocumentVO document = workflowDocument("COMPLETED");
+        document.setDocumentType("EXPENSE_RESOLUTION");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap())).thenReturn(document);
+
+        assertThatThrownBy(() -> invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L))
+            .isInstanceOf(ResponseStatusException.class);
+
+        verify(approvalDAO, never()).selectUserReferenceApprovalLineForUpdate(anyMap());
+        assertNoReferenceConfirmationWrites();
+    }
+
+    @Test
+    void referenceConfirmationRejectsNonReferenceParticipantWithoutWrites() throws Exception {
+        LoginVO participant = participantUser("login-202", "202", "결재자");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("COMPLETED"));
+        when(approvalDAO.selectUserReferenceApprovalLineForUpdate(anyMap())).thenReturn(null);
+
+        assertThatThrownBy(() -> invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, participant, 77L))
+            .isInstanceOf(ResponseStatusException.class);
+
+        assertNoReferenceConfirmationWrites();
+    }
+
+    @Test
+    void referenceConfirmationRejectsMissingOrUnauthorizedParticipantRowsWithoutWrites() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("COMPLETED"));
+        when(approvalDAO.selectUserReferenceApprovalLineForUpdate(anyMap())).thenReturn(null);
+
+        assertThatThrownBy(() -> invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L))
+            .isInstanceOf(ResponseStatusException.class);
+
+        assertNoReferenceConfirmationWrites();
+    }
+
+    @Test
+    void repeatedReferenceConfirmationReturnsPersistedSuccessWithoutDuplicateWrites() throws Exception {
+        LoginVO reference = participantUser("login-reference", "202", "참조자");
+        Date persistedAt = new Date(1_798_000_000_000L);
+        when(approvalDAO.selectDocumentApprovalForUpdate(anyMap()))
+            .thenReturn(workflowDocument("COMPLETED"));
+        when(approvalDAO.selectUserReferenceApprovalLineForUpdate(anyMap()))
+            .thenReturn(referenceLine(41L, "202", "CONFIRMED", persistedAt));
+
+        Object result = invokeApprovalMethod("confirmReference",
+            new Class<?>[] {LoginVO.class, Long.class}, reference, 77L);
+
+        assertThat(readProperty(result, "getElectronicApprovalId")).isEqualTo(77L);
+        assertThat(readProperty(result, "getActionStatus")).isEqualTo("CONFIRMED");
+        assertThat(readProperty(result, "getActionAt")).isEqualTo(persistedAt);
+        assertNoReferenceConfirmationWrites();
     }
 
     @Test
@@ -890,9 +1438,27 @@ class DocumentApprovalInteractionServiceImplTest {
     private DocumentApprovalInteractionServiceImpl sharedService() { return sharedService(imageStorageService); }
 
     private DocumentApprovalInteractionServiceImpl sharedService(EmbeddedImageStorageService storage) {
+        return sharedService(storage, mock(NotificationService.class));
+    }
+
+    private DocumentApprovalInteractionServiceImpl sharedService(NotificationService notifications) {
+        return sharedService(imageStorageService, notifications);
+    }
+
+    private DocumentApprovalInteractionServiceImpl sharedService(
+            EmbeddedImageStorageService storage, NotificationService notifications) {
+        return sharedService(approvalDAO, storage, notifications);
+    }
+
+    private DocumentApprovalInteractionServiceImpl sharedService(DocumentApprovalDAO dao) {
+        return sharedService(dao, imageStorageService, mock(NotificationService.class));
+    }
+
+    private DocumentApprovalInteractionServiceImpl sharedService(
+            DocumentApprovalDAO dao, EmbeddedImageStorageService storage, NotificationService notifications) {
         DocumentApprovalAccessServiceImpl access = accessService();
-        return new DocumentApprovalInteractionServiceImpl(approvalDAO, commentDAO, fileService, storage, access,
-                draftSupportService(storage, access), commentSupportService());
+        return new DocumentApprovalInteractionServiceImpl(dao, commentDAO, fileService, storage, access,
+                draftSupportService(storage, access), commentSupportService(), notifications);
     }
 
     private DocumentApprovalDetailVO detail(int viewCount) {
@@ -1013,6 +1579,37 @@ class DocumentApprovalInteractionServiceImplTest {
         DocumentApprovalLineVO line = pendingLine(id, stageOrder, participantType, userId);
         line.setActionStatus("APPROVED");
         return line;
+    }
+
+    private DocumentApprovalLineVO referenceLine(Long id, String userId, String actionStatus, Date actionAt) {
+        DocumentApprovalLineVO line = pendingLine(id, 1, "REFERENCE", userId);
+        line.setActionStatus(actionStatus);
+        line.setActionAt(actionAt);
+        return line;
+    }
+
+    private DocumentApprovalLineVO finalConfirmationLine(
+            Long id, String actionStatus, Date pendingAt, Date actionAt) {
+        DocumentApprovalLineVO line = pendingLine(id, 3, "FINAL_CONFIRMATION", "101");
+        line.setActionStatus(actionStatus);
+        line.setPendingAt(pendingAt);
+        line.setActionAt(actionAt);
+        return line;
+    }
+
+    private Object readProperty(Object target, String getterName) throws Exception {
+        return target.getClass().getMethod(getterName).invoke(target);
+    }
+
+    private void assertNoReferenceConfirmationWrites() {
+        assertThat(mockingDetails(approvalDAO).getInvocations())
+            .noneMatch(this::isApprovalDaoMutation);
+        verifyNoInteractions(commentDAO);
+    }
+
+    private boolean isApprovalDaoMutation(Invocation invocation) {
+        String methodName = invocation.getMethod().getName();
+        return !methodName.startsWith("select") && !methodName.startsWith("count");
     }
 
     private LoginVO participantUser(String id, String uniqId, String name) {

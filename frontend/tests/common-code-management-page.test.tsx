@@ -4,9 +4,10 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardContent } from '../src/pages/dashboard/components/DashboardContent';
 import {
   CommonCodeManagementPanel,
@@ -19,6 +20,7 @@ import { saveCommonCodeBatch } from '../src/pages/co/master/common-code/services
 import { RoleManagementPanel } from '../src/pages/settings/system/roles/components/RoleManagementPanel';
 import { Splitter } from '../src/shared/components/Splitter';
 import { NotificationProvider } from '../src/shared/context/NotificationContext';
+import { CommonCodeManagementPage } from '../src/pages/co/master/common-code/CommonCodeManagementPage';
 
 const apiMocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -28,6 +30,7 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 const treeRefState = vi.hoisted(() => ({
+  useRealTree: false,
   current: null as {
     deleteSelectedRows?: () => void;
   } | null,
@@ -44,6 +47,9 @@ vi.mock('../src/shared/components/f1-grid', async () => {
   return {
     ...actual,
     F1Tree: React.forwardRef(function MockTree(props: any, ref) {
+      if (treeRefState.useRealTree) {
+        return <actual.F1Tree {...props} ref={ref} />;
+      }
       React.useImperativeHandle(ref, () => ({
         getSelectedRows: () => [],
         getSelectedRowIds: () => ['1'],
@@ -136,6 +142,7 @@ const commonCodeItems = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  treeRefState.useRealTree = false;
   apiMocks.apiGet.mockImplementation((path: string) => {
     if (path === '/api/v1/co/master/common-code/groups') {
       return Promise.resolve({ resultList: commonCodeGroups });
@@ -151,6 +158,316 @@ beforeEach(() => {
 });
 
 describe('CommonCode management page', () => {
+  const pageSessionKey = 'songyeon-erp:page:common-code-management';
+  let previousPageSession: string | null | undefined;
+
+  afterEach(() => {
+    if (previousPageSession === undefined) return;
+    if (previousPageSession === null) {
+      window.sessionStorage.removeItem(pageSessionKey);
+    } else {
+      window.sessionStorage.setItem(pageSessionKey, previousPageSession);
+    }
+    previousPageSession = undefined;
+  });
+
+  function renderRealPage() {
+    previousPageSession = window.sessionStorage.getItem(pageSessionKey);
+    window.sessionStorage.removeItem(pageSessionKey);
+    treeRefState.useRealTree = true;
+    return render(
+      <ThemeProvider theme={createTheme()}>
+        <NotificationProvider>
+          <CommonCodeManagementPage
+            selectedModule={{
+              id: 'co',
+              name: '기준정보',
+              icon: null,
+              tree: [],
+              menus: [],
+            }}
+            currentMenuName="공통코드 관리"
+            content={{
+              title: '공통코드 관리',
+              description: '공통코드를 그룹과 상세코드로 관리합니다.',
+              cards: [],
+              items: [],
+            }}
+            selectedMenuPermissions={{
+              read: true,
+              create: true,
+              update: true,
+              delete: true,
+              excel: true,
+            }}
+          />
+        </NotificationProvider>
+      </ThemeProvider>,
+    );
+  }
+
+  async function editDetailName(value: string) {
+    const cell = await screen.findByRole('gridcell', { name: '거래명세서' });
+    fireEvent.doubleClick(cell);
+    const input = await screen.findByDisplayValue('거래명세서');
+    fireEvent.change(input, { target: { value } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '저장' })).toBeEnabled(),
+    );
+  }
+
+  it('locks common-code editing through save and quiet refresh without hiding current rows', async () => {
+    let resolveSave!: (value: unknown) => void;
+    let resolveGroups!: (value: unknown) => void;
+    let resolveItems!: (value: unknown) => void;
+    apiMocks.apiPost.mockImplementation(
+      () => new Promise((resolve) => { resolveSave = resolve; }),
+    );
+    const initialGet = apiMocks.apiGet.getMockImplementation()!;
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/co/master/common-code/groups') {
+        return Promise.resolve({ resultList: [...commonCodeGroups].reverse() });
+      }
+      if (path === '/api/v1/co/master/common-code/groups/2/items') {
+        return Promise.resolve({
+          resultList: commonCodeItems.map((item) => ({ ...item, groupId: 2 })),
+        });
+      }
+      return initialGet(path);
+    });
+    const { container } = renderRealPage();
+    await editDetailName('거래명세서 수정');
+    const originalGet = apiMocks.apiGet.getMockImplementation()!;
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/co/master/common-code/groups') {
+        return new Promise((resolve) => { resolveGroups = resolve; });
+      }
+      if (path === '/api/v1/co/master/common-code/groups/2/items') {
+        return new Promise((resolve) => { resolveItems = resolve; });
+      }
+      return originalGet(path);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledTimes(1));
+
+    const assertLocked = () => {
+      const tree = screen.getByRole('grid', { name: '공통코드 그룹 트리' });
+      const detail = screen.getByRole('grid', { name: '공통코드 상세코드' });
+      expect(within(tree).getByRole('gridcell', { name: '첨부문서업무' })).toBeVisible();
+      expect(within(detail).getByRole('gridcell', { name: '거래명세서 수정' })).toBeVisible();
+      expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: '조회', exact: true })).toBeDisabled();
+      expect(screen.getByRole('textbox', { name: '공통코드 검색' })).toBeDisabled();
+      const callsBefore = apiMocks.apiGet.mock.calls.length;
+      const rowCount = within(detail).getAllByRole('row').length;
+      const treeRowCount = within(tree).getAllByRole('row').length;
+      const selectedRows = container.querySelectorAll('[data-grid-selected="true"]').length;
+      fireEvent.mouseDown(within(tree).getByRole('gridcell', { name: '첨부문서업무' }), { button: 0 });
+      fireEvent.click(within(tree).getByRole('gridcell', { name: '첨부문서업무' }));
+      fireEvent.mouseDown(within(detail).getAllByRole('gridcell', { name: '사업자등록증' })[0], { button: 0 });
+      fireEvent.focus(within(tree).getByRole('gridcell', { name: '첨부문서업무' }));
+      for (const grid of [tree, detail]) {
+        for (const key of ['Insert', 'Delete', 'F2']) {
+          fireEvent.keyDown(grid, { key, code: key });
+        }
+        fireEvent.keyDown(grid, { key: 'd', code: 'KeyD', ctrlKey: true });
+        fireEvent.contextMenu(grid.lastElementChild as HTMLElement);
+      }
+      fireEvent.doubleClick(within(detail).getByRole('gridcell', { name: '거래명세서 수정' }));
+      fireEvent.doubleClick(within(tree).getByRole('gridcell', { name: '첨부문서업무' }));
+      const parentCodeCell = within(detail).getAllByRole('row')[1]
+        .querySelectorAll('[role="gridcell"]')[3];
+      fireEvent.doubleClick(parentCodeCell);
+      const useCheckbox = within(detail).getAllByRole('checkbox')[1];
+      expect(useCheckbox).toBeDisabled();
+      fireEvent.click(useCheckbox.closest('[role="gridcell"]') as HTMLElement);
+      fireEvent.click(within(detail).getByRole('columnheader', { name: '사용여부' }));
+      fireEvent.click(screen.getByRole('button', { name: '조회', exact: true }));
+      fireEvent.keyDown(screen.getByRole('textbox', { name: '공통코드 검색' }), { key: 'Enter' });
+      fireEvent.click(screen.getByRole('button', { name: '저장' }));
+      expect(screen.queryByRole('menuitem', { name: /추가|삭제/ })).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('거래명세서 수정')).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('첨부문서업무')).not.toBeInTheDocument();
+      expect(useCheckbox).toBeChecked();
+      expect(within(detail).getAllByRole('row')).toHaveLength(rowCount);
+      expect(within(tree).getAllByRole('row')).toHaveLength(treeRowCount);
+      expect(container.querySelectorAll('[data-grid-selected="true"]')).toHaveLength(selectedRows);
+      expect(apiMocks.apiGet).toHaveBeenCalledTimes(callsBefore);
+      expect(apiMocks.apiPost).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    };
+    assertLocked();
+    await act(async () => { resolveSave({ result: { success: true } }); });
+    await waitFor(() => expect(resolveGroups).toBeTypeOf('function'));
+    assertLocked();
+    await act(async () => { resolveGroups({ resultList: commonCodeGroups }); });
+    await waitFor(() => expect(resolveItems).toBeTypeOf('function'));
+    assertLocked();
+    await act(async () => {
+      resolveItems({
+        resultList: commonCodeItems.map((item, index) =>
+          index === 0
+            ? { ...item, groupId: 2, itemNm: '저장된 거래명세서' }
+            : { ...item, groupId: 2 },
+        ),
+      });
+    });
+    expect(await screen.findByRole('gridcell', { name: '저장된 거래명세서' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: '공통코드 검색' })).toBeEnabled();
+    fireEvent.doubleClick(screen.getByRole('gridcell', { name: '저장된 거래명세서' }));
+    expect(await screen.findByDisplayValue('저장된 거래명세서')).toBeVisible();
+  }, 15000);
+
+  it.each(['save', 'group refresh', 'detail refresh'] as const)(
+    'releases the common-code quiet-save lock after a %s failure',
+    async (phase) => {
+      let resolveSave!: (value: unknown) => void;
+      let rejectRequest!: (error: Error) => void;
+      apiMocks.apiPost.mockImplementation(
+        () => new Promise((resolve, reject) => {
+          resolveSave = resolve;
+          if (phase === 'save') rejectRequest = reject;
+        }),
+      );
+      renderRealPage();
+      await editDetailName('실패 후 유지할 수정');
+      const originalGet = apiMocks.apiGet.getMockImplementation()!;
+      apiMocks.apiGet.mockImplementation((path: string) => {
+        if (
+          (phase === 'group refresh' && path === '/api/v1/co/master/common-code/groups') ||
+          (phase === 'detail refresh' && path === '/api/v1/co/master/common-code/groups/1/items')
+        ) {
+          return new Promise((_resolve, reject) => { rejectRequest = reject; });
+        }
+        return originalGet(path);
+      });
+      fireEvent.click(screen.getByRole('button', { name: '저장' }));
+      await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledTimes(1));
+      if (phase !== 'save') {
+        await act(async () => { resolveSave({ result: { success: true } }); });
+      }
+      await waitFor(() => expect(rejectRequest).toBeTypeOf('function'));
+      expect(screen.getByRole('button', { name: '조회', exact: true })).toBeDisabled();
+      expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+      await act(async () => { rejectRequest(new Error(`${phase} failed`)); });
+      expect((await screen.findAllByText(`${phase} failed`)).length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled();
+      expect(screen.getByRole('textbox', { name: '공통코드 검색' })).toBeEnabled();
+      if (phase === 'save') {
+        expect(screen.getByRole('gridcell', { name: '실패 후 유지할 수정' })).toBeVisible();
+        expect(screen.getByRole('button', { name: '저장' })).toBeEnabled();
+        apiMocks.apiPost.mockResolvedValue({ result: { success: true } });
+        fireEvent.click(screen.getByRole('button', { name: '저장' }));
+        await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledTimes(2));
+        expect(apiMocks.apiPost.mock.calls[1][1].items.updatedRows[0].itemNm).toBe('실패 후 유지할 수정');
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled(),
+        );
+      }
+    },
+    15000,
+  );
+
+  it('retains details and reports failure without success notification when quiet detail refresh rejects', async () => {
+    let resolveSave!: (value: unknown) => void;
+    let rejectRefresh!: (error: Error) => void;
+    apiMocks.apiPost.mockImplementation(
+      () => new Promise((resolve) => { resolveSave = resolve; }),
+    );
+    renderRealPage();
+    await editDetailName('재조회 실패 후 유지할 상세');
+    const originalGet = apiMocks.apiGet.getMockImplementation()!;
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/co/master/common-code/groups/1/items') {
+        return new Promise((_resolve, reject) => { rejectRefresh = reject; });
+      }
+      return originalGet(path);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledTimes(1));
+    await act(async () => { resolveSave({ result: { success: true } }); });
+    await waitFor(() => expect(rejectRefresh).toBeTypeOf('function'));
+    expect(screen.getByRole('gridcell', { name: '재조회 실패 후 유지할 상세' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '조회', exact: true })).toBeDisabled();
+    expect(screen.queryByTestId('f1-grid-loading-overlay')).not.toBeInTheDocument();
+
+    await act(async () => { rejectRefresh(new Error('상세 재조회 실패')); });
+
+    expect((await screen.findAllByText('상세 재조회 실패'))[0]).toBeVisible();
+    expect(screen.getByRole('grid', { name: '공통코드 상세코드' })).toBeVisible();
+    expect(screen.getByRole('gridcell', { name: '재조회 실패 후 유지할 상세' })).toBeVisible();
+    expect(screen.getAllByRole('gridcell', { name: '사업자등록증' })).toHaveLength(2);
+    expect(screen.queryByText('공통코드를 저장했습니다.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled();
+    expect(screen.getByRole('textbox', { name: '공통코드 검색' })).toBeEnabled();
+    fireEvent.doubleClick(screen.getByRole('gridcell', { name: '재조회 실패 후 유지할 상세' }));
+    expect(await screen.findByDisplayValue('재조회 실패 후 유지할 상세')).toBeVisible();
+  }, 15000);
+
+  it('does not resubmit a saved detail insert after quiet refresh failure and a new edit', async () => {
+    let rejectRefresh!: (error: Error) => void;
+    renderRealPage();
+    await screen.findByRole('gridcell', { name: '거래명세서' });
+    const detail = screen.getByRole('grid', { name: '공통코드 상세코드' });
+    fireEvent.contextMenu(detail.lastElementChild as HTMLElement);
+    fireEvent.click(await screen.findByRole('menuitem', { name: '행 추가' }));
+    const newRow = within(detail).getAllByRole('row').at(-1)!;
+    const nameCell = within(newRow).getAllByRole('gridcell')[2];
+    fireEvent.doubleClick(nameCell);
+    const input = within(newRow).getByRole('textbox');
+    fireEvent.change(input, { target: { value: '새 상세코드' } });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    apiMocks.apiPost.mockResolvedValue({
+      item: {
+        groups: [],
+        items: [{
+          ...commonCodeItems[0],
+          commonCodeItemId: 12,
+          itemCode: 'NEW_DETAIL',
+          itemNm: '새 상세코드',
+        }],
+      },
+    });
+    const originalGet = apiMocks.apiGet.getMockImplementation()!;
+    apiMocks.apiGet.mockImplementation((path: string) => {
+      if (path === '/api/v1/co/master/common-code/groups/1/items') {
+        return new Promise((_resolve, reject) => { rejectRefresh = reject; });
+      }
+      return originalGet(path);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(rejectRefresh).toBeTypeOf('function'));
+    expect(apiMocks.apiPost.mock.calls[0][1].items.insertedRows).toHaveLength(1);
+    await act(async () => { rejectRefresh(new Error('저장 후 재조회 실패')); });
+    expect((await screen.findAllByText('저장 후 재조회 실패'))[0]).toBeVisible();
+    expect(screen.getByRole('gridcell', { name: '새 상세코드' })).toBeVisible();
+    expect(screen.queryByText('공통코드를 저장했습니다.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '저장' })).toBeDisabled();
+
+    expect(screen.getByRole('gridcell', { name: 'NEW_DETAIL' })).toBeVisible();
+    fireEvent.doubleClick(screen.getByRole('gridcell', { name: '새 상세코드' }));
+    const savedInput = await screen.findByDisplayValue('새 상세코드');
+    fireEvent.change(savedInput, { target: { value: '두 번째 저장 수정' } });
+    fireEvent.keyDown(savedInput, { key: 'Enter', code: 'Enter' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '저장' })).toBeEnabled(),
+    );
+    apiMocks.apiGet.mockImplementation(originalGet);
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(apiMocks.apiPost).toHaveBeenCalledTimes(2));
+    expect(apiMocks.apiPost.mock.calls[1][1].items.insertedRows).toEqual([]);
+    expect(apiMocks.apiPost.mock.calls[1][1].items.updatedRows).toEqual([
+      expect.objectContaining({ id: '12', itemNm: '두 번째 저장 수정' }),
+    ]);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '조회', exact: true })).toBeEnabled(),
+    );
+  }, 15000);
+
   it('allows an empty item code only for a new row that can be auto-generated', () => {
     expect(getItemCodeValidationMessage('', true)).toBeNull();
     expect(getItemCodeValidationMessage('', false)).toBe(

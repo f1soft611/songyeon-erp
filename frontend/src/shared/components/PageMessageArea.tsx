@@ -7,6 +7,7 @@ type PageMessageAreaProps = {
   severity?: AlertProps['severity'];
   action?: ReactNode;
   role?: 'alert' | 'status';
+  compact?: boolean;
 };
 
 function normalizePageMessage(message: string): string {
@@ -33,13 +34,20 @@ export function PageMessageArea({
   severity = 'error',
   action,
   role = 'alert',
+  compact = false,
 }: PageMessageAreaProps) {
   const normalizedMessage = normalizePageMessage(message);
 
   if (!normalizedMessage) return null;
 
   return (
-    <Box sx={{ px: { xs: 1.5, sm: 3 }, pt: 2, pb: 2 }}>
+    <Box
+      sx={{
+        px: { xs: 1.5, sm: 3 },
+        pt: compact ? 1 : 2,
+        pb: compact ? 0 : 2,
+      }}
+    >
       <Alert
         severity={severity}
         onClose={onClose}

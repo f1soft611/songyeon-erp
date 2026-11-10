@@ -20,6 +20,7 @@ export type Receiving = {
   returnOfId?: number | null;
   returnedQty?: number | null;
   returnableQty?: number | null;
+  stockQty?: number | null; // 이 원재료의 지금 재고(지우면 마이너스가 되는 입고를 막는다, 2026-11-05)
   files?: AttachmentFile[];
 };
 

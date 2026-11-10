@@ -11,7 +11,7 @@ vi.mock('../src/shared/services/apiClient', () => ({
   apiDelete: (...args: unknown[]) => apiDelete(...args),
 }));
 
-import { fetchBom, fetchProductBomRows, fetchSubMaterials, saveBom, setProductDiscontinued } from '../src/pages/co/master/item-master/services/itemMaster.service';
+import { fetchBom, fetchProductBomRows, fetchSubMaterials, saveBom, saveProductInfo, setProductDiscontinued } from '../src/pages/co/master/item-master/services/itemMaster.service';
 import { appliedPrice, diffBom, filterProductRows, materialNamePatch, staleCutoff, unknownClientMessage } from '../src/pages/co/master/item-master/utils/productBom';
 import { formatPrice, formatQty, percentText, ratioToPercent } from '../src/shared/utils/numberFormat';
 import type { MaterialOption, ProductBomRow } from '../src/pages/co/master/item-master/types/itemMaster.types';
@@ -136,6 +136,19 @@ describe('제품BOM 서비스', () => {
     expect(await fetchBom('000001')).toEqual([
       { materialCode: 'M001', materialName: '돼지고기', ratio: 0.5, unitPricePerKg: 8000, amountPerKg: 4000 },
     ]);
+  });
+
+  it('식품유형(2026-11-05): 목록은 코드 · 이름을 받고, 기본정보 저장은 고른 코드를 보낸다', async () => {
+    apiGet.mockResolvedValueOnce({ resultList: [{ code: '000001', name: '양념불고기', foodType: '002', foodTypeNm: '소스(살균제품)' }] });
+    expect((await fetchProductBomRows(false))[0]).toMatchObject({ foodType: '002', foodTypeNm: '소스(살균제품)' });
+    apiGet.mockResolvedValueOnce({ resultList: [{ code: '000002', name: '된장' }] });
+    expect((await fetchProductBomRows(false))[0]).toMatchObject({ foodType: '', foodTypeNm: '' });
+
+    apiPut.mockResolvedValueOnce({});
+    await saveProductInfo('000001', { name: ' 양념불고기 ', storage: '002', foodType: ' 001 ', clientCode: '000003' });
+    expect(apiPut).toHaveBeenLastCalledWith('/api/v1/co/master/item-master/000001/info', {
+      name: '양념불고기', storage: '002', foodType: '001', clientCode: '000003',
+    });
   });
 
   it('빈 부자재는 빈 값으로 받는다', async () => {

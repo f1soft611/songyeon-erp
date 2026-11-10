@@ -86,6 +86,15 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      {/* 2026-11-04 S_ERP 통합검색 화면 */}
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/groupware/*"
         element={

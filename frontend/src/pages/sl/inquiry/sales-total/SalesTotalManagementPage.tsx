@@ -7,6 +7,7 @@ import { type PermissionActionGroupDefinition } from '../../../../shared/compone
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { toPageSearchFields, type PageSearchFieldValue } from '../../../../shared/components/page-search/searchFields';
 import { ConfirmDialog } from '../../../../shared/components/ConfirmDialog';
+import { readSearchSession, saveSearchSession } from '../../../../shared/utils/searchSession';
 import type { MenuPermission, ModuleItem, PageContent } from '../../../dashboard/types/dashboard';
 import { formatMoney, formatQty } from '../../entry/sales-register/utils/salesRegister';
 import { defaultSalesDetailValues, toSalesQuery } from '../sales-status/utils/salesStatus';
@@ -56,17 +57,20 @@ export function SalesTotalManagementPage({
   selectedMenuPermissions,
 }: SalesTotalManagementPageProps) {
   const [defaults] = useState(defaultSalesDetailValues);
-  const management = useSalesTotalManagement(toSalesQuery(defaults, ''));
+  // 2026-11-04 마지막으로 조회한 조건(거래처 · 상세 조회)은 탭 세션에 두고, 다른 화면에 갔다 돌아오면 그 조건으로 다시 부른다
+  const [saved] = useState(() => readSearchSession('sl-sales-total', { keyword: '', detailValues: defaults }, { keyword: '', detailValues: {} }));
+  const management = useSalesTotalManagement(toSalesQuery(saved.detailValues, saved.keyword));
   const { loaded, shown, visible } = management;
-  const [client, setClient] = useState('');
-  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
-  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(defaults);
+  const [client, setClient] = useState(saved.keyword);
+  const [detailValues, setDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
+  const [appliedDetailValues, setAppliedDetailValues] = useState<Record<string, PageSearchFieldValue>>(saved.detailValues);
 
   const columns = useMemo(() => createSalesTotalColumns(), []);
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
 
   const reload = (values = appliedDetailValues) => {
     setAppliedDetailValues(values);
+    saveSearchSession('sl-sales-total', { keyword: client, detailValues: values });
     management.setDirection(toDirection(values.direction));
     void management.loadRows(toSalesQuery(values, client));
   };
@@ -121,7 +125,7 @@ export function SalesTotalManagementPage({
         onDetailSearch={reload}
         detailLoading={management.loading}
       />
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           <StatTile label="건수" value={loaded ? String(shown.count) : '-'} />
           <StatTile label="입고 수량" value={loaded ? formatQty(shown.inQty) : '-'} />

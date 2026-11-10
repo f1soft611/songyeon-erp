@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   UNGROUPED, availableChannels, batteryText, channelLabel, channelValueText, groupSections, rangeText, refreshToast, toTemp, valueText,
   type TempReading,
-} from '../src/pages/qm/temperature/utils/temperature';
+} from '../src/pages/qm/temperature/temp-monitor/utils/temperature';
 
 const r = (id: number, groupName: string | null, extra: Partial<TempReading> = {}): TempReading => ({ id, name: `센서${id}`, groupName, ok: true, ...extra });
 

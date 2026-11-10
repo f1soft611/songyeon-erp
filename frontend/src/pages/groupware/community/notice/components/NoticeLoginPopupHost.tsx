@@ -18,7 +18,7 @@ import { NoticePopupBody } from './NoticePopupBody';
 type Queue = { ids: number[]; index: number };
 const sessionKey = () => {
   const auth = getStoredAuth();
-  return auth ? `s-erp-notice-popups:${JSON.stringify([auth.tenantCode, auth.userId, auth.popupSessionId ?? 'legacy'])}` : '';
+  return auth ? `songyeon-erp-notice-popups:${JSON.stringify([auth.tenantCode, auth.userId, auth.popupSessionId ?? 'legacy'])}` : '';
 };
 
 export function NoticeLoginPopupHost() {

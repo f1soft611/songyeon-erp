@@ -60,6 +60,7 @@ public class ProductRegisterServiceImpl extends EgovAbstractServiceImpl implemen
         product.setProductName(name);
         product.setSpec(memo(request.getSpec()));
         product.setStorage(itemMasterService.resolveStorageCode(request.getStorage())); // 2026-10-23 공통코드 STORAGE_METHOD 코드
+        product.setFoodType(itemMasterService.resolveFoodTypeCode(request.getFoodType())); // 2026-11-05 공통코드 FOOD_TYPE 코드
         product.setClientCode(clientCode);
         product.setProductType(memo(request.getProductType()));
         product.setRegUserId(request.getRegUserId());

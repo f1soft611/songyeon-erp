@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInitialLoadState } from '../../../../../shared/hooks/useInitialLoadState';
 import { searchDocumentStatus } from '../services/documentStatus.service';
 import type {
@@ -9,25 +9,27 @@ import type {
 export function useDocumentStatusList(
   appliedFilters: DocumentStatusFilters,
   enabled: boolean,
-  onLoadStart: () => void,
 ) {
   const [totalRowCount, setTotalRowCount] = useState(0);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [rows, setRows] = useState<DocumentStatusRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [retryToken, setRetryToken] = useState(0);
+  const [retryRequest, setRetryRequest] = useState({ version: 0, quiet: false });
+  const previousRetryVersion = useRef(0);
   const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   useEffect(() => {
     if (!enabled) return;
 
     const controller = new AbortController();
+    const isQuietReload =
+      retryRequest.quiet && retryRequest.version !== previousRetryVersion.current;
+    previousRetryVersion.current = retryRequest.version;
     start();
     setHasLoaded(false);
     setError('');
-    onLoadStart();
-    setLoading(true);
+    if (!isQuietReload) setLoading(true);
 
     void searchDocumentStatus(appliedFilters, controller.signal)
       .then((result) => {
@@ -45,18 +47,22 @@ export function useDocumentStatusList(
         );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && !isQuietReload) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [appliedFilters, enabled, onLoadStart, retryToken, start, succeed, fail]);
+  }, [appliedFilters, enabled, retryRequest, start, succeed, fail]);
 
   const clearError = useCallback(() => setError(''), []);
   const retry = useCallback(() => {
     setHasLoaded(false);
     setError('');
-    setRetryToken((current) => current + 1);
+    setRetryRequest((current) => ({ version: current.version + 1, quiet: false }));
   }, []);
+  const refreshQuietly = useCallback(
+    () => setRetryRequest((current) => ({ version: current.version + 1, quiet: true })),
+    [],
+  );
 
-  return { initialLoad, rows, totalRowCount, hasLoaded, loading, error, clearError, retry };
+  return { initialLoad, rows, totalRowCount, hasLoaded, loading, error, clearError, retry, refreshQuietly };
 }

@@ -44,12 +44,13 @@ public class ItemMasterDAO extends EgovAbstractMapper {
         update("ItemMasterDAO.updateProductAudit", params);
     }
 
-    /** clientCode = 거래처코드(2026-10-23, 예전에는 거래처 이름) */
-    public void updateProductInfo(String code, String name, String storage, String clientCode) throws Exception {
+    /** clientCode = 거래처코드(2026-10-23, 예전에는 거래처 이름), foodType = 식품유형 코드(2026-11-05, 공통코드 FOOD_TYPE) */
+    public void updateProductInfo(String code, String name, String storage, String foodType, String clientCode) throws Exception {
         Map<String, Object> params = new HashMap<>();
         params.put("code", code);
         params.put("name", name);
         params.put("storage", storage);
+        params.put("foodType", foodType);
         params.put("clientCode", clientCode);
         update("ItemMasterDAO.updateProductInfo", params);
     }
@@ -143,6 +144,11 @@ public class ItemMasterDAO extends EgovAbstractMapper {
     /** 보관방법: 공통코드 STORAGE_METHOD 의 사용 중 코드(2026-10-23) */
     public List<String> selectStorageCodes() throws Exception {
         return selectList("ItemMasterDAO.selectStorageCodes");
+    }
+
+    /** 식품유형: 공통코드 FOOD_TYPE 의 사용 중 코드(2026-11-05) */
+    public List<String> selectFoodTypeCodes() throws Exception {
+        return selectList("ItemMasterDAO.selectFoodTypeCodes");
     }
 
     /** 거래처 고르기 목록: 사용 중 거래처 코드 · 이름(2026-10-23) */

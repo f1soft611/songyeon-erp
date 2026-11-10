@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!-- 품질관리 - 제품검사 (송연 qdocs.py). 2026-11-06 제품별 기준 탭 · 검사 탭 조회만.
+     식품유형은 공통코드 FOOD_TYPE 코드로 저장된다(20261105_003). 화면에는 공통코드 이름, 코드가 아닌 예전 글자는 그대로 -->
+<mapper namespace="ProductInspectionDAO">
+
+    <!-- 제품별 기준 목록(송연 pspec_products): 사용안함 제품은 빼고, 식품유형 있는 것 먼저 · 제품명 순, 최대 500줄 -->
+    <select id="selectProductSpecs" parameterType="map" resultType="egovframework.let.qm.inspection.productinspection.domain.model.ProductSpecRowVO">
+        SELECT
+            p.code AS "code",
+            p.name AS "name",
+            p.spec AS "spec",
+            NULLIF(TRIM(p.food_type), '') AS "foodType",
+            COALESCE(
+                (SELECT i.item_nm
+                   FROM tb_common_code_item i
+                   JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'FOOD_TYPE'
+                   JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                  WHERE i.item_code = TRIM(p.food_type)
+                  LIMIT 1),
+                NULLIF(TRIM(p.food_type), '')) AS "foodTypeNm"
+        FROM products p
+        WHERE COALESCE(p.discontinued, 0) = 0
+        <if test="q != null and q != ''">
+          AND (p.name ILIKE '%' || #{q} || '%' OR p.code ILIKE '%' || #{q} || '%')
+        </if>
+        <if test="typed == 'Y'.toString()">
+          AND NULLIF(TRIM(p.food_type), '') IS NOT NULL
+        </if>
+        <if test="typed == 'N'.toString()">
+          AND NULLIF(TRIM(p.food_type), '') IS NULL
+        </if>
+        ORDER BY CASE WHEN NULLIF(TRIM(p.food_type), '') IS NULL THEN 1 ELSE 0 END, p.name, p.code
+        LIMIT 500
+    </select>
+
+    <!-- 요약(검색과 관계없이 사용 중인 제품 전체). 규격 넣은 수는 서비스에서 0(제품별 기준 표가 아직 없다) -->
+    <select id="selectSpecStats" resultType="egovframework.let.qm.inspection.productinspection.domain.model.ProductSpecStatsVO">
+        SELECT
+            COUNT(*)::int AS "total",
+            COUNT(*) FILTER (WHERE NULLIF(TRIM(p.food_type), '') IS NOT NULL)::int AS "typed"
+        FROM products p
+        WHERE COALESCE(p.discontinued, 0) = 0
+    </select>
+
+    <!-- 검사 탭 로트(송연 list_lots · lot_context). 기본은 생산이 끝난 것(실생산량이 들어온 줄)만, planned 면 생산예정 줄도.
+         기간: 제조일 = 생산일, 출고일 = 그 로트의 출하줄 날짜나 생산줄의 물류출고일 중 하나라도 기간 안.
+         출하줄 날짜는 확정된 것 · 안 된 것으로 나눠 ' / ' 로 잇고, 출고일 · 생산량 · 소비기한 문구는 서비스가 만든다. 최대 300줄 -->
+    <select id="selectLots" parameterType="map" resultType="egovframework.let.qm.inspection.productinspection.domain.model.InspectionLotVO">
+        SELECT
+            ps.id AS "lotId",
+            ps.lot_no AS "lotNo",
+            ps.schedule_date AS "madeOn",
+            ps.product_code AS "productCode",
+            COALESCE(NULLIF(TRIM(pr.name), ''), ps.product_code) AS "productName",
+            NULLIF(TRIM(pr.food_type), '') AS "foodType",
+            COALESCE(
+                (SELECT i.item_nm
+                   FROM tb_common_code_item i
+                   JOIN tb_common_code_group g ON g.common_code_group_id = i.group_id AND g.group_code = 'FOOD_TYPE'
+                   JOIN tb_tenant t ON t.tenant_id = g.tenant_id AND t.tenant_code = 'SONGYEON'
+                  WHERE i.item_code = TRIM(pr.food_type)
+                  LIMIT 1),
+                NULLIF(TRIM(pr.food_type), '')) AS "foodTypeNm",
+            pr.net_weight AS "netWeight",
+            pr.shelf_life_months AS "shelfLifeMonths",
+            pr.shelf_life_unit AS "shelfLifeUnit",
+            pr.storage AS "storage",
+            ps.actual_qty AS "actualQty",
+            ps.order_qty AS "orderQty",
+            ps.logistics_date AS "logisticsDate",
+            ps.is_stock_production AS "stockProduction",
+            (SELECT string_agg(ls.schedule_date, ' / ' ORDER BY ls.schedule_date)
+               FROM logistics_schedule ls
+              WHERE ls.lot_id = ps.id AND COALESCE(ls.ship_confirmed, 0) &lt;&gt; 0
+                AND NULLIF(TRIM(ls.schedule_date), '') IS NOT NULL) AS "doneShipDates",
+            (SELECT string_agg(ls.schedule_date, ' / ' ORDER BY ls.schedule_date)
+               FROM logistics_schedule ls
+              WHERE ls.lot_id = ps.id AND COALESCE(ls.ship_confirmed, 0) = 0
+                AND NULLIF(TRIM(ls.schedule_date), '') IS NOT NULL) AS "plannedShipDates"
+        FROM production_schedule ps
+        LEFT JOIN products pr ON pr.code = ps.product_code
+        WHERE 1 = 1
+        <if test="!planned">
+          AND NULLIF(TRIM(ps.actual_qty), '') IS NOT NULL
+        </if>
+        <if test="start != null and end != null">
+          <choose>
+            <when test="byShip">
+              AND (EXISTS (SELECT 1 FROM logistics_schedule ls2
+                            WHERE ls2.lot_id = ps.id AND ls2.schedule_date BETWEEN #{start} AND #{end})
+                   OR ps.logistics_date BETWEEN #{start} AND #{end})
+            </when>
+            <otherwise>
+              AND ps.schedule_date BETWEEN #{start} AND #{end}
+            </otherwise>
+          </choose>
+        </if>
+        ORDER BY ps.schedule_date DESC, ps.id DESC
+        LIMIT 300
+    </select>
+</mapper>

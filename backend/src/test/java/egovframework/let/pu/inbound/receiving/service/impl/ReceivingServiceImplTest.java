@@ -206,6 +206,38 @@ class ReceivingServiceImplTest {
 		verify(attachments).deleteAllFor("receiving", "3");
 	}
 
+	@DisplayName("취소 막기(2026-11-05): 반품이 걸린 입고, 지우면 재고가 마이너스가 되는 입고는 지우지 않는다")
+	@Test
+	void cancelBlocked() throws Exception {
+		ReceivingDAO dao = mock(ReceivingDAO.class);
+		ReceivingServiceImpl service = new ReceivingServiceImpl(dao, mock(AttachmentService.class));
+		ReceivingVO returned = new ReceivingVO();
+		returned.setMaterialCode("2705");
+		returned.setQty(10.0);
+		returned.setStockQty(50.0);
+		when(dao.selectForCancel(3L)).thenReturn(returned);
+		when(dao.selectReturnedQty(3L)).thenReturn(2.0);
+		assertEquals("반품이 등록된 입고는 지울 수 없어요. 반품등록에서 반품을 먼저 지워주세요",
+				assertThrows(IllegalArgumentException.class, () -> service.cancel(3L)).getMessage());
+
+		ReceivingVO used = new ReceivingVO();
+		used.setMaterialCode("2705");
+		used.setQty(10.0);
+		used.setStockQty(3.5);
+		when(dao.selectForCancel(4L)).thenReturn(used);
+		when(dao.selectReturnedQty(4L)).thenReturn(0.0);
+		assertEquals("재고가 모자라 지울 수 없어요(현재 재고 3.5, 입고 수량 10)",
+				assertThrows(IllegalArgumentException.class, () -> service.cancel(4L)).getMessage());
+
+		verify(dao, org.mockito.Mockito.never()).addMaterialStock(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyDouble());
+		verify(dao, org.mockito.Mockito.never()).deleteReceiving(org.mockito.ArgumentMatchers.anyLong());
+
+		// 재고가 딱 입고 수량만큼이면 지운다(0 이 된다)
+		used.setStockQty(10.0);
+		service.cancel(4L);
+		verify(dao).deleteReceiving(4L);
+	}
+
 	@DisplayName("마지막 단가: 같은 거래처 우선, 없으면 전체, 코드 없으면 비움 / 집계·상세는 기간 필수")
 	@Test
 	void lastPriceAndSummary() throws Exception {

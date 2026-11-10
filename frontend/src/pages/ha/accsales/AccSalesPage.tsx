@@ -212,7 +212,7 @@ export function AccSalesPage({ selectedModule, currentMenuName, content, breadcr
           <Tab value="매입" label={ACC_SALES.매입.tab} />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Card sx={cardSx}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <Typography aria-label="조회 조건" sx={{ fontSize: 12.5, color: 'text.secondary' }}>

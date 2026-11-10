@@ -27,7 +27,7 @@ describe('영업관리 > 제품등록', () => {
 
   it('빈 칸은 null, 원재료명·배합비율이 모두 있는 줄만, 맞춘 원재료는 코드도 보낸다', () => {
     const body = buildRegisterBody(
-      { ...EMPTY_PRODUCT_FORM, name: ' 떡볶이소스 2kg ', spec: ' ', storage: '002', clientCode: '000003' }, // 2026-10-23 보관방법 · 거래처는 코드
+      { ...EMPTY_PRODUCT_FORM, name: ' 떡볶이소스 2kg ', spec: ' ', storage: '002', foodType: '001', clientCode: '000003' }, // 2026-10-23 보관방법 · 거래처, 2026-11-05 식품유형은 코드
       [
         row({ id: '1', materialName: ' 고춧가루 ', ratioPercent: 12.5, unitPrice: 8700, materialCode: '000002' }),
         row({ id: '2', materialName: '소금', ratioPercent: null }),
@@ -40,12 +40,18 @@ describe('영업관리 > 제품등록', () => {
       spec: null,
       productType: null,
       storage: '002',
+      foodType: '001',
       clientCode: '000003',
       bom: [
         { materialName: '고춧가루', ratioPercent: 12.5, unitPrice: 8700, materialCode: '000002' },
         { materialName: '설탕', ratioPercent: 3, unitPrice: null },
       ],
     });
+  });
+
+  it('식품유형을 고르지 않으면 null 로 보낸다(2026-11-05, 비워 둘 수 있다)', () => {
+    expect(EMPTY_PRODUCT_FORM.foodType).toBe('');
+    expect(buildRegisterBody({ ...EMPTY_PRODUCT_FORM, name: '소스', foodType: ' ' }, []).foodType).toBeNull();
   });
 
   it('등록하면 발번한 제품코드와 원재료비를 받는다', async () => {

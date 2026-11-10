@@ -298,6 +298,12 @@ export const pageContentMap: Record<string, PageContent> = {
       },
     ],
   },
+  'screen-reviews': {
+    title: '화면검수 관리',
+    description: '메뉴 · 화면별 검수 상태를 한 번에 확인해요',
+    cards: [],
+    items: [],
+  },
   'f1-grid-test': {
     title: 'F1 Grid 테스트',
     description: '클립보드, 검증, 확장 에디터와 키보드 입력을 확인합니다.',

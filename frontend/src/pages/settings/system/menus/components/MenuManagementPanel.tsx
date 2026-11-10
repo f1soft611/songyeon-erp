@@ -37,15 +37,15 @@ type MenuManagementPanelProps = {
   selectedRoleId?: string;
   permissions: MenuPermissionDefinition[];
   canExportExcel?: boolean;
-  // 메뉴 권한(2026-10-21): 쓰기 = 셀 편집 · 오른쪽 클릭 행 추가, 삭제 = 오른쪽 클릭 행 삭제. 안 주면 true
-  canWrite?: boolean;
-  canDelete?: boolean;
   menuGridLoading?: boolean;
   onRefresh?: (
     moduleId: number,
     bypassDirtyConfirmation?: boolean,
     showSkeleton?: boolean,
-  ) => Promise<void>;
+  ) => Promise<void | boolean>;
+  // 메뉴 권한(2026-10-21): 쓰기 = 셀 편집 · 오른쪽 클릭 행 추가, 삭제 = 오른쪽 클릭 행 삭제. 안 주면 true
+  canWrite?: boolean;
+  canDelete?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
   onSaveSuccess?: (message: string) => void;
@@ -94,7 +94,7 @@ export const MenuManagementPanel = forwardRef<
   useImperativeHandle(ref, () => ({
     saveCurrentChanges: handleSave,
     deleteSelectedRows: () => {
-      treeRef.current?.deleteSelectedRows();
+      if (!saving) treeRef.current?.deleteSelectedRows();
     },
     exportCurrentRows: () => {
       const rows = treeRef.current?.getActiveRows() ?? [];
@@ -157,16 +157,19 @@ export const MenuManagementPanel = forwardRef<
       headerGroup: '기본기능',
       width: 100,
       type: 'checkbox' as const,
-      editable: (row: MenuManagementRow) => !row.hasChildren,
+      editable: (row: MenuManagementRow) => !saving && !row.hasChildren,
       getValue: (row: MenuManagementRow) =>
         hasPermissionGroup(row.permissionCodes, codes),
-      onValueChange: (row: MenuManagementRow, checked: unknown) => ({
-        permissionCodes: togglePermissionGroup(
-          row.permissionCodes,
-          codes,
-          Boolean(checked),
-        ),
-      }),
+      onValueChange: (row: MenuManagementRow, checked: unknown) =>
+        saving
+          ? {}
+          : {
+              permissionCodes: togglePermissionGroup(
+                row.permissionCodes,
+                codes,
+                Boolean(checked),
+              ),
+            },
       headerAlign: 'center' as const,
       align: 'center' as const,
     }),
@@ -185,6 +188,7 @@ export const MenuManagementPanel = forwardRef<
       row: MenuManagementRow;
       field: keyof MenuManagementRow;
     }) => {
+      if (saving) return false;
       if (field === 'code') {
         return isNewMenuRow(row.id);
       }
@@ -343,7 +347,8 @@ export const MenuManagementPanel = forwardRef<
         }
       }
 
-      await onRefresh?.(selectedModule.moduleId, true);
+      const refreshed = await onRefresh?.(selectedModule.moduleId, true);
+      if (refreshed === false) return;
       saveCheckpointRef.current = undefined;
       completedPermissionRowIdsRef.current.clear();
       setChanges({ insertedRows: [], updatedRows: [], deletedRows: [] });
@@ -458,6 +463,18 @@ export const MenuManagementPanel = forwardRef<
               height: '100%',
               overflow: 'hidden',
             }}
+            onContextMenuCapture={(event) => {
+              if (saving) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
+            onKeyDownCapture={(event) => {
+              if (saving && event.key === 'Delete') {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            }}
           >
             <F1Tree
               key={treeKey}
@@ -478,13 +495,14 @@ export const MenuManagementPanel = forwardRef<
               ariaLabel="F1-TREE 메뉴 관리"
               canExportExcel={canExportExcel}
               excelFileName={`${selectedModule?.moduleName ?? 'menu'}-export`}
-              createRow={createMenuRow}
-              editorPlugins={[menuEditorPlugin]}
+              createRow={saving ? undefined : createMenuRow}
               allowAddRootInContextMenu={canWrite}
-              allowAddRowInContextMenu={canWrite}
-              allowDeleteRowInContextMenu={canDelete}
+              allowAddRowInContextMenu={canWrite && !saving}
+              allowDeleteRowInContextMenu={canDelete && !saving}
+              editorPlugins={[menuEditorPlugin]}
               loading={menuGridLoading}
               beforeEdit={({ row, field }) => {
+                if (saving) return false;
                 if (field === 'code' && !isNewMenuRow(row.id)) {
                   return false;
                 }

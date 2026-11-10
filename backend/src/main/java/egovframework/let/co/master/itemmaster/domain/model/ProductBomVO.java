@@ -34,6 +34,12 @@ public class ProductBomVO implements Serializable {
     @Schema(description = "보관방법 이름(공통코드 STORAGE_METHOD)")
     private String storageNm;
 
+    @Schema(description = "식품유형 코드(공통코드 FOOD_TYPE, 2026-11-05)")
+    private String foodType;
+
+    @Schema(description = "식품유형 이름(공통코드 FOOD_TYPE)")
+    private String foodTypeNm;
+
     @Schema(description = "거래처코드(clients.client_code, 2026-10-23. 제품에는 이 코드를 저장한다)")
     private String clientCode;
 

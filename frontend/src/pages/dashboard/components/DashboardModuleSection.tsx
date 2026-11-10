@@ -5,18 +5,25 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import StarOutlineOutlined from '@mui/icons-material/StarOutlineOutlined';
 import type { ModuleItem } from '../types/dashboard';
 
 type DashboardModuleSectionProps = {
   moduleItems: ModuleItem[];
   selectedModuleId: string;
+  hasFavorites?: boolean;
+  favoritesSelected?: boolean;
   onModuleChange: (moduleId: string) => void;
+  onFavoritesSelect?: () => void;
 };
 
 export function DashboardModuleSection({
   moduleItems,
   selectedModuleId,
+  hasFavorites = false,
+  favoritesSelected = false,
   onModuleChange,
+  onFavoritesSelect,
 }: DashboardModuleSectionProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -54,7 +61,10 @@ export function DashboardModuleSection({
           <ListItemButton
             key={id}
             selected={selectedModuleId === id}
-            onClick={() => onModuleChange(id)}
+            onClick={(event) => {
+              event.currentTarget.blur();
+              onModuleChange(id);
+            }}
             aria-label={name}
             sx={{
               borderRadius: 1.5,
@@ -133,6 +143,44 @@ export function DashboardModuleSection({
             </Box>
           </ListItemButton>
         ))}
+        {hasFavorites && (
+          <ListItemButton
+            selected={favoritesSelected}
+            onClick={(event) => {
+              event.currentTarget.blur();
+              onFavoritesSelect?.();
+            }}
+            aria-label="즐겨찾기"
+            sx={{
+              borderRadius: 1.5,
+              minHeight: 56,
+              px: 0.5,
+              py: 0.5,
+              color: favoritesSelected ? '#1d4ed8' : isDark ? '#cbd5e1' : '#475569',
+              '&.Mui-selected': {
+                bgcolor: isDark
+                  ? 'rgba(59,130,246,0.3)'
+                  : 'linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)',
+              },
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0.4,
+                width: '100%',
+              }}
+            >
+              <StarOutlineOutlined fontSize="medium" />
+              <Typography variant="caption" sx={{ fontSize: '0.6rem', fontWeight: 700 }}>
+                즐겨찾기
+              </Typography>
+            </Box>
+          </ListItemButton>
+        )}
       </Stack>
     </Box>
   );

@@ -5,6 +5,7 @@ import {
   deleteCommentFromTree,
   insertNoticeReplyAfter,
 } from '../src/pages/groupware/community/notice/data/noticeCommentTree';
+import { toNoticeCommentTree } from '../src/pages/groupware/community/notice/data/noticePostAdapter';
 
 const root: NoticeCommentItem = {
   id: 10,
@@ -16,6 +17,35 @@ const root: NoticeCommentItem = {
 };
 
 describe('notice comment tree helpers', () => {
+  it('allows editing only notice comments written by the current user', () => {
+    localStorage.setItem(
+      'songyeon-erp-auth',
+      JSON.stringify({ userId: 'current-user' }),
+    );
+
+    const [owned, other, missingWriter, deleted] = toNoticeCommentTree([
+      { commentId: 1, writerId: 'current-user' },
+      { commentId: 2, writerId: 'another-user' },
+      { commentId: 3 },
+      {
+        commentId: 4,
+        writerId: 'current-user',
+        deletedYn: 'Y',
+      },
+    ]);
+
+    expect(owned.isEditable).toBe(true);
+    expect(other.isEditable).toBe(false);
+    expect(missingWriter.isEditable).toBe(false);
+    expect(deleted.isEditable).toBe(false);
+
+    localStorage.removeItem('songyeon-erp-auth');
+    const [withoutAuth] = toNoticeCommentTree([
+      { commentId: 5, writerId: 'current-user' },
+    ]);
+    expect(withoutAuth.isEditable).toBe(false);
+  });
+
   it('appends replies to their parent and inserts a display reply after a target', () => {
     const reply: NoticeCommentItem = {
       id: 11,

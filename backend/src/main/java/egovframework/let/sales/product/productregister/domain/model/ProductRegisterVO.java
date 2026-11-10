@@ -35,6 +35,9 @@ public class ProductRegisterVO implements Serializable {
     @Schema(description = "보관방법")
     private String storage;
 
+    @Schema(description = "식품유형 코드(2026-11-05, 공통코드 FOOD_TYPE)")
+    private String foodType;
+
     // 거래처코드(2026-10-23): 제품 표에는 이 코드를 저장한다(이름은 응답용)
     private String clientCode;
 

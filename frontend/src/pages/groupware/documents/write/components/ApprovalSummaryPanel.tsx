@@ -14,10 +14,32 @@ export function ApprovalSummaryPanel({
   summary,
   onSelectScope,
 }: ApprovalSummaryPanelProps) {
-  const scopes: Array<{ scope: DocumentApprovalScope; count: number }> = [
-    { scope: 'MY_PENDING', count: summary?.actionRequiredCount ?? 0 },
-    { scope: 'IN_PROGRESS', count: summary?.inProgressCount ?? 0 },
-    { scope: 'DRAFT', count: summary?.draftCount ?? 0 },
+  const scopes: Array<{ scope: DocumentApprovalScope; count: number; label: string }> = [
+    {
+      scope: 'MY_PENDING',
+      count: summary?.actionRequiredCount ?? 0,
+      label: getDocumentApprovalScopeLabel('MY_PENDING'),
+    },
+    {
+      scope: 'IN_PROGRESS',
+      count: summary?.inProgressCount ?? 0,
+      label: getDocumentApprovalScopeLabel('IN_PROGRESS'),
+    },
+    {
+      scope: 'DRAFT',
+      count: summary?.draftCount ?? 0,
+      label: getDocumentApprovalScopeLabel('DRAFT'),
+    },
+    {
+      scope: 'MY_REFERENCE_PENDING',
+      count: summary?.referenceConfirmationRequiredCount ?? 0,
+      label: '내가 확인할 문서',
+    },
+    {
+      scope: 'MY_FINAL_CONFIRMATION_PENDING',
+      count: summary?.finalConfirmationRequiredCount ?? 0,
+      label: getDocumentApprovalScopeLabel('MY_FINAL_CONFIRMATION_PENDING'),
+    },
   ];
 
   return (
@@ -33,7 +55,7 @@ export function ApprovalSummaryPanel({
           결재 요약
         </Typography>
         <Stack spacing={1}>
-          {scopes.map(({ scope, count }) => (
+          {scopes.map(({ scope, count, label }) => (
             <Button
               key={scope}
               variant="text"
@@ -51,7 +73,7 @@ export function ApprovalSummaryPanel({
               }}
             >
               <Typography variant="body2" color="text.secondary">
-                {getDocumentApprovalScopeLabel(scope)}
+                {label}
               </Typography>
               <Typography variant="body2" sx={{ fontWeight: 800 }}>
                 {count}건

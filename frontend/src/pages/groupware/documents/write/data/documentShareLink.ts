@@ -1,7 +1,12 @@
 import { createDocumentShareToken, getSharedDocumentPreview } from '../services/documentApproval.service';
+import {
+  extractContentShareLinks,
+  parseContentShareLink,
+  type DocumentShareReference,
+} from '../../../../../shared/components/feed/contentShareLinks';
 
 const DOCUMENT_SHARE_PATH = '/groupware/doc/write';
-export type DocumentShareReference = number | string;
+export type { DocumentShareReference } from '../../../../../shared/components/feed/contentShareLinks';
 
 export async function buildDocumentShareLink(documentId: number): Promise<string> {
   if (!Number.isSafeInteger(documentId) || documentId <= 0) {
@@ -12,23 +17,8 @@ export async function buildDocumentShareLink(documentId: number): Promise<string
 }
 
 export function parseDocumentShareLink(value: string): DocumentShareReference | null {
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.origin !== window.location.origin || url.pathname !== DOCUMENT_SHARE_PATH
-      || url.username || url.password) return null;
-    if (url.searchParams.has('share')) {
-      const token = url.searchParams.get('share') ?? '';
-      return url.searchParams.getAll('share').length === 1 && !url.searchParams.has('documentId')
-        && /^v1\.[A-Za-z0-9_-]{59}$/.test(token) ? token : null;
-    }
-    if (url.searchParams.getAll('documentId').length !== 1) return null;
-    const rawId = url.searchParams.get('documentId') ?? '';
-    if (!/^[1-9]\d*$/.test(rawId)) return null;
-    const id = Number(rawId);
-    return Number.isSafeInteger(id) ? id : null;
-  } catch {
-    return null;
-  }
+  const parsed = parseContentShareLink(value);
+  return parsed?.kind === 'document' ? parsed.reference : null;
 }
 
 export async function resolveDocumentShareReference(reference: DocumentShareReference): Promise<number> {
@@ -37,16 +27,13 @@ export async function resolveDocumentShareReference(reference: DocumentShareRefe
 }
 
 export function extractDocumentShareIds(html: string): DocumentShareReference[] {
-  const document = new DOMParser().parseFromString(html, 'text/html');
-  document.querySelectorAll('script, style').forEach((element) => element.remove());
-  const candidates = [
-    ...Array.from(document.querySelectorAll('a[href]'), (anchor) => anchor.getAttribute('href') ?? ''),
-  ];
-  const textNodes = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  while (textNodes.nextNode()) {
-    if (textNodes.currentNode.parentElement?.closest('a')) continue;
-    candidates.push(...((textNodes.currentNode.textContent ?? '').match(/https?:\/\/[^\s<>"']+/g) ?? [])
-      .map((value) => value.replace(/[.,;!?)\]}]+$/, '')));
-  }
-  return [...new Set(candidates.map(parseDocumentShareLink).filter((id) => id !== null))];
+  return [...new Set(extractContentShareLinks(html)
+    .filter((link): link is Extract<typeof link, { kind: 'document' }> => link.kind === 'document')
+    .map((link) => link.reference))];
+}
+
+export function extractExternalLinkUrls(html: string): string[] {
+  return [...new Set(extractContentShareLinks(html)
+    .filter((link): link is Extract<typeof link, { kind: 'external' }> => link.kind === 'external')
+    .map((link) => link.url))];
 }

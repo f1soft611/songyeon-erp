@@ -4,11 +4,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import SaveIcon from '@mui/icons-material/Save';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
+import { useInitialLoadState } from '../../../../shared/hooks/useInitialLoadState';
 import { type PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
 import { useNotification } from '../../../../shared/context/NotificationContext';
+import { useUnsavedChangesBeforeUnload } from '../../../../shared/hooks/useUnsavedChangesBeforeUnload';
 import type {
   ModuleItem,
   PageContent,
@@ -52,11 +55,13 @@ export function ModuleManagementPage({
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [panelDirty, setPanelDirty] = useState(false);
+  useUnsavedChangesBeforeUnload(panelDirty);
   const [saving, setSaving] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
   const [moduleGridKey, setModuleGridKey] = useState(0);
   const [refreshConfirmOpen, setRefreshConfirmOpen] = useState(false);
   const moduleRequestIdRef = useRef(0);
+  const { start, succeed, fail, ...initialLoad } = useInitialLoadState();
 
   const filteredModules = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -84,6 +89,7 @@ export function ModuleManagementPage({
   const loadModules = useCallback(
     async ({ showSkeleton = false }: { showSkeleton?: boolean } = {}) => {
       const requestId = ++moduleRequestIdRef.current;
+      start();
       setError('');
       if (showSkeleton) {
         setPageLoading(true);
@@ -93,10 +99,11 @@ export function ModuleManagementPage({
         const result = await fetchModuleRows();
         if (requestId === moduleRequestIdRef.current) {
           setModules(result);
+          succeed();
         }
       } catch (requestError) {
         if (requestId === moduleRequestIdRef.current) {
-          setModules([]);
+          fail(requestError);
           setError(
             requestError instanceof Error
               ? requestError.message
@@ -110,7 +117,7 @@ export function ModuleManagementPage({
         }
       }
     },
-    [],
+    [start, succeed, fail],
   );
 
   useEffect(() => {
@@ -124,7 +131,7 @@ export function ModuleManagementPage({
   }, [loadModules]);
 
   const handleSaveChanges = useCallback(async () => {
-    if (!modulePanelRef.current) return;
+    if (!modulePanelRef.current || saving) return;
     setSaving(true);
     try {
       await modulePanelRef.current.saveCurrentChanges();
@@ -137,22 +144,24 @@ export function ModuleManagementPage({
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [saving]);
 
   const requestModuleRefresh = useCallback(() => {
+    if (saving) return;
     if (panelDirty) {
       setRefreshConfirmOpen(true);
       return;
     }
-    void loadModules({ showSkeleton: true });
-  }, [loadModules, panelDirty]);
+    void loadModules({ showSkeleton: true }).catch(() => undefined);
+  }, [loadModules, panelDirty, saving]);
 
   const confirmModuleRefresh = useCallback(() => {
+    if (saving) return;
     setRefreshConfirmOpen(false);
     setPanelDirty(false);
     setModuleGridKey((current) => current + 1);
-    void loadModules({ showSkeleton: true });
-  }, [loadModules]);
+    void loadModules({ showSkeleton: true }).catch(() => undefined);
+  }, [loadModules, saving]);
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
     {
@@ -162,7 +171,7 @@ export function ModuleManagementPage({
           label: '조회',
           icon: SearchIcon,
           visible: pageActionPermissions.read,
-          disabled: false,
+          disabled: saving,
           onClick: requestModuleRefresh,
         },
       ],
@@ -173,6 +182,7 @@ export function ModuleManagementPage({
         {
           label: '저장',
           icon: SaveIcon,
+          saving,
           visible: pageActionPermissions.write,
           disabled: !panelDirty || saving,
           onClick: () => {
@@ -203,8 +213,10 @@ export function ModuleManagementPage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
+      <PageLoadBoundary {...initialLoad} label="모듈 목록" onRetry={requestModuleRefresh}>
       <PageSearchArea>
         <TextField
+          disabled={saving}
           size="small"
           margin="none"
           placeholder="모듈 코드/명/경로/아이콘 검색"
@@ -217,6 +229,7 @@ export function ModuleManagementPage({
                 <IconButton
                   size="small"
                   aria-label="검색어 초기화"
+                  disabled={saving}
                   onClick={() => setSearchQuery('')}
                   edge="end"
                   sx={{ mr: 0.5, color: 'text.secondary' }}
@@ -258,6 +271,7 @@ export function ModuleManagementPage({
         onError={setError}
         moduleGridKey={moduleGridKey}
         moduleGridLoading={pageLoading}
+        saving={saving}
       />
       <UnsavedChangesConfirmDialog
         open={refreshConfirmOpen}
@@ -268,6 +282,7 @@ export function ModuleManagementPage({
         onCancel={() => setRefreshConfirmOpen(false)}
         onContinue={confirmModuleRefresh}
       />
+      </PageLoadBoundary>
     </Box>
   );
 }

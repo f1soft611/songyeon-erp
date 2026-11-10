@@ -15,6 +15,7 @@ export type UserSelectEditorProps = {
   value: F1GridUserValue;
   options: F1GridUserOption[];
   multiple?: boolean;
+  disableCloseOnSelect?: boolean;
   hideSelectedOptions?: boolean;
   preserveSelectionOrder?: boolean;
   autoFocus?: boolean;
@@ -45,6 +46,7 @@ export function UserSelectEditor({
   value,
   options,
   multiple = false,
+  disableCloseOnSelect = multiple,
   hideSelectedOptions = false,
   preserveSelectionOrder = false,
   autoFocus = false,
@@ -105,7 +107,7 @@ export function UserSelectEditor({
       readOnly={readOnly}
       disabled={disabled}
       openOnFocus
-      disableCloseOnSelect={multiple}
+      disableCloseOnSelect={disableCloseOnSelect}
       filterSelectedOptions={hideSelectedOptions}
       options={options}
       value={selectedValue as F1GridUserOption | F1GridUserOption[] | null}

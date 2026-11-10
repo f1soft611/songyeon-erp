@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="MenuFavoriteDAO">
+
+    <select id="selectFolders" resultType="egovframework.let.system.menus.domain.model.MenuFavoriteFolderVO">
+        SELECT favorite_folder_id AS folder_id, folder_nm AS folder_name, tenant_id, user_id
+        FROM public.tb_user_menu_favorite_folder
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+        ORDER BY favorite_folder_id ASC
+    </select>
+
+    <select id="selectFavorites" resultType="egovframework.let.system.menus.domain.model.MenuFavoriteVO">
+        SELECT favorite_id, menu_id, favorite_folder_id AS folder_id, favorite_nm AS favorite_name
+        FROM public.tb_user_menu_favorite
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+        ORDER BY COALESCE(favorite_folder_id, 0) ASC, favorite_id ASC
+    </select>
+
+    <select id="selectFavoriteFolder" resultType="egovframework.let.system.menus.domain.model.MenuFavoriteFolderVO">
+        SELECT favorite_folder_id AS folder_id, folder_nm AS folder_name, tenant_id, user_id
+        FROM public.tb_user_menu_favorite_folder
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND favorite_folder_id = #{folderId}
+    </select>
+
+    <select id="countFavoritesInFolder" resultType="int">
+        SELECT COUNT(*)
+        FROM public.tb_user_menu_favorite
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND favorite_folder_id = #{folderId}
+    </select>
+
+    <insert id="insertFolder" parameterType="map" useGeneratedKeys="true" keyProperty="folderId" keyColumn="favorite_folder_id">
+        INSERT INTO public.tb_user_menu_favorite_folder (tenant_id, user_id, folder_nm)
+        VALUES (#{tenantId}, #{userId}, #{folderName})
+    </insert>
+
+    <update id="renameFolder" parameterType="map">
+        UPDATE public.tb_user_menu_favorite_folder
+        SET folder_nm = #{folderName},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND favorite_folder_id = #{folderId}
+    </update>
+
+    <delete id="deleteFolder" parameterType="map">
+        DELETE FROM public.tb_user_menu_favorite_folder folder
+        WHERE folder.tenant_id = #{tenantId}
+          AND folder.user_id = #{userId}
+          AND folder.favorite_folder_id = #{folderId}
+          AND NOT EXISTS (
+              SELECT 1
+              FROM public.tb_user_menu_favorite favorite
+              WHERE favorite.tenant_id = folder.tenant_id
+                AND favorite.user_id = folder.user_id
+                AND favorite.favorite_folder_id = folder.favorite_folder_id
+          )
+    </delete>
+
+    <insert id="insertFavorite" parameterType="map" useGeneratedKeys="true" keyProperty="favoriteId" keyColumn="favorite_id">
+        INSERT INTO public.tb_user_menu_favorite (
+            tenant_id, user_id, menu_id, favorite_folder_id, favorite_nm
+        )
+        VALUES (
+            #{tenantId}, #{userId}, #{menuId}, #{folderId, jdbcType=BIGINT},
+            #{favoriteName, jdbcType=VARCHAR}
+        )
+    </insert>
+
+    <update id="moveFavorite" parameterType="map">
+        UPDATE public.tb_user_menu_favorite
+        SET favorite_folder_id = #{folderId, jdbcType=BIGINT},
+            favorite_nm = COALESCE(#{favoriteName, jdbcType=VARCHAR}, favorite_nm),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND favorite_id = #{favoriteId}
+    </update>
+
+    <delete id="deleteFavorite" parameterType="map">
+        DELETE FROM public.tb_user_menu_favorite
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND favorite_id = #{favoriteId}
+    </delete>
+</mapper>

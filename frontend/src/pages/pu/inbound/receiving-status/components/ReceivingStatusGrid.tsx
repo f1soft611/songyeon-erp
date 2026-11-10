@@ -1,7 +1,7 @@
 import { Box, Chip, Typography } from '@mui/material';
 import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
 import type { StatusRow } from '../../receiving-register/types/receiving.types';
-import { formatMoney, formatQty } from '../../receiving-register/utils/receiving';
+import { formatMoney } from '../../receiving-register/utils/receiving';
 
 const returnColor = ({ row }: { row: StatusRow }) => (row.isReturn ? { color: '#dc2626' } : undefined);
 
@@ -19,7 +19,7 @@ export function createReceivingStatusColumns(): F1GridColumn<StatusRow>[] {
     {
       field: 'receiveDate',
       headerName: '입고일자',
-      width: 110,
+      width: 100,
       align: 'center',
       mergeRows: true,
     },
@@ -41,7 +41,7 @@ export function createReceivingStatusColumns(): F1GridColumn<StatusRow>[] {
       field: 'subtotal',
       headerName: '거래처 소계',
       width: 120,
-      headerAlign: 'center',
+      type: 'currency',
       align: 'right',
       mergeRows: true,
       renderCell: ({ row }) => formatMoney(row.subtotal),
@@ -50,8 +50,8 @@ export function createReceivingStatusColumns(): F1GridColumn<StatusRow>[] {
     {
       field: 'materialKey',
       headerName: '입고품목',
-      flex: 1.3,
-      width: 200,
+      flex: 1,
+      width: 170,
       align: 'left',
       mergeRows: true,
       renderCell: ({ row }) => (
@@ -65,9 +65,9 @@ export function createReceivingStatusColumns(): F1GridColumn<StatusRow>[] {
       field: 'qty',
       headerName: '수량',
       width: 90,
-      headerAlign: 'center',
+      type: 'number',
+      decimalPlaces: 2,
       align: 'right',
-      renderCell: ({ row }) => formatQty(row.qty),
       getCellStyle: returnColor,
     },
     {
@@ -75,39 +75,38 @@ export function createReceivingStatusColumns(): F1GridColumn<StatusRow>[] {
       headerName: '과세',
       width: 70,
       align: 'center',
-      renderCell: ({ row }) => row.taxType || '',
     },
     {
       field: 'unitPrice',
       headerName: '단가',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 4,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.unitPrice),
     },
     {
       field: 'supplyAmount',
       headerName: '공급가액',
       width: 110,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.supplyAmount),
     },
     {
       field: 'vatAmount',
       headerName: '부가세',
       width: 100,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.vatAmount),
     },
     {
       field: 'totalAmount',
       headerName: '합계금액',
       width: 120,
-      headerAlign: 'center',
+      type: 'currency',
+      decimalPlaces: 3,
       align: 'right',
-      renderCell: ({ row }) => formatMoney(row.totalAmount),
       getCellStyle: ({ row }) => ({ fontWeight: 700, ...(row.isReturn ? { color: '#dc2626' } : {}) }),
     },
   ];

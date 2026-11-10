@@ -1,5 +1,5 @@
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import { IconButton, Menu, MenuItem } from '@mui/material';
+import { Divider, IconButton, Menu, MenuItem } from '@mui/material';
 import { useState } from 'react';
 import type { ApprovalDocumentStatus } from '../types/documentWrite.types';
 
@@ -8,6 +8,7 @@ type DocumentActionsMenuProps = {
   documentStatus?: ApprovalDocumentStatus;
   disabled?: boolean;
   onShare: () => void;
+  onAddReferences?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 };
@@ -17,6 +18,7 @@ export function DocumentActionsMenu({
   documentStatus,
   disabled = false,
   onShare,
+  onAddReferences,
   onEdit,
   onDelete,
 }: DocumentActionsMenuProps) {
@@ -42,6 +44,15 @@ export function DocumentActionsMenu({
         }}>
           문서 공유하기
         </MenuItem>
+        {onAddReferences && (
+          <MenuItem onClick={() => {
+            setAnchor(null);
+            onAddReferences();
+          }}>
+            참조자 추가하기
+          </MenuItem>
+        )}
+        {(canEdit || canDelete) && <Divider />}
         {canEdit && (
           <MenuItem onClick={() => {
             setAnchor(null);

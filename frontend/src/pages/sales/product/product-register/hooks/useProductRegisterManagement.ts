@@ -10,7 +10,7 @@ import { bomRowsFromQuote } from '../../../order/quote/utils/quote';
 import { emptyBomEditRows, newBomRowId, type BomEditGridHandle } from '../components/BomEditGrid';
 import { deleteProduct, registerProduct } from '../services/productRegister.service';
 import type { ProductRegisterBody, ProductRegisterForm } from '../types/productRegister.types';
-import { buildRegisterBody, EMPTY_PRODUCT_FORM, STORAGE_METHOD_GROUP, storageCodeOf } from '../utils/productRegister';
+import { buildRegisterBody, EMPTY_PRODUCT_FORM, FOOD_TYPE_GROUP, STORAGE_METHOD_GROUP, storageCodeOf } from '../utils/productRegister';
 
 const errorText = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback;
@@ -22,6 +22,7 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
   const savingRef = useRef(false);
   const [form, setForm] = useState<ProductRegisterForm>(EMPTY_PRODUCT_FORM);
   const storageOptions = useCommonCodeOptions(STORAGE_METHOD_GROUP); // 보관방법 공통코드(2026-10-23)
+  const foodTypeOptions = useCommonCodeOptions(FOOD_TYPE_GROUP); // 식품유형 공통코드(2026-11-05)
   const [bomSource, setBomSource] = useState<{ rows: BomEditRow[]; key: number }>(() => ({ rows: emptyBomEditRows(), key: 0 }));
   const [materials, setMaterials] = useState<MaterialOption[]>([]);
   const [materialsLoaded, setMaterialsLoaded] = useState(false);
@@ -47,7 +48,8 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
     if (filledQuoteRef.current === quote.quoteId || !materialsLoaded || (quote.storage && storageOptions.length === 0)) return;
     filledQuoteRef.current = quote.quoteId;
     // 견적의 보관방법은 이름 글자라 코드로 바꿔 채운다(2026-10-23)
-    setForm({ name: quote.productName, spec: quote.spec, productType: quote.productType, storage: storageCodeOf(storageOptions, quote.storage), clientCode: quote.clientCode });
+    // 견적에는 식품유형이 없어 비워 두고 여기서 고른다(2026-11-05)
+    setForm({ name: quote.productName, spec: quote.spec, productType: quote.productType, storage: storageCodeOf(storageOptions, quote.storage), foodType: '', clientCode: quote.clientCode });
     const rows = bomRowsFromQuote(quote.bom, materialsRef.current, newBomRowId);
     setBomSource((current) => ({ rows: rows.length ? rows : emptyBomEditRows(), key: current.key + 1 }));
     setError('');
@@ -196,6 +198,7 @@ export function useProductRegisterManagement(bomGridRef: RefObject<BomEditGridHa
     form,
     setFormValues,
     storageOptions,
+    foodTypeOptions,
     packagingTypes,
     clients,
     materials,

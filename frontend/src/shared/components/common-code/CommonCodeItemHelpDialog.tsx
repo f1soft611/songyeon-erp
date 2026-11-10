@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import AddIcon from '@mui/icons-material/Add';
-import { Alert, Box, Button, CircularProgress, Stack } from '@mui/material';
+import { Alert, Box, Button, Stack } from '@mui/material';
+import { AppSaveButton } from '../AppSaveButton';
 import { UnsavedChangesConfirmDialog } from '../UnsavedChangesConfirmDialog';
 import { CommonDialog } from '../CommonDialog';
 import { useNotification } from '../../context/NotificationContext';
+import { useUnsavedChangesBeforeUnload } from '../../hooks/useUnsavedChangesBeforeUnload';
 import {
   F1Grid,
   type F1GridChanges,
@@ -71,6 +73,7 @@ export function CommonCodeItemHelpDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  useUnsavedChangesBeforeUnload(open && hasChanges);
   const [gridKey, setGridKey] = useState(0);
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
@@ -209,13 +212,9 @@ export function CommonCodeItemHelpDialog({
         actions={
           <>
             {canEdit && (
-              <Button
+              <AppSaveButton
                 variant="contained"
-                startIcon={
-                  saving ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : undefined
-                }
+                saving={saving}
                 sx={{
                   borderRadius: 1.5,
                   fontWeight: 700,
@@ -226,7 +225,7 @@ export function CommonCodeItemHelpDialog({
                 onClick={() => void handleSave()}
               >
                 저장
-              </Button>
+              </AppSaveButton>
             )}
             <Button onClick={requestClose} disabled={saving}>
               취소

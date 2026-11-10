@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 export type MenuItem = {
   id: string;
+  menuId?: number;
   name: string;
   pageKey: string;
   path?: string;

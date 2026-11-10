@@ -194,6 +194,7 @@ const currentRows = grid.acceptSavedRows(savedRows);
 - 인라인 편집 중 같은 Grid의 다른 셀 또는 툴바/액션으로 이동하면 edit를 commit하고 dirty 변경 집합에 반영한다. Grid가 중첩 MUI Dialog/Modal 안에 있어도 조상 모달의 이벤트를 editor popup으로 오인하지 않는다. 실제 editor popup으로 포인터/포커스가 이동할 때만 commit을 보류한다. 따라서 폼 바깥의 저장 버튼도 편집 commit으로 갱신된 dirty 상태를 기준으로 동작한다.
 - 컨텍스트 메뉴 등으로 추가한 신규 행을 저장 전에 삭제하면 해당 행은 `deleted` 변경으로 남지 않는다. 행과 원본·dirty 상태를 함께 제거하므로 `getChanges()`의 inserted/updated/deleted 목록에서 모두 제외되며, 변경이 없으면 페이지 저장 액션도 비활성화할 수 있다.
 - dirty 표시는 컬럼 타입에 관계없이 동일하게 적용된다(텍스트, 숫자, 체크박스, 날짜, 시간 등). 컬럼 타입별 렌더링 분기와 무관하게 셀 루트에서 공통으로 마크를 그리기 때문이다.
+- 빈(`null`) 숫자 셀을 편집기로 열었다가 아무것도 입력하지 않고 확정하면 값은 `null` 그대로이고 dirty 로 표시하지 않는다. 0 을 직접 입력하면 빈 값과 다른 0 으로 저장한다(S_ERP `6894dd2a`, 송연 2026-11-04 반영. 이전에는 빈 입력이 `Number('')` = 0 으로 바뀌어 수정되지 않은 행이 dirty 가 됐다).
 - `column.getValue`로 값을 파생시키는 컬럼(예: 여러 체크박스가 하나의 배열 필드를 공유하는 권한 체크박스)은 dirty 판정도 `getValue(row)`를 원본 값과 비교해 계산한다. `onValueChange`가 실제로 갱신하는 필드명이 `column.field`와 다르더라도(예: `permissionCodes` 배열을 갱신하지만 컬럼은 `readPermission`) 해당 컬럼 셀에 정확히 dirty 마크가 표시된다.
 - `type: 'user'` 컬럼은 `userOptions`의 사용자 항목(`value`, `label`, `avatarUrl`, `positionName`, `departmentName`)을 검색/선택한다. 셀 편집과 row form modal은 같은 avatar/name/position/department 선택 UI를 사용하고, `form.multiple: true`면 선택 ID 배열과 개별 chip 해제를 제공한다.
 - 인라인 user picker option 클릭은 Autocomplete portal의 mousedown이 Grid outside-click commit으로 처리되지 않게 보호한다. 그렇지 않으면 option click보다 먼저 editor가 닫혀 선택값이 셀에 반영되지 않는다.
@@ -2510,6 +2511,7 @@ ERP
 
 - `hideSelectedOptions`: `true`이면 이미 선택된 사용자를 드롭다운 후보에서 숨긴다. 선택값은 입력 안의 칩으로 계속 표시한다. 기본값은 `false`다.
 - `preserveSelectionOrder`: `true`이면 선택 ID 배열 순서대로 선택 칩을 표시한다. 기본값은 `false`다.
+- `disableCloseOnSelect`: 사용자를 고른 뒤에도 목록을 열어 둘지 정한다. 기본값은 `multiple` 과 같다(여러 명 선택이면 열어 둠). 전자결재 참조자 추가 창은 여러 명을 고르면서 고를 때마다 목록을 닫도록 `false` 를 쓴다(S_ERP `ea020e60`, 송연 2026-11-04 반영).
 - 각 옵션은 필요한 화면에서만 활성화하며, 기본값을 사용하는 기존 화면의 동작은 유지한다.
 
 # 37. UserSelectEditor 라벨 수직 정렬

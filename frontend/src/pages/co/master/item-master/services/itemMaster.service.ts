@@ -33,6 +33,8 @@ export const toProductBomRow = (item: Record<string, unknown>): ProductBomRow =>
     spec: text(item.spec),
     storage: text(item.storage),
     storageNm: text(item.storageNm),
+    foodType: text(item.foodType),
+    foodTypeNm: text(item.foodTypeNm),
     clientName: text(item.clientName),
     clientCode: text(item.clientCode),
     discontinued: Number(item.discontinued) === 1,
@@ -85,12 +87,13 @@ export async function saveBom(code: string, rows: BomEditRow[]): Promise<number>
 
 export async function saveProductInfo(
   code: string,
-  payload: { name: string; storage: string; clientCode: string },
+  payload: { name: string; storage: string; foodType: string; clientCode: string },
 ): Promise<void> {
-  // 2026-10-23 거래처는 목록에서 고른 거래처코드를 보낸다(서버가 그대로 저장)
+  // 2026-10-23 거래처는 목록에서 고른 거래처코드를 보낸다(서버가 그대로 저장). 2026-11-05 식품유형도 코드
   await apiPut(`${productPath(code)}/info`, {
     name: payload.name.trim(),
     storage: payload.storage.trim(),
+    foodType: payload.foodType.trim(),
     clientCode: payload.clientCode.trim(),
   });
 }

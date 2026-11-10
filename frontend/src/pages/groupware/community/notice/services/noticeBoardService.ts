@@ -71,6 +71,10 @@ function readItem<T>(response: unknown): T | undefined {
   return (candidate.item ?? candidate.result) as T | undefined;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 export async function fetchNoticePosts(
   page: number,
   size: number,
@@ -116,6 +120,38 @@ export async function fetchNoticePostDetail(
   );
 
   return (readItem<NoticeBoardPostApi>(result) ?? {}) as NoticeBoardPostApi;
+}
+
+export async function buildNoticeShareLink(postId: number): Promise<string> {
+  if (!Number.isSafeInteger(postId) || postId <= 0) {
+    throw new Error('공지 ID가 올바르지 않습니다.');
+  }
+  const response = await apiPost<{ item?: { token?: string } }>(
+    `/api/v1/groupware/boards/notice/posts/${postId}/share-link`,
+    {},
+  );
+  const token = response.item?.token;
+  if (typeof token !== 'string' || !/^v1\.[A-Za-z0-9_-]{59}$/.test(token)) {
+    throw new Error('공지 공유 링크를 확인할 수 없습니다.');
+  }
+  return `${window.location.origin}/groupware/community/notice?${new URLSearchParams({ share: token })}`;
+}
+
+export async function getSharedNoticePreview(token: string): Promise<NoticeBoardPostApi> {
+  if (!/^v1\.[A-Za-z0-9_-]{59}$/.test(token)) {
+    throw new Error('공지 공유 링크를 확인할 수 없습니다.');
+  }
+  const response = await apiGet<{ item?: unknown }>(
+    `/api/v1/groupware/boards/notice/shared-post?${new URLSearchParams({ token })}`,
+  );
+  const post = response.item;
+  if (!isObject(post)
+    || !/^[1-9]\d*$/.test(String(post.postId ?? ''))
+    || !Number.isSafeInteger(Number(post.postId))
+    || typeof post.title !== 'string') {
+    throw new Error('공지 미리보기 응답을 확인할 수 없습니다.');
+  }
+  return post as NoticeBoardPostApi;
 }
 
 export async function createNoticePost(

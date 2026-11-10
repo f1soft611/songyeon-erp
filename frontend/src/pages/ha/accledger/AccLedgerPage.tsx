@@ -169,7 +169,7 @@ export function AccLedgerPage({ selectedModule, currentMenuName, content, breadc
           <Tab value="채무" label={LEDGER_TABS.채무.tab} />
         </Tabs>
       </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 1 }, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box sx={{ p: 1, flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <Card sx={cardSx}>
           <Typography aria-label="조회 조건" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
             {data ? ledgerCondition(data) : '조회 조건을 정해주세요 — 오른쪽 위 [조회]를 눌러 기간과 거래처를 골라주세요'}

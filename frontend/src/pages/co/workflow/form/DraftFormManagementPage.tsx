@@ -4,14 +4,18 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import ClearIcon from '@mui/icons-material/Clear';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import { Box, CircularProgress, IconButton, TextField } from '@mui/material';
+import { Box, IconButton, TextField } from '@mui/material';
 import { PageHeader } from '../../../../shared/components/PageHeader';
+import { PageLoadBoundary } from '../../../../shared/components/PageLoadBoundary';
 import { PageSearchArea } from '../../../../shared/components/PageSearchArea';
 import { PageMessageArea } from '../../../../shared/components/PageMessageArea';
 import { UnsavedChangesConfirmDialog } from '../../../../shared/components/UnsavedChangesConfirmDialog';
+import { useUnsavedChangesBeforeUnload } from '../../../../shared/hooks/useUnsavedChangesBeforeUnload';
+import { usePageSessionState } from '../../../../shared/hooks/usePageSessionState';
 import type { PermissionActionGroupDefinition } from '../../../../shared/components/PermissionGroup';
 import { type F1GridRef } from '../../../../shared/components/f1-grid';
 import {
+  isPageSearchValues,
   toPageSearchFields,
   type PageSearchFieldValue,
 } from '../../../../shared/components/page-search/searchFields';
@@ -36,6 +40,43 @@ import {
 import { DraftFormTemplateDialog } from './components/DraftFormTemplateDialog';
 import { useDraftFormManagement } from './hooks/useDraftFormManagement';
 
+const DRAFT_FORM_SEARCH_SESSION_KEY = 'songyeon-erp:page:draft-form-management';
+const DRAFT_FORM_SEARCH_SESSION_VERSION = 1;
+
+type DraftFormSearchSession = {
+  keyword: string;
+  detailValues: Record<string, PageSearchFieldValue>;
+};
+
+type PendingDraftFormSearch = {
+  filters: DraftFormFilters;
+  session: DraftFormSearchSession;
+};
+
+function isDraftFormSearchSession(value: unknown): value is DraftFormSearchSession {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<DraftFormSearchSession>;
+  return typeof candidate.keyword === 'string' && isPageSearchValues(candidate.detailValues);
+}
+
+function toDraftFormSearchFilters(
+  session: DraftFormSearchSession,
+): DraftFormFilters {
+  const selected = (value: PageSearchFieldValue | undefined) =>
+    value == null || typeof value === 'object' ? '' : String(value).trim();
+  const useAt = selected(session.detailValues.useAt);
+  return {
+    keyword: session.keyword.trim() || undefined,
+    categoryItemId: selected(session.detailValues.categoryItemId)
+      ? Number(selected(session.detailValues.categoryItemId))
+      : undefined,
+    regTermId: selected(session.detailValues.regTermId)
+      ? Number(selected(session.detailValues.regTermId))
+      : undefined,
+    useAt: useAt === 'Y' || useAt === 'N' ? useAt : undefined,
+  };
+}
+
 type DraftFormManagementPageProps = {
   selectedModule: ModuleItem;
   currentMenuName: string;
@@ -45,12 +86,6 @@ type DraftFormManagementPageProps = {
   isTenantAdmin?: boolean;
 };
 
-function DraftFormSaveProgressIcon() {
-  return (
-    <CircularProgress size={16} color="inherit" aria-label="기안양식 저장 중" />
-  );
-}
-
 export function DraftFormManagementPage({
   selectedModule,
   currentMenuName,
@@ -59,12 +94,26 @@ export function DraftFormManagementPage({
   selectedMenuPermissions,
   isTenantAdmin = false,
 }: DraftFormManagementPageProps) {
-  const management = useDraftFormManagement();
+  const { state: searchSession, setState: setSearchSession } =
+    usePageSessionState<DraftFormSearchSession | null>(
+      DRAFT_FORM_SEARCH_SESSION_KEY,
+      null,
+      {
+        version: DRAFT_FORM_SEARCH_SESSION_VERSION,
+        validate: (value): value is DraftFormSearchSession | null =>
+          value === null || isDraftFormSearchSession(value),
+      },
+    );
+  const management = useDraftFormManagement(
+    searchSession ? toDraftFormSearchFilters(searchSession) : {},
+  );
+  useUnsavedChangesBeforeUnload(management.hasChanges);
   const gridRef = useRef<F1GridRef<DraftFormRow>>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const saveAttemptActiveRef = useRef(false);
+  const [searchQuery, setSearchQuery] = useState(searchSession?.keyword ?? '');
   const [detailValues, setDetailValues] = useState<
     Record<string, PageSearchFieldValue>
-  >({});
+  >(searchSession?.detailValues ?? {});
   const [helperOpen, setHelperOpen] = useState(false);
   const [templateTarget, setTemplateTarget] = useState<DraftFormRow | null>(null);
   const [pendingTemplateTarget, setPendingTemplateTarget] =
@@ -73,9 +122,8 @@ export function DraftFormManagementPage({
     useState(false);
   const [categoryNoticeDismissed, setCategoryNoticeDismissed] = useState(false);
   const [refreshConfirmOpen, setRefreshConfirmOpen] = useState(false);
-  const [pendingFilters, setPendingFilters] = useState<DraftFormFilters | null>(
-    null,
-  );
+  const [pendingSearch, setPendingSearch] =
+    useState<PendingDraftFormSearch | null>(null);
 
   const pagePermissions = {
     read: Boolean(selectedMenuPermissions?.read),
@@ -91,6 +139,7 @@ export function DraftFormManagementPage({
   const canEditTemplate = pagePermissions.update;
   const handleOpenTemplate = useCallback(
     (row: DraftFormRow) => {
+      if (management.saving) return;
       if (management.hasChanges) {
         setPendingTemplateTarget(row);
         setTemplateDiscardConfirmOpen(true);
@@ -98,7 +147,7 @@ export function DraftFormManagementPage({
       }
       setTemplateTarget(row);
     },
-    [management.hasChanges],
+    [management.hasChanges, management.saving],
   );
   const columns = useMemo(
     () =>
@@ -106,8 +155,8 @@ export function DraftFormManagementPage({
         management.categoryItems,
         management.cycleItems,
         management.users,
-        canWriteForms,
-        canEditTemplate ? handleOpenTemplate : undefined,
+        canWriteForms && !management.saving,
+        canEditTemplate && !management.saving ? handleOpenTemplate : undefined,
       ),
     [
       management.categoryItems,
@@ -115,74 +164,71 @@ export function DraftFormManagementPage({
       management.users,
       canWriteForms,
       canEditTemplate,
+      management.saving,
       handleOpenTemplate,
     ],
   );
   const detailFields = useMemo(() => toPageSearchFields(columns), [columns]);
-  // 마지막으로 조회한 상세조건(조건 칩 · 조건 개수 표시, S_ERP PageSearchArea appliedDetailValues)
-  const appliedDetailValues = useMemo<Record<string, PageSearchFieldValue>>(() => {
-    const { categoryItemId, regTermId, useAt } = management.appliedFilters;
-    return {
-      categoryItemId: categoryItemId != null ? String(categoryItemId) : '',
-      regTermId: regTermId != null ? String(regTermId) : '',
-      useAt: useAt ?? '',
-    };
-  }, [management.appliedFilters]);
 
-  const requestSearch = (filters: DraftFormFilters) => {
+  const requestSearch = (
+    filters: DraftFormFilters,
+    session: DraftFormSearchSession,
+  ) => {
+    if (management.saving) return;
     if (management.hasChanges) {
-      setPendingFilters(filters);
+      setPendingSearch({ filters, session });
       setRefreshConfirmOpen(true);
       return;
     }
     management.applyFilters(filters);
+    setSearchSession(session);
+    setDetailValues(session.detailValues);
   };
 
   const handleDetailSearch = (values: Record<string, PageSearchFieldValue>) => {
-    const selected = (value: PageSearchFieldValue | undefined) =>
-      value == null || typeof value === 'object' ? '' : String(value).trim();
-    const useAt = selected(values.useAt);
-    requestSearch({
-      keyword: searchQuery.trim() || undefined,
-      categoryItemId: selected(values.categoryItemId)
-        ? Number(selected(values.categoryItemId))
-        : undefined,
-      regTermId: selected(values.regTermId)
-        ? Number(selected(values.regTermId))
-        : undefined,
-      useAt: useAt === 'Y' || useAt === 'N' ? useAt : undefined,
-    });
+    const session = { keyword: searchQuery.trim(), detailValues: values };
+    requestSearch(toDraftFormSearchFilters(session), session);
   };
 
   const handleDefaultSearch = () => {
-    requestSearch({
-      ...management.appliedFilters,
-      keyword: searchQuery.trim() || undefined,
-    });
+    const session = {
+      keyword: searchQuery.trim(),
+      detailValues: searchSession?.detailValues ?? {},
+    };
+    requestSearch(toDraftFormSearchFilters(session), session);
   };
 
   const cancelPendingSearch = () => {
     setRefreshConfirmOpen(false);
-    setPendingFilters(null);
+    setPendingSearch(null);
+    setDetailValues(searchSession?.detailValues ?? {});
   };
 
   const confirmPendingSearch = () => {
-    const filters = pendingFilters;
+    const pending = pendingSearch;
     setRefreshConfirmOpen(false);
-    setPendingFilters(null);
-    if (!filters) return;
+    setPendingSearch(null);
+    if (!pending) return;
     management.discardChanges();
-    management.applyFilters(filters);
+    management.applyFilters(pending.filters);
+    setSearchSession(pending.session);
+    setDetailValues(pending.session.detailValues);
   };
 
   const handleGridSave = () => {
+    if (management.saving || saveAttemptActiveRef.current) return;
     const grid = gridRef.current;
     if (!grid) return;
     if (!grid.validate()) {
       management.setError('필수 입력 항목을 확인해 주세요.');
       return;
     }
-    void management.saveChanges(grid.getChanges());
+    saveAttemptActiveRef.current = true;
+    void management
+      .saveChanges(grid.getChanges())
+      .finally(() => {
+        saveAttemptActiveRef.current = false;
+      });
   };
 
   const pageActionGroups: PermissionActionGroupDefinition[] = [
@@ -193,6 +239,7 @@ export function DraftFormManagementPage({
           label: '분류 설정',
           icon: CategoryOutlinedIcon,
           visible: canEditCategories,
+          disabled: management.saving,
           onClick: () => setHelperOpen(true),
         },
         {
@@ -202,6 +249,7 @@ export function DraftFormManagementPage({
           disabled:
             management.loading ||
             management.optionsLoading ||
+            management.saving ||
             management.categoryItems.length === 0,
           onClick: () => gridRef.current?.addRow(),
         },
@@ -214,6 +262,7 @@ export function DraftFormManagementPage({
           label: '조회',
           icon: SearchIcon,
           visible: pagePermissions.read,
+          disabled: management.saving,
           onClick: handleDefaultSearch,
         },
       ],
@@ -223,7 +272,9 @@ export function DraftFormManagementPage({
       actions: [
         {
           label: '저장',
-          icon: management.saving ? DraftFormSaveProgressIcon : SaveIcon,
+          icon: SaveIcon,
+          saving: management.saving,
+          savingAriaLabel: '기안양식 저장 중',
           visible: canWriteForms,
           disabled: !management.hasChanges || management.saving,
           onClick: handleGridSave,
@@ -251,53 +302,64 @@ export function DraftFormManagementPage({
         description={content.description}
         actionGroups={pageActionGroups}
       />
-      <PageSearchArea
-        searchField={
-          <TextField
-            size="small"
-            margin="none"
-            placeholder="양식코드/양식명 검색"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            slotProps={{
-              htmlInput: { 'aria-label': '기안양식 검색' },
-              input: {
-                endAdornment: searchQuery ? (
-                  <IconButton
-                    type="button"
-                    size="small"
-                    edge="end"
-                    aria-label="기안양식 검색어 초기화"
-                    onClick={() => setSearchQuery('')}
-                    sx={{ p: 0.25 }}
-                  >
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                ) : null,
-              },
-            }}
-            sx={(theme) => ({
-              width: '100%',
-              height: 40,
-              '& .MuiOutlinedInput-root': {
-                height: '100%',
-                borderRadius: '0 8px 8px 0',
-                backgroundColor:
-                  theme.palette.mode === 'dark'
-                    ? 'rgba(15, 23, 42, 0.72)'
-                    : 'rgba(255,255,255,0.72)',
-              },
-            })}
-          />
-        }
-        onDefaultSearch={handleDefaultSearch}
-        detailFields={detailFields}
-        detailValues={detailValues}
-        appliedDetailValues={appliedDetailValues}
-        onDetailValuesChange={setDetailValues}
-        onDetailSearch={handleDetailSearch}
-        detailLoading={management.loading}
-      />
+      <PageLoadBoundary {...management.initialLoad} label="기안양식 목록"
+        onRetry={() => management.applyFilters(management.appliedFilters)}>
+      <PageLoadBoundary {...management.optionsInitialLoad} label="기안양식 옵션"
+        onRetry={() => { void management.loadOptions(); }}>
+      <Box
+        component="fieldset"
+        disabled={management.saving}
+        sx={{ border: 0, m: 0, minWidth: 0, p: 0 }}
+      >
+        <PageSearchArea
+          searchField={
+            <TextField
+              size="small"
+              margin="none"
+              placeholder="양식코드/양식명 검색"
+              value={searchQuery}
+              disabled={management.saving}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              slotProps={{
+                htmlInput: { 'aria-label': '기안양식 검색' },
+                input: {
+                  endAdornment: searchQuery ? (
+                    <IconButton
+                      type="button"
+                      size="small"
+                      edge="end"
+                      aria-label="기안양식 검색어 초기화"
+                      onClick={() => setSearchQuery('')}
+                      sx={{ p: 0.25 }}
+                    >
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  ) : null,
+                },
+              }}
+              sx={(theme) => ({
+                width: '100%',
+                height: 40,
+                '& .MuiOutlinedInput-root': {
+                  height: '100%',
+                  borderRadius: '0 8px 8px 0',
+                  backgroundColor:
+                    theme.palette.mode === 'dark'
+                      ? 'rgba(15, 23, 42, 0.72)'
+                      : 'rgba(255,255,255,0.72)',
+                },
+              })}
+            />
+          }
+          onDefaultSearch={handleDefaultSearch}
+          detailFields={detailFields}
+          detailValues={detailValues}
+          appliedDetailValues={searchSession?.detailValues ?? {}}
+          onDetailValuesChange={setDetailValues}
+          onDetailSearch={handleDetailSearch}
+          detailLoading={management.loading || management.saving}
+        />
+      </Box>
       <PageMessageArea
         message={management.error}
         onClose={() => management.setError('')}
@@ -314,6 +376,18 @@ export function DraftFormManagementPage({
         onClose={() => setCategoryNoticeDismissed(true)}
       />
       <Box
+        onKeyDownCapture={(event) => {
+          // The grid's Delete shortcut bypasses its context-menu delete gate.
+          if (
+            management.saving &&
+            event.key === 'Delete' &&
+            event.target instanceof HTMLElement &&
+            event.target.closest('[role="grid"]')
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }}
         sx={{
           flex: 1,
           minHeight: 280,
@@ -325,10 +399,13 @@ export function DraftFormManagementPage({
           rows={management.rows}
           columns={columns}
           canCreate={
-            pagePermissions.create && management.categoryItems.length > 0
+            pagePermissions.create &&
+            management.categoryItems.length > 0 &&
+            !management.saving
           }
-          canUpdate={pagePermissions.update}
+          canUpdate={pagePermissions.update && !management.saving}
           canExportExcel={pagePermissions.excel}
+          saving={management.saving}
           loading={management.loading}
           gridKey={management.gridKey}
           gridRef={gridRef}
@@ -395,6 +472,8 @@ export function DraftFormManagementPage({
           if (target) setTemplateTarget(target);
         }}
       />
+      </PageLoadBoundary>
+      </PageLoadBoundary>
     </Box>
   );
 }

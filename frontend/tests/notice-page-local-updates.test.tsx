@@ -152,6 +152,36 @@ describe('CommunityNoticePage local updates', () => {
     });
   });
 
+  it('opens a different linked notice without remounting the notice page', async () => {
+    const renderLinked = (requestedPostId: number) => (
+      <ThemeProvider theme={createTheme()}>
+        <NotificationProvider>
+          <CommunityNoticePage
+            selectedModule={selectedModule}
+            currentMenuName="공지사항"
+            content={content}
+            requestedPostId={requestedPostId}
+          />
+        </NotificationProvider>
+      </ThemeProvider>
+    );
+    noticeServiceMocks.fetchNoticePostDetail.mockImplementation(async (id: number) => ({
+      ...detail, postId: id, title: `연결 공지 ${id}`,
+    }));
+    const view = render(renderLinked(51));
+    await waitFor(() => {
+      expect(noticeServiceMocks.fetchNoticePostDetail).toHaveBeenCalledWith(51);
+    });
+    await screen.findAllByText('연결 공지 51');
+
+    view.rerender(renderLinked(52));
+
+    await waitFor(() => {
+      expect(noticeServiceMocks.fetchNoticePostDetail).toHaveBeenCalledWith(52);
+    });
+    await screen.findAllByText('연결 공지 52');
+  });
+
   it('keeps the initial skeleton until the notice API resolves', async () => {
     let resolvePosts: (posts: []) => void = () => undefined;
     noticeServiceMocks.fetchNoticePosts.mockReturnValueOnce(

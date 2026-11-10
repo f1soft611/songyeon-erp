@@ -1,8 +1,33 @@
-import { Box, Button, IconButton, Typography, useTheme } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  IconButton,
+  Snackbar,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import HistoryOutlined from '@mui/icons-material/HistoryOutlined';
+import StarOutlined from '@mui/icons-material/StarOutlined';
+import StarOutlineOutlined from '@mui/icons-material/StarOutlineOutlined';
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
 import type { MenuTreeNode, ModuleItem } from '../types/dashboard';
+import type { MenuFavoritesResponse, FavoriteMenu } from '../types/menuFavorite.types';
+import { useState, type MouseEvent } from 'react';
+import {
+  createMenuFavorite,
+  createMenuFavoriteFolder,
+  deleteMenuFavorite,
+  deleteMenuFavoriteFolder,
+  moveMenuFavorite,
+  renameMenuFavoriteFolder,
+} from '../services/menuFavorite.service';
+import {
+  MenuFavoriteContextMenu,
+  type FavoriteContextTarget,
+} from './MenuFavoriteContextMenu';
+import { MenuFavoriteEditDialog } from './MenuFavoriteEditDialog';
 
 type RecentMenuEntry = {
   menuId: string;
@@ -19,9 +44,13 @@ type DashboardMenuTreeProps = {
   expandedItemIds: string[];
   selectedMenuId: string;
   recentMenuItems?: RecentMenuEntry[];
+  favorites?: MenuFavoritesResponse;
+  onFavoritesRefresh?: () => Promise<void>;
   onMenuSelect: (menuId: string) => void;
   onRecentMenuSelect?: (path: string) => void;
   onToggleMenu?: () => void;
+  onFavoritesError?: (message: string) => void;
+  onFavoritesMore?: () => void;
 };
 
 const formatRecentMenuTime = (visitedAt: number) => {
@@ -50,9 +79,13 @@ export function DashboardMenuTree({
   expandedItemIds,
   selectedMenuId,
   recentMenuItems = [],
+  favorites = { folders: [], favorites: [] },
+  onFavoritesRefresh,
   onMenuSelect,
   onRecentMenuSelect,
   onToggleMenu,
+  onFavoritesError,
+  onFavoritesMore,
 }: DashboardMenuTreeProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
@@ -60,22 +93,143 @@ export function DashboardMenuTree({
   const softBg = isDark ? '#0f172a' : '#f1f5f9';
   const expandedItemKey = expandedItemIds.join(',');
   const treeStateKey = `${selectedModule.id}:${expandedItemKey}:${selectedMenuId}`;
+  const [contextTarget, setContextTarget] = useState<FavoriteContextTarget | null>(null);
+  const [contextPosition, setContextPosition] = useState<{ top: number; left: number } | null>(null);
+  const [localError, setLocalError] = useState('');
+  const [editingFavorite, setEditingFavorite] = useState<{
+    menuId: number;
+    menuName: string;
+    menuUrl: string;
+    favorite: FavoriteMenu;
+  } | null>(null);
+  const runFavoriteAction = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      const result = await action();
+      await onFavoritesRefresh?.();
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '즐겨찾기 작업에 실패했습니다.';
+      if (onFavoritesError) {
+        onFavoritesError(message);
+      } else {
+        setLocalError(message);
+      }
+      return undefined;
+    }
+  };
+  const openFavoriteEditor = (
+    target: Extract<FavoriteContextTarget, { kind: 'available-menu' }>,
+  ) => {
+    if (!target.favorite) return;
+    setEditingFavorite({
+      menuId: target.menuId,
+      menuName: target.label,
+      menuUrl: target.path,
+      favorite: target.favorite,
+    });
+  };
+  const openContextMenu = (event: MouseEvent<HTMLElement>, target: FavoriteContextTarget) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextTarget(target);
+    setContextPosition(
+      event.type === 'contextmenu'
+        ? { top: event.clientY, left: event.clientX }
+        : { top: rect.bottom, left: rect.right },
+    );
+  };
+  const favoritesByMenuId = new Map<number, FavoriteMenu>();
+  favorites.favorites.forEach((favorite) => favoritesByMenuId.set(favorite.menuId, favorite));
 
   const renderMenuNode = (node: MenuTreeNode) => {
     const hasChildren = Boolean(node.children?.length);
     const isSelected = selectedMenuId === node.id;
+    const isEligible =
+      !hasChildren &&
+      Boolean(node.path) &&
+      node.menuId != null &&
+      node.permissions?.read === true;
+    const favorite = node.menuId == null ? undefined : favoritesByMenuId.get(node.menuId);
+    const menuTarget: FavoriteContextTarget | null = isEligible && node.menuId != null
+      ? {
+          kind: 'available-menu',
+          menuId: node.menuId,
+          label: node.name,
+          path: node.path!,
+          ...(favorite ? { favorite } : {}),
+        }
+      : null;
 
     return (
       <TreeItem
         key={node.id}
         itemId={node.id}
-        label={node.name}
+        label={
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
+          >
+            <Box component="span" sx={{ flex: 1 }}>{node.name}</Box>
+            {menuTarget && (
+              <IconButton
+                size="small"
+                aria-label={`${favorite ? '즐겨찾기 편집' : '즐겨찾기 추가'}: ${node.name}`}
+                aria-pressed={Boolean(favorite)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (favorite) {
+                    openFavoriteEditor(menuTarget);
+                    return;
+                  }
+                  void runFavoriteAction(() =>
+                    createMenuFavorite(menuTarget.menuId, null, node.name),
+                  ).then((response) => {
+                    const createdFavorite = response?.favorites.find(
+                      (item) => item.menuId === node.menuId,
+                    );
+                    if (createdFavorite && menuTarget) {
+                      setEditingFavorite({
+                        menuId: menuTarget.menuId,
+                        menuName: node.name,
+                        menuUrl: menuTarget.path,
+                        favorite: createdFavorite,
+                      });
+                    } else if (response) {
+                      const message = '등록된 즐겨찾기를 응답에서 찾을 수 없습니다.';
+                      onFavoritesError?.(message);
+                      setLocalError(onFavoritesError ? '' : message);
+                    }
+                  });
+                }}
+              >
+                {favorite ? (
+                  <StarOutlined fontSize="small" color="warning" />
+                ) : (
+                  <StarOutlineOutlined fontSize="small" />
+                )}
+              </IconButton>
+            )}
+          </Box>
+        }
         onClick={
           hasChildren
             ? undefined
             : () => {
                 onMenuSelect(node.id);
               }
+        }
+        onContextMenu={menuTarget ? (event) => openContextMenu(event, menuTarget) : undefined}
+        onKeyDown={
+          menuTarget
+            ? (event) => {
+                if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) {
+                  return;
+                }
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                setContextTarget(menuTarget);
+                setContextPosition({ top: rect.bottom, left: rect.left });
+              }
+            : undefined
         }
         sx={{
           '& > .MuiTreeItem-content': {
@@ -194,6 +348,65 @@ export function DashboardMenuTree({
         >
           {selectedModule.tree.map(renderMenuNode)}
         </SimpleTreeView>
+        <MenuFavoriteContextMenu
+          target={contextTarget}
+          anchorPosition={contextPosition}
+          onClose={() => {
+            setContextTarget(null);
+            setContextPosition(null);
+          }}
+          folders={favorites.folders}
+          folderCounts={new Map(
+            favorites.folders.map((folder) => [
+              folder.folderId,
+              favorites.favorites.filter((favorite) => favorite.folderId === folder.folderId).length,
+            ]),
+          )}
+          onCreateFolder={async (name) => {
+            await runFavoriteAction(() => createMenuFavoriteFolder(name));
+          }}
+          onRenameFolder={async (id, name) => {
+            await runFavoriteAction(() => renameMenuFavoriteFolder(id, name));
+          }}
+          onDeleteFolder={async (id) => {
+            await runFavoriteAction(() => deleteMenuFavoriteFolder(id));
+          }}
+          onMoveFavorite={async (id, folderId) => {
+            await runFavoriteAction(() => moveMenuFavorite(id, folderId));
+          }}
+          onDeleteFavorite={async (id) => {
+            await runFavoriteAction(() => deleteMenuFavorite(id));
+          }}
+          onCreateFavorite={async (menuId, folderId) => {
+            await runFavoriteAction(() => createMenuFavorite(menuId, folderId));
+          }}
+          onEditFavorite={openFavoriteEditor}
+        />
+        {editingFavorite && (
+          <MenuFavoriteEditDialog
+            open
+            menuName={editingFavorite.menuName}
+            menuUrl={editingFavorite.menuUrl}
+            favorite={editingFavorite.favorite}
+            folders={favorites.folders}
+            onClose={() => setEditingFavorite(null)}
+            onMore={() => {
+              setEditingFavorite(null);
+              onFavoritesMore?.();
+            }}
+            onSave={async (name, folderId) => {
+              await moveMenuFavorite(editingFavorite.favorite.favoriteId, folderId, name);
+              await onFavoritesRefresh?.();
+            }}
+            onRemove={async () => {
+              await deleteMenuFavorite(editingFavorite.favorite.favoriteId);
+              await onFavoritesRefresh?.();
+            }}
+          />
+        )}
+        <Snackbar open={Boolean(localError)} autoHideDuration={5000} onClose={() => setLocalError('')}>
+          <Alert severity="error" onClose={() => setLocalError('')}>{localError}</Alert>
+        </Snackbar>
       </Box>
       <Box
         sx={{

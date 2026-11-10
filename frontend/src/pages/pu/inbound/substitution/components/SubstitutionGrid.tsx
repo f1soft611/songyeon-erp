@@ -3,7 +3,6 @@ import { Box, Button, Chip } from '@mui/material';
 import { F1Grid, type F1GridColumn } from '../../../../../shared/components/f1-grid';
 import { resetGridStorageIfColumnsChanged } from '../../../../../shared/utils/gridStorage';
 import type { SubstitutionSchedule } from '../types/materialSubstitution.types';
-import { clientOrStock } from '../utils/materialSubstitution';
 
 const STORAGE_KEY = 'pu-msub-grid';
 // 2026-11-02 [상세보기] 단추 칸을 rowAction 으로 바꿨다. 저장된 칸 순서에 지금 칸이 없으면 처음 순서로
@@ -43,16 +42,14 @@ export function createSubstitutionColumns({ onOpenDetail }: SubstitutionColumnOp
       width: 180,
       align: 'left',
       getCellStyle: gold,
-      renderCell: ({ row }) => clientOrStock(row.clientName),
     },
     {
       field: 'orderQty',
       headerName: '생산지시량',
       width: 120,
-      headerAlign: 'center',
+      type: 'number',
       align: 'right',
       getCellStyle: gold,
-      renderCell: ({ row }) => row.orderQty || '',
     },
     {
       field: 'lotNo',
@@ -60,7 +57,6 @@ export function createSubstitutionColumns({ onOpenDetail }: SubstitutionColumnOp
       width: 130,
       align: 'center',
       getCellStyle: gold,
-      renderCell: ({ row }) => row.lotNo || '',
     },
     {
       field: 'substitutionCount',
